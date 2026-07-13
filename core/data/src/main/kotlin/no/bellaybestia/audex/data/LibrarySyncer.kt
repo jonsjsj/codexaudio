@@ -11,6 +11,7 @@ import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import no.bellaybestia.audex.network.abs.AbsLibraryItem
+import no.bellaybestia.audex.network.abs.AbsMediaProgress
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,25 +63,22 @@ class LibrarySyncer @Inject constructor(
         // Bulk progress reconcile — resume pointers only; listening time is
         // additive and only ever flows out through the sessions API.
         val me = api.me()
-        progressDao.upsertAll(
-            me.mediaProgress.map {
-                ProgressEntity(
-                    serverId = serverId,
-                    libraryItemId = it.libraryItemId,
-                    pct = if (it.isFinished) 1.0 else maxOf(it.progress, it.ebookProgress ?: 0.0),
-                    currentTimeS = it.currentTime,
-                    ebookLocation = it.ebookLocation,
-                    ebookProgress = it.ebookProgress,
-                    isFinished = it.isFinished,
-                    lastUpdate = it.lastUpdate,
-                    source = "SERVER",
-                )
-            }
-        )
+        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
         serverDao.upsert(
             serverDao.enabled().first { it.serverId == serverId }
                 .copy(absUserId = me.id, lastFullSyncAt = System.currentTimeMillis())
         )
+    }
+
+    /**
+     * Lightweight progress-only reconcile from GET /api/me — used on socket
+     * (re)connect and on `user_updated` events, without a full library walk.
+     */
+    suspend fun reconcileProgress(serverId: String) {
+        val server = serverDao.enabled().firstOrNull { it.serverId == serverId } ?: return
+        val api = clientFactory.api(serverId, server.baseUrl)
+        val me = runCatching { api.me() }.getOrNull() ?: return
+        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
     }
 }
 
@@ -114,3 +112,16 @@ internal fun AbsLibraryItem.chapterEntities(serverId: String): List<RemoteChapte
     media.chapters.mapIndexed { idx, c ->
         RemoteChapterEntity(serverId, id, idx, c.title, c.start, c.end)
     }
+
+internal fun AbsMediaProgress.toProgressEntity(serverId: String): ProgressEntity =
+    ProgressEntity(
+        serverId = serverId,
+        libraryItemId = libraryItemId,
+        pct = if (isFinished) 1.0 else maxOf(progress, ebookProgress ?: 0.0),
+        currentTimeS = currentTime,
+        ebookLocation = ebookLocation,
+        ebookProgress = ebookProgress,
+        isFinished = isFinished,
+        lastUpdate = lastUpdate,
+        source = "SERVER",
+    )

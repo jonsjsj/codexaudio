@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.domain.model.Work
 
 /**
  * Works of one author as a flat hairline-divided list, in the order the

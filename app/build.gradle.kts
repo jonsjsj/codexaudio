@@ -7,16 +7,16 @@ plugins {
 }
 
 android {
-    namespace = "no.bellaybestia.codexaudio"
+    namespace = "no.bellaybestia.audex"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "no.bellaybestia.codexaudio"
+        applicationId = "no.bellaybestia.audex"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        manifestPlaceholders["appAuthRedirectScheme"] = "codexaudio"
+        manifestPlaceholders["appAuthRedirectScheme"] = "audex"
     }
 
     compileOptions {

@@ -1,6 +1,6 @@
 # 01 — Overview
 
-This document is the top-level description of codex-audio-android: what the app is, how it is
+This document is the top-level description of audex-android: what the app is, how it is
 shaped architecturally, what it must achieve, and — just as importantly — what it deliberately does
 not do. The remaining docs expand each aspect: [02](02-codex-learnings.md) covers what is borrowed
 from Codex, [03](03-abs-api-usage.md) the Audiobookshelf API surface, [04](04-android-architecture.md)
@@ -18,8 +18,8 @@ Stack: Kotlin, Jetpack Compose, Media3/ExoPlayer, Readium Kotlin, Room, Retrofit
 socket.io-client, AppAuth, Hilt. Min SDK 26. Multi-server support is MVP scope; offline-first is a
 hard requirement; podcasts are a later phase.
 
-Proposed applicationId is `no.bellaybestia.codexaudio` (the generic default in code should be
-configurable), with OAuth custom scheme `codexaudio://oauth` — the scheme must be whitelisted in
+Proposed applicationId is `no.bellaybestia.audex` (the generic default in code should be
+configurable), with OAuth custom scheme `audex://oauth` — the scheme must be whitelisted in
 each ABS server's "Allowed Mobile Redirect URLs" (see [08 — open questions](08-open-questions.md),
 question 1).
 

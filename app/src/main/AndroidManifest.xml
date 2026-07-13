@@ -7,9 +7,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:name=".CodexAudioApp"
-        android:label="Codex Audio"
-        android:theme="@style/Theme.CodexAudio">
+        android:name=".AudexApp"
+        android:label="Audex"
+        android:theme="@style/Theme.Audex">
 
         <activity
             android:name=".MainActivity"

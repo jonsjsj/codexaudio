@@ -1,4 +1,4 @@
-# codex-audio-android
+# audex-android
 
 A native Android client for [Audiobookshelf](https://www.audiobookshelf.org/) that replaces the
 official app for a self-hosted, multi-server setup. It is **author/series-centric** rather than

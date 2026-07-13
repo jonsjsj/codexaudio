@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "codex-audio-android"
+rootProject.name = "audex-android"
 
 include(
     ":app",

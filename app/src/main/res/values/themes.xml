@@ -3,7 +3,7 @@
     <!-- Compose draws everything; the XML theme only has to be action-bar-free
          and dependency-free. The dark window background avoids a white flash
          before the first composition (the app is dark-first). -->
-    <style name="Theme.CodexAudio" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Audex" parent="android:Theme.DeviceDefault.NoActionBar">
         <item name="android:windowBackground">#FF101216</item>
     </style>
 </resources>

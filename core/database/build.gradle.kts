@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "no.bellaybestia.codexaudio.database"
+    namespace = "no.bellaybestia.audex.database"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

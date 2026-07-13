@@ -28,11 +28,13 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:network-abs"))
     implementation(project(":core:auth"))
+    implementation(project(":core:player"))
     implementation(project(":core:common"))
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.media3.session)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.work)

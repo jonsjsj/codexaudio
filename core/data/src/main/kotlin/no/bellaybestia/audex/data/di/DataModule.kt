@@ -9,11 +9,15 @@ import no.bellaybestia.audex.auth.AbsTokenRefresher
 import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.data.AuthRepositoryImpl
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
+import no.bellaybestia.audex.data.PlaybackControllerImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
+import no.bellaybestia.audex.data.StreamTokenResolverImpl
+import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.network.abs.AbsClientFactory
+import no.bellaybestia.audex.player.StreamTokenResolver
 import javax.inject.Singleton
 
 @Module
@@ -28,6 +32,12 @@ abstract class DataModule {
 
     @Binds
     abstract fun authRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds
+    abstract fun playbackController(impl: PlaybackControllerImpl): PlaybackController
+
+    @Binds
+    abstract fun streamTokenResolver(impl: StreamTokenResolverImpl): StreamTokenResolver
 
     companion object {
         @Provides

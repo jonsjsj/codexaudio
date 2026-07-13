@@ -8,7 +8,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import no.bellaybestia.audex.domain.download.DownloadFormat
+import no.bellaybestia.audex.domain.download.DownloadInfo
+import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.model.Edition
+import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.repository.CatalogRepository
@@ -18,6 +22,7 @@ import javax.inject.Inject
 class WorkDetailViewModel @Inject constructor(
     catalogRepository: CatalogRepository,
     private val playbackController: PlaybackController,
+    private val downloads: Downloads,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -32,6 +37,9 @@ class WorkDetailViewModel @Inject constructor(
 
     val playback: StateFlow<PlaybackState> = playbackController.state
 
+    val downloadStates: StateFlow<List<DownloadInfo>> = downloads.all()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun play(edition: Edition) {
         viewModelScope.launch {
             playbackController.play(edition.serverId, edition.libraryItemId, title, author)
@@ -39,4 +47,16 @@ class WorkDetailViewModel @Inject constructor(
     }
 
     fun togglePlayPause() = playbackController.togglePlayPause()
+
+    fun download(edition: Edition) =
+        downloads.start(edition.serverId, edition.libraryItemId, edition.format.toDownloadFormat())
+
+    fun removeDownload(edition: Edition) {
+        viewModelScope.launch {
+            downloads.remove(edition.serverId, edition.libraryItemId, edition.format.toDownloadFormat())
+        }
+    }
+
+    private fun Format.toDownloadFormat(): DownloadFormat =
+        if (this == Format.AUDIO) DownloadFormat.AUDIO else DownloadFormat.EBOOK
 }

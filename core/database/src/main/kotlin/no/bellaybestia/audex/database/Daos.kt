@@ -195,10 +195,31 @@ interface EbookProgressQueueDao {
     suspend fun delete(serverId: String, itemId: String)
 }
 
+/** A download row joined with its item title (for the Downloads list). */
+data class DownloadWithTitle(
+    val serverId: String,
+    val libraryItemId: String,
+    val kind: String,
+    val state: String,
+    val bytesTotal: Long,
+    val bytesDone: Long,
+    val dirPath: String?,
+    val title: String?,
+)
+
 @Dao
 interface DownloadDao {
     @Query("SELECT * FROM downloads ORDER BY serverId, libraryItemId")
     fun observeAll(): Flow<List<DownloadEntity>>
+
+    @Query(
+        """SELECT d.serverId, d.libraryItemId, d.kind, d.state, d.bytesTotal, d.bytesDone, d.dirPath,
+                  r.title AS title
+           FROM downloads d
+           LEFT JOIN remote_items r ON r.serverId = d.serverId AND r.libraryItemId = d.libraryItemId
+           ORDER BY r.title COLLATE NOCASE"""
+    )
+    fun observeAllWithTitle(): Flow<List<DownloadWithTitle>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(row: DownloadEntity)

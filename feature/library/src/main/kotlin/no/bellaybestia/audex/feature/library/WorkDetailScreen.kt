@@ -46,6 +46,7 @@ fun WorkDetailScreen(
 ) {
     val editions by viewModel.editions.collectAsState()
     val playback by viewModel.playback.collectAsState()
+    val downloadStates by viewModel.downloadStates.collectAsState()
 
     Column(modifier.fillMaxSize()) {
         Text(
@@ -84,12 +85,20 @@ fun WorkDetailScreen(
         } else {
             editions.forEachIndexed { index, edition ->
                 val isThis = playback.libraryItemId == edition.libraryItemId
+                val download = downloadStates.firstOrNull {
+                    it.serverId == edition.serverId &&
+                        it.libraryItemId == edition.libraryItemId &&
+                        it.format.name == edition.format.name
+                }
                 EditionRow(
                     edition = edition,
                     isPlayingThis = isThis && playback.isPlaying,
                     isLoadingThis = isThis && playback.isLoading,
+                    download = download,
                     onPlay = { viewModel.play(edition) },
                     onTogglePlayPause = { viewModel.togglePlayPause() },
+                    onDownload = { viewModel.download(edition) },
+                    onRemoveDownload = { viewModel.removeDownload(edition) },
                 )
                 if (index < editions.lastIndex) {
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -104,8 +113,11 @@ private fun EditionRow(
     edition: Edition,
     isPlayingThis: Boolean,
     isLoadingThis: Boolean,
+    download: no.bellaybestia.audex.domain.download.DownloadInfo?,
     onPlay: () -> Unit,
     onTogglePlayPause: () -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
 ) {
     val isAudio = edition.format == Format.AUDIO
     val icon = if (isAudio) Icons.Outlined.Headphones else Icons.Outlined.MenuBook
@@ -157,29 +169,52 @@ private fun EditionRow(
 
         Spacer16()
 
-        // Action affordance (flat accent text — no filled buttons per design rules).
-        if (isAudio) {
-            val actionLabel = when {
-                isLoadingThis -> "Loading…"
-                isPlayingThis -> "Pause"
-                else -> "Play"
+        // Actions (flat accent text — no filled buttons per design rules).
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (isAudio) {
+                val actionLabel = when {
+                    isLoadingThis -> "Loading…"
+                    isPlayingThis -> "Pause"
+                    else -> "Play"
+                }
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(enabled = !isLoadingThis) {
+                            if (isPlayingThis) onTogglePlayPause() else onPlay()
+                        }
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                )
+            } else {
+                Text(
+                    text = "Read",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
+                )
+            }
+
+            val downloadLabel = when {
+                download == null -> "Download"
+                download.isActive -> "Downloading…"
+                download.isComplete -> "Saved ✓"
+                else -> "Retry"
+            }
+            val downloadClick: (() -> Unit)? = when {
+                download?.isActive == true -> null
+                download?.isComplete == true -> onRemoveDownload
+                else -> onDownload
             }
             Text(
-                text = actionLabel,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
+                text = downloadLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (download?.isActive == true) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable(enabled = !isLoadingThis) {
-                        if (isPlayingThis) onTogglePlayPause() else onPlay()
-                    }
+                    .then(if (downloadClick != null) Modifier.clickable(onClick = downloadClick) else Modifier)
                     .padding(vertical = 4.dp, horizontal = 4.dp),
-            )
-        } else {
-            Text(
-                text = "Read",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
             )
         }
     }

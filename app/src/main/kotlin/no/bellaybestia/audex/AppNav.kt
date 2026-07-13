@@ -18,9 +18,11 @@ import androidx.navigation.navArgument
 import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.feature.downloads.DownloadsScreen
 import no.bellaybestia.audex.feature.home.HomeScreen
+import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen
 import no.bellaybestia.audex.feature.library.SeriesDetailScreen
+import no.bellaybestia.audex.feature.library.WorkDetailScreen
 import no.bellaybestia.audex.feature.player.PlayerScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
@@ -34,9 +36,12 @@ private object Routes {
     const val PLAYER = "player"
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
+    const val WORK = "work/{id}?title={title}&author={author}"
 
     fun author(id: String, name: String) = "author/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun series(id: String, name: String) = "series/${Uri.encode(id)}?name=${Uri.encode(name)}"
+    fun work(id: String, title: String, author: String?) =
+        "work/${Uri.encode(id)}?title=${Uri.encode(title)}&author=${Uri.encode(author.orEmpty())}"
 }
 
 private val bottomTabs = listOf("Home", "Library", "Downloads", "Settings")
@@ -56,7 +61,7 @@ fun AppNav() {
     val currentRoute = backStackEntry?.destination?.route
     val selectedTab = when (currentRoute) {
         Routes.HOME -> 0
-        Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES -> 1
+        Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK -> 1
         Routes.DOWNLOADS -> 2
         Routes.SETTINGS, Routes.ADD_SERVER -> 3
         else -> 0
@@ -89,6 +94,7 @@ fun AppNav() {
                     onSeriesClick = { id, name ->
                         navController.navigate(Routes.series(id, name))
                     },
+                    onWorkClick = { work -> navController.navigateToWork(work) },
                 )
             }
             composable(Routes.DOWNLOADS) {
@@ -116,6 +122,7 @@ fun AppNav() {
                 AuthorDetailScreen(
                     authorId = entry.arguments?.getString("id").orEmpty(),
                     authorName = entry.arguments?.getString("name"),
+                    onWorkClick = { work -> navController.navigateToWork(work) },
                 )
             }
             composable(
@@ -132,7 +139,26 @@ fun AppNav() {
                 SeriesDetailScreen(
                     seriesId = entry.arguments?.getString("id").orEmpty(),
                     seriesName = entry.arguments?.getString("name"),
+                    onWorkClick = { work -> navController.navigateToWork(work) },
                 )
+            }
+            composable(
+                route = Routes.WORK,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("title") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("author") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
+                WorkDetailScreen()
             }
             composable(Routes.PLAYER) {
                 PlayerScreen()
@@ -146,6 +172,10 @@ fun AppNav() {
  * saving state, avoid duplicate copies, and restore the target tab's saved
  * stack (scroll positions included, via the saveable state holder).
  */
+private fun NavHostController.navigateToWork(work: Work) {
+    navigate(Routes.work(work.id, work.title, work.authorName))
+}
+
 private fun NavHostController.navigateToTab(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }

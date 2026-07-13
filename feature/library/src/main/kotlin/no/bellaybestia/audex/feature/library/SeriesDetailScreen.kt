@@ -30,6 +30,7 @@ private fun Work.isFinished(): Boolean =
 fun SeriesDetailScreen(
     seriesId: String,
     seriesName: String? = null,
+    onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SeriesDetailViewModel = hiltViewModel(),
 ) {
@@ -57,7 +58,7 @@ fun SeriesDetailScreen(
         )
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(works, key = { _, work -> work.id }) { index, work ->
-                WorkRowItem(work = work)
+                WorkRowItem(work = work, onClick = { onWorkClick(work) })
                 if (index < works.lastIndex) {
                     HorizontalDivider(
                         thickness = 1.dp,

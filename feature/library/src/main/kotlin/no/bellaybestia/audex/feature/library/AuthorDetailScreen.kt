@@ -26,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun AuthorDetailScreen(
     authorId: String,
     authorName: String? = null,
+    onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AuthorDetailViewModel = hiltViewModel(),
 ) {
@@ -46,7 +47,7 @@ fun AuthorDetailScreen(
         )
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(works, key = { _, work -> work.id }) { index, work ->
-                WorkRowItem(work = work)
+                WorkRowItem(work = work, onClick = { onWorkClick(work) })
                 if (index < works.lastIndex) {
                     HorizontalDivider(
                         thickness = 1.dp,

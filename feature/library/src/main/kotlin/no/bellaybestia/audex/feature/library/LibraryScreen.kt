@@ -46,6 +46,7 @@ private fun FlatDivider() {
 fun LibraryScreen(
     onAuthorClick: (id: String, name: String) -> Unit,
     onSeriesClick: (id: String, name: String) -> Unit,
+    onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
@@ -70,7 +71,7 @@ fun LibraryScreen(
         when (selectedTab) {
             0 -> AuthorsList(authors, authorsListState, onAuthorClick)
             1 -> SeriesList(series, seriesListState, onSeriesClick)
-            else -> WorksList(works, worksListState)
+            else -> WorksList(works, worksListState, onWorkClick)
         }
     }
 }
@@ -127,11 +128,12 @@ fun SeriesList(
 fun WorksList(
     works: List<Work>,
     listState: LazyListState,
+    onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         itemsIndexed(works, key = { _, work -> work.id }) { index, work ->
-            WorkRowItem(work = work)
+            WorkRowItem(work = work, onClick = { onWorkClick(work) })
             if (index < works.lastIndex) FlatDivider()
         }
     }

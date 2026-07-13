@@ -58,7 +58,7 @@ fun AppNav() {
         Routes.HOME -> 0
         Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES -> 1
         Routes.DOWNLOADS -> 2
-        Routes.SETTINGS -> 3
+        Routes.SETTINGS, Routes.ADD_SERVER -> 3
         else -> 0
     }
 

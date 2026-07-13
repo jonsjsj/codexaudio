@@ -6,7 +6,6 @@ import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.database.ServerEntity
 import no.bellaybestia.audex.domain.model.ServerAccount
 import no.bellaybestia.audex.domain.repository.ServerRepository
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,9 +21,7 @@ class ServerRepositoryImpl @Inject constructor(
 
     override suspend fun addServer(name: String, baseUrl: String): ServerAccount {
         val normalized = baseUrl.trim().trimEnd('/')
-        // Deterministic id from the base URL so re-adding a server keeps its
-        // editions, progress rows and downloads attached.
-        val serverId = UUID.nameUUIDFromBytes(normalized.lowercase().toByteArray()).toString()
+        val serverId = deriveServerId(normalized)
         serverDao.upsert(ServerEntity(serverId = serverId, name = name.trim(), baseUrl = normalized))
         return ServerAccount(serverId, name.trim(), normalized)
     }

@@ -21,6 +21,16 @@ interface AbsApi {
     @GET("status")
     suspend fun status(): AbsStatus
 
+    // OIDC token exchange: after ABS bounces the code back to audex://oauth, call
+    // the callback with the PKCE code_verifier to get the login payload
+    // (verified against ABS 2.35.1 — see core/auth/AbsOidcFlow.tokenExchangeUrl).
+    @GET("auth/openid/callback")
+    suspend fun oidcCallback(
+        @Query("code") code: String,
+        @Query("state") state: String,
+        @Query("code_verifier") codeVerifier: String,
+    ): AbsLoginResponse
+
     @GET("api/me")
     suspend fun me(): AbsUser
 

@@ -24,7 +24,6 @@ kotlin {
 
 dependencies {
     implementation(project(":core:network-abs"))
-    implementation(libs.appauth)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

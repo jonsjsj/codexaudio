@@ -22,6 +22,7 @@ import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen
 import no.bellaybestia.audex.feature.library.SeriesDetailScreen
 import no.bellaybestia.audex.feature.player.PlayerScreen
+import no.bellaybestia.audex.feature.settings.AddServerScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
 
 private object Routes {
@@ -29,6 +30,7 @@ private object Routes {
     const val LIBRARY = "library"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
+    const val ADD_SERVER = "add_server"
     const val PLAYER = "player"
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
@@ -94,10 +96,11 @@ fun AppNav() {
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
-                    onAddServer = {
-                        // Add-server flow lands with :core:auth wiring.
-                    },
+                    onAddServer = { navController.navigate(Routes.ADD_SERVER) },
                 )
+            }
+            composable(Routes.ADD_SERVER) {
+                AddServerScreen(onDone = { navController.popBackStack() })
             }
             composable(
                 route = Routes.AUTHOR,

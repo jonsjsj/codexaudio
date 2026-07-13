@@ -1,10 +1,14 @@
 package no.bellaybestia.audex.network.abs
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
+import okhttp3.Route
 import retrofit2.Retrofit
 import java.util.concurrent.ConcurrentHashMap
 
@@ -29,6 +33,7 @@ fun interface TokenRefresher {
  */
 class AbsClientFactory(
     private val tokenProvider: TokenProvider,
+    private val tokenRefresher: TokenRefresher,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -47,6 +52,7 @@ class AbsClientFactory(
 
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor(serverId))
+            .authenticator(refreshAuthenticator(serverId))
             .build()
         val api = Retrofit.Builder()
             .baseUrl(normalized)
@@ -70,5 +76,32 @@ class AbsClientFactory(
                 .build()
         }
         chain.proceed(request)
+    }
+
+    /**
+     * On a 401, refresh once (single-flight + rotation-safe in :core:auth) and
+     * retry with the new access token. Returning null gives up, so the caller
+     * sees the 401 and the UI can mark the server "needs login". OkHttp calls
+     * this off the main thread, so blocking on the suspend refresh is fine.
+     */
+    private fun refreshAuthenticator(serverId: String) = Authenticator { _: Route?, response: Response ->
+        if (responseCount(response) >= 2) return@Authenticator null // already retried once
+        val newToken = runBlocking { tokenRefresher.refresh(serverId) } ?: return@Authenticator null
+        // Don't loop if the token we'd send is the one that just failed.
+        val sent = response.request.header("Authorization")
+        if (sent == "Bearer $newToken") return@Authenticator null
+        response.request.newBuilder()
+            .header("Authorization", "Bearer $newToken")
+            .build()
+    }
+
+    private fun responseCount(response: Response): Int {
+        var count = 1
+        var prior: Response? = response.priorResponse
+        while (prior != null) {
+            count++
+            prior = prior.priorResponse
+        }
+        return count
     }
 }

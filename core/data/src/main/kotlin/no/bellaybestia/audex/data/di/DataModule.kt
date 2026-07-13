@@ -5,9 +5,12 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import no.bellaybestia.audex.auth.AbsTokenRefresher
 import no.bellaybestia.audex.auth.ServerTokenStore
+import no.bellaybestia.audex.data.AuthRepositoryImpl
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
+import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.network.abs.AbsClientFactory
@@ -23,10 +26,15 @@ abstract class DataModule {
     @Binds
     abstract fun serverRepository(impl: ServerRepositoryImpl): ServerRepository
 
+    @Binds
+    abstract fun authRepository(impl: AuthRepositoryImpl): AuthRepository
+
     companion object {
         @Provides
         @Singleton
-        fun absClientFactory(tokenStore: ServerTokenStore): AbsClientFactory =
-            AbsClientFactory(tokenStore)
+        fun absClientFactory(
+            tokenStore: ServerTokenStore,
+            refresher: AbsTokenRefresher,
+        ): AbsClientFactory = AbsClientFactory(tokenStore, refresher)
     }
 }

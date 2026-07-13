@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only overlay: allow cleartext HTTP so the app can talk to a LAN/emulator
+  Audiobookshelf server (e.g. http://10.0.2.2:13378 from the Android emulator,
+  which reaches the Docker host where ABS runs). Release builds stay HTTPS-only.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

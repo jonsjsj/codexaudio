@@ -33,6 +33,8 @@ uploads later and the stats stay intact.
 - Readium reader over downloaded EPUBs.
 - `ebookLocation`/`ebookProgress` push + offline queue.
 - Full airplane-mode browsing (cover prefetch).
+- Immersion read-along groundwork ([09](09-immersion-reading.md)): unified position handoff (Tier 1)
+  when the reader lands; chapter-anchored proportional follow-along (Tier 2) begins here.
 
 **Gate:** an airplane-mode weekend — browse, listen, read; everything reconciles on reconnect,
 including into Codex.
@@ -43,6 +45,9 @@ including into Codex.
 - Manual join/split/merge UIs.
 - Handoff math ([05](05-sequence-diagrams.md), diagram (c)) + "Continue in other format" +
   continue-rail handoff chips.
+- **Immersion read-along (Tier 2)** ([09](09-immersion-reading.md)): audiobook clock drives the
+  Readium reader via chapter-anchored proportional sync, bidirectional; audio stays the master clock
+  for session/stats correctness.
 - Position-conflict chip + undo.
 
 **Gate:** diagram (c) works end-to-end on a book with mismatched front matter; an override

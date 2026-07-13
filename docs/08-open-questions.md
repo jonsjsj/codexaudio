@@ -18,6 +18,11 @@ version before the phase that depends on them (phases per [07 — build plan](07
 4. **GraphicAudio default**: separate work (recommended) vs same-work edition.
 5. **Ebook streaming**: ever build a Readium custom HTTP client against ABS, or stay
    download-only permanently?
+5b. **Immersion read-along** ([09](09-immersion-reading.md)): is chapter-anchored proportional
+   follow-along acceptable as "read-along", or is word-level highlight the bar (which requires Tier-3
+   forced alignment — a much larger project, since ABS carries no audio↔text timing)? Also: default
+   when both editions exist (audio-drives-page vs ask), and whether to invest in server-side
+   alignment later.
 6. **Override portability**: export/import overrides so a reinstall or second device keeps manual
    matches — Phase 4 scope?
 7. **Minimum ABS version pin** (≥ 2.26, required for refresh-token rotation) — is a hard

@@ -31,4 +31,7 @@ class DownloadsImpl @Inject constructor(
     override suspend fun remove(serverId: String, libraryItemId: String, format: DownloadFormat) {
         downloadManager.delete(serverId, libraryItemId, DownloadKind.valueOf(format.name))
     }
+
+    override suspend fun localEbookPath(serverId: String, libraryItemId: String): String? =
+        downloadManager.localEbookFile(serverId, libraryItemId)?.absolutePath
 }

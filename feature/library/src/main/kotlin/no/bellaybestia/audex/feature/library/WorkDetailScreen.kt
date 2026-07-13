@@ -41,6 +41,7 @@ import no.bellaybestia.audex.domain.model.Format
  */
 @Composable
 fun WorkDetailScreen(
+    onOpenReader: (serverId: String, libraryItemId: String, title: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: WorkDetailViewModel = hiltViewModel(),
 ) {
@@ -99,6 +100,7 @@ fun WorkDetailScreen(
                     onTogglePlayPause = { viewModel.togglePlayPause() },
                     onDownload = { viewModel.download(edition) },
                     onRemoveDownload = { viewModel.removeDownload(edition) },
+                    onRead = { onOpenReader(edition.serverId, edition.libraryItemId, viewModel.title) },
                 )
                 if (index < editions.lastIndex) {
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -118,6 +120,7 @@ private fun EditionRow(
     onTogglePlayPause: () -> Unit,
     onDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
+    onRead: () -> Unit,
 ) {
     val isAudio = edition.format == Format.AUDIO
     val icon = if (isAudio) Icons.Outlined.Headphones else Icons.Outlined.MenuBook
@@ -188,11 +191,16 @@ private fun EditionRow(
                         .padding(vertical = 4.dp, horizontal = 4.dp),
                 )
             } else {
+                // Ebook is readable once downloaded (offline reader).
+                val readable = download?.isComplete == true
                 Text(
                     text = "Read",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
+                    color = if (readable) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .then(if (readable) Modifier.clickable(onClick = onRead) else Modifier)
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
                 )
             }
 

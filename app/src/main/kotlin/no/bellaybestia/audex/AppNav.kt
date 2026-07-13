@@ -21,6 +21,7 @@ import no.bellaybestia.audex.feature.home.HomeScreen
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen
+import no.bellaybestia.audex.feature.library.ReaderScreen
 import no.bellaybestia.audex.feature.library.SeriesDetailScreen
 import no.bellaybestia.audex.feature.library.WorkDetailScreen
 import no.bellaybestia.audex.feature.player.PlayerScreen
@@ -37,11 +38,14 @@ private object Routes {
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
     const val WORK = "work/{id}?title={title}&author={author}"
+    const val READER = "reader/{serverId}/{itemId}?title={title}"
 
     fun author(id: String, name: String) = "author/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun series(id: String, name: String) = "series/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun work(id: String, title: String, author: String?) =
         "work/${Uri.encode(id)}?title=${Uri.encode(title)}&author=${Uri.encode(author.orEmpty())}"
+    fun reader(serverId: String, itemId: String, title: String) =
+        "reader/${Uri.encode(serverId)}/${Uri.encode(itemId)}?title=${Uri.encode(title)}"
 }
 
 private val bottomTabs = listOf("Home", "Library", "Downloads", "Settings")
@@ -61,7 +65,7 @@ fun AppNav() {
     val currentRoute = backStackEntry?.destination?.route
     val selectedTab = when (currentRoute) {
         Routes.HOME -> 0
-        Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK -> 1
+        Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER -> 1
         Routes.DOWNLOADS -> 2
         Routes.SETTINGS, Routes.ADD_SERVER -> 3
         else -> 0
@@ -158,7 +162,25 @@ fun AppNav() {
                     },
                 ),
             ) {
-                WorkDetailScreen()
+                WorkDetailScreen(
+                    onOpenReader = { serverId, itemId, title ->
+                        navController.navigate(Routes.reader(serverId, itemId, title))
+                    },
+                )
+            }
+            composable(
+                route = Routes.READER,
+                arguments = listOf(
+                    navArgument("serverId") { type = NavType.StringType },
+                    navArgument("itemId") { type = NavType.StringType },
+                    navArgument("title") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
+                ReaderScreen()
             }
             composable(Routes.PLAYER) {
                 PlayerScreen()

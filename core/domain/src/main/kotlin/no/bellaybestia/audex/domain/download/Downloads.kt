@@ -23,4 +23,7 @@ interface Downloads {
     fun all(): Flow<List<DownloadInfo>>
     fun start(serverId: String, libraryItemId: String, format: DownloadFormat)
     suspend fun remove(serverId: String, libraryItemId: String, format: DownloadFormat)
+
+    /** Absolute path to the downloaded ebook file, or null if not downloaded. */
+    suspend fun localEbookPath(serverId: String, libraryItemId: String): String?
 }

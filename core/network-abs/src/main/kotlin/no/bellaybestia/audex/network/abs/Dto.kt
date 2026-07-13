@@ -51,6 +51,33 @@ data class AbsMedia(
     val numAudioFiles: Int = 0,
     val ebookFormat: String? = null,
     val chapters: List<AbsChapter> = emptyList(),
+    // Present on the expanded item (GET /api/items/{id}?expanded=1); used for
+    // per-file offline downloads (each file addressed by its `ino`).
+    val audioFiles: List<AbsAudioFile> = emptyList(),
+    val ebookFile: AbsEbookFile? = null,
+)
+
+@Serializable
+data class AbsAudioFile(
+    val index: Int = 0,
+    val ino: String = "",
+    val duration: Double = 0.0,
+    val mimeType: String? = null,
+    val metadata: AbsFileMetadata = AbsFileMetadata(),
+)
+
+@Serializable
+data class AbsEbookFile(
+    val ino: String = "",
+    val ebookFormat: String? = null,
+    val metadata: AbsFileMetadata = AbsFileMetadata(),
+)
+
+@Serializable
+data class AbsFileMetadata(
+    val filename: String = "",
+    val ext: String? = null,
+    val size: Long = 0,
 )
 
 @Serializable

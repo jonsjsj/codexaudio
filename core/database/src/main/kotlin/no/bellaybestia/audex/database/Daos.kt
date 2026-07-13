@@ -202,4 +202,16 @@ interface DownloadDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(row: DownloadEntity)
+
+    @Query("SELECT * FROM downloads WHERE serverId = :serverId AND libraryItemId = :itemId AND kind = :kind")
+    suspend fun get(serverId: String, itemId: String, kind: String): DownloadEntity?
+
+    @Query("SELECT * FROM downloads WHERE serverId = :serverId AND libraryItemId = :itemId")
+    suspend fun forItem(serverId: String, itemId: String): List<DownloadEntity>
+
+    @Query("UPDATE downloads SET state = :state, bytesDone = :bytesDone, bytesTotal = :bytesTotal, dirPath = :dirPath WHERE serverId = :serverId AND libraryItemId = :itemId AND kind = :kind")
+    suspend fun updateProgress(serverId: String, itemId: String, kind: String, state: String, bytesDone: Long, bytesTotal: Long, dirPath: String?)
+
+    @Query("DELETE FROM downloads WHERE serverId = :serverId AND libraryItemId = :itemId AND kind = :kind")
+    suspend fun delete(serverId: String, itemId: String, kind: String)
 }

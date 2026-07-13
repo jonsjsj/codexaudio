@@ -8,7 +8,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import dagger.hilt.android.qualifiers.ApplicationContext
+import no.bellaybestia.audex.data.workers.DownloadWorker
 import no.bellaybestia.audex.data.workers.LibrarySyncWorker
 import no.bellaybestia.audex.data.workers.SessionUploadWorker
 import java.util.concurrent.TimeUnit
@@ -55,6 +57,23 @@ class WorkScheduler @Inject constructor(
             "${LibrarySyncWorker.UNIQUE_NAME}-now",
             ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<LibrarySyncWorker>().setConstraints(connected).build(),
+        )
+    }
+
+    /** Download an item's audio or ebook files for offline use. */
+    fun downloadNow(serverId: String, libraryItemId: String, kind: DownloadKind) {
+        val data = workDataOf(
+            DownloadWorker.KEY_SERVER to serverId,
+            DownloadWorker.KEY_ITEM to libraryItemId,
+            DownloadWorker.KEY_KIND to kind.name,
+        )
+        workManager.enqueueUniqueWork(
+            "download-$serverId-$libraryItemId-${kind.name}",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<DownloadWorker>()
+                .setInputData(data)
+                .setConstraints(connected)
+                .build(),
         )
     }
 

@@ -39,6 +39,13 @@ uploads later and the stats stay intact.
 **Gate:** an airplane-mode weekend — browse, listen, read; everything reconciles on reconnect,
 including into Codex.
 
+**Status (2026-07-13):** downloads (per-file, manifest for offline resume) + offline playback +
+ebook-position queue/uploader are built and CI-green; the work-detail card has Download/Read
+actions and a real Downloads screen. Remaining: the Readium reflowable **renderer** — deferred
+because readium 3.3.0 needs a newer Kotlin/AGP than pinned and the navigator needs on-device
+verification. The reader entry point + ebook-position pipeline are already wired, so the renderer
+(and Tier-2 immersion, [09](09-immersion-reading.md)) drop in without touching the rest.
+
 ## Phase 3 — matching polish + cross-format handoff UX
 
 - SUGGESTED-match review screen → overrides.

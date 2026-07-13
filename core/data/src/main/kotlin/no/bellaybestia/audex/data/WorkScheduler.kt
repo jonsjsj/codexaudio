@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.qualifiers.ApplicationContext
 import no.bellaybestia.audex.data.workers.DownloadWorker
+import no.bellaybestia.audex.data.workers.EbookProgressUploadWorker
 import no.bellaybestia.audex.data.workers.LibrarySyncWorker
 import no.bellaybestia.audex.data.workers.SessionUploadWorker
 import java.util.concurrent.TimeUnit
@@ -48,6 +49,22 @@ class WorkScheduler @Inject constructor(
             PeriodicWorkRequestBuilder<SessionUploadWorker>(1, TimeUnit.HOURS)
                 .setConstraints(connected)
                 .build(),
+        )
+        workManager.enqueueUniquePeriodicWork(
+            EbookProgressUploadWorker.UNIQUE_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<EbookProgressUploadWorker>(1, TimeUnit.HOURS)
+                .setConstraints(connected)
+                .build(),
+        )
+    }
+
+    /** Flush queued ebook positions as soon as there's connectivity. */
+    fun uploadEbookProgressNow() {
+        workManager.enqueueUniqueWork(
+            "${EbookProgressUploadWorker.UNIQUE_NAME}-now",
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            OneTimeWorkRequestBuilder<EbookProgressUploadWorker>().setConstraints(connected).build(),
         )
     }
 

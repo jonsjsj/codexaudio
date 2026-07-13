@@ -8,6 +8,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import no.bellaybestia.audex.data.DownloadKind
 import no.bellaybestia.audex.data.DownloadManager
+import no.bellaybestia.audex.data.EbookProgressUploader
 import no.bellaybestia.audex.data.LibrarySyncer
 import no.bellaybestia.audex.data.SessionUploader
 
@@ -80,5 +81,22 @@ class DownloadWorker @AssistedInject constructor(
         const val KEY_SERVER = "serverId"
         const val KEY_ITEM = "itemId"
         const val KEY_KIND = "kind"
+    }
+}
+
+/** Drains queued ebook positions via PATCH /api/me/progress/{id}. */
+@HiltWorker
+class EbookProgressUploadWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val uploader: EbookProgressUploader,
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result = runCatching {
+        if (uploader.flush()) Result.success() else Result.retry()
+    }.getOrElse { Result.retry() }
+
+    companion object {
+        const val UNIQUE_NAME = "ebook-progress-upload"
     }
 }

@@ -10,11 +10,13 @@ import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.data.AuthRepositoryImpl
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
 import no.bellaybestia.audex.data.DownloadsImpl
+import no.bellaybestia.audex.data.EbookProgressWriterImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
 import no.bellaybestia.audex.data.StreamTokenResolverImpl
 import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.playback.PlaybackController
+import no.bellaybestia.audex.domain.reader.EbookProgressWriter
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
@@ -43,6 +45,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun downloads(impl: DownloadsImpl): Downloads
+
+    @Binds
+    abstract fun ebookProgressWriter(impl: EbookProgressWriterImpl): EbookProgressWriter
 
     companion object {
         @Provides

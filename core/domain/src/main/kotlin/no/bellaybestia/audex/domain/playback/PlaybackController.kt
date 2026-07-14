@@ -12,6 +12,7 @@ data class PlaybackState(
     val author: String? = null,
     val positionMs: Long = 0,
     val durationMs: Long = 0,
+    val speed: Float = 1f,
     val error: String? = null,
 ) {
     val hasItem: Boolean get() = libraryItemId != null
@@ -31,6 +32,18 @@ interface PlaybackController {
     suspend fun play(serverId: String, libraryItemId: String, title: String, author: String?)
 
     fun togglePlayPause()
+
+    /** Seek to an overall position (ms from the start of the whole book). */
+    fun seekTo(positionMs: Long)
+
+    /** Jump back ~15s. */
+    fun skipBackward()
+
+    /** Jump forward ~30s. */
+    fun skipForward()
+
+    /** Set the playback speed (0.5–3.0×). */
+    fun setSpeed(speed: Float)
 
     fun stop()
 }

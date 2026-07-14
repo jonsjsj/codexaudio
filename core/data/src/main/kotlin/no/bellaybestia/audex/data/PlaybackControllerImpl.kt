@@ -170,6 +170,33 @@ class PlaybackControllerImpl @Inject constructor(
         }
     }
 
+    override fun seekTo(positionMs: Long) {
+        scope.launch(main) { seekOverall(positionMs / 1000.0) }
+    }
+
+    override fun skipBackward() {
+        scope.launch(main) { seekOverall((overallPositionS() - 15).coerceAtLeast(0.0)) }
+    }
+
+    override fun skipForward() {
+        scope.launch(main) { seekOverall((overallPositionS() + 30).coerceAtMost(totalDurationS)) }
+    }
+
+    override fun setSpeed(speed: Float) {
+        scope.launch(main) {
+            controller?.setPlaybackSpeed(speed)
+            _state.update { it.copy(speed = speed) }
+        }
+    }
+
+    /** Seek to an overall second, mapping onto the right track. Runs on main. */
+    private fun seekOverall(targetS: Double) {
+        val c = controller ?: return
+        val idx = activeOffsets.indexOfLast { it <= targetS }.coerceAtLeast(0)
+        val withinMs = ((targetS - (activeOffsets.getOrNull(idx) ?: 0.0)).coerceAtLeast(0.0) * 1000).toLong()
+        c.seekTo(idx, withinMs)
+    }
+
     override fun stop() {
         val api = activeApi
         val sessionId = activeSessionId

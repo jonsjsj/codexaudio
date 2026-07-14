@@ -1,6 +1,7 @@
 package no.bellaybestia.audex
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -24,6 +25,7 @@ import no.bellaybestia.audex.feature.library.LibraryScreen
 import no.bellaybestia.audex.feature.library.ReaderScreen
 import no.bellaybestia.audex.feature.library.SeriesDetailScreen
 import no.bellaybestia.audex.feature.library.WorkDetailScreen
+import no.bellaybestia.audex.feature.player.MiniPlayer
 import no.bellaybestia.audex.feature.player.PlayerScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
@@ -73,11 +75,16 @@ fun AppNav() {
 
     Scaffold(
         bottomBar = {
-            FlatTabRow(
-                tabs = bottomTabs,
-                selectedIndex = selectedTab,
-                onSelect = { index -> navController.navigateToTab(bottomTabRoutes[index]) },
-            )
+            Column {
+                if (currentRoute != Routes.PLAYER) {
+                    MiniPlayer(onExpand = { navController.navigate(Routes.PLAYER) })
+                }
+                FlatTabRow(
+                    tabs = bottomTabs,
+                    selectedIndex = selectedTab,
+                    onSelect = { index -> navController.navigateToTab(bottomTabRoutes[index]) },
+                )
+            }
         },
     ) { innerPadding ->
         NavHost(

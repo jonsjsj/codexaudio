@@ -23,6 +23,9 @@ import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.ReaderPrefs
+import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
+import no.bellaybestia.audex.domain.reader.ReaderTheme
 import no.bellaybestia.audex.domain.reader.SyncMap
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import org.json.JSONObject
@@ -80,6 +83,7 @@ class ReaderViewModel @Inject constructor(
     private val ebookProgressWriter: EbookProgressWriter,
     private val catalogRepository: CatalogRepository,
     private val alignmentRepository: AlignmentRepository,
+    private val readerSettings: ReaderSettingsStore,
     playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -126,6 +130,23 @@ class ReaderViewModel @Inject constructor(
     /** Word-sync map for this work's audio (docs/10); null → proportional follow. */
     private val _syncMap = MutableStateFlow<SyncMap?>(null)
     val syncMap: StateFlow<SyncMap?> = _syncMap.asStateFlow()
+
+    /** Persisted appearance (font %, theme); the screen submits it to Readium. */
+    val readerPrefs: StateFlow<ReaderPrefs> = readerSettings.prefs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReaderPrefs())
+
+    fun adjustFontSize(deltaPct: Int) {
+        val current = readerPrefs.value
+        viewModelScope.launch {
+            readerSettings.set(current.copy(fontSizePct = current.fontSizePct + deltaPct))
+        }
+    }
+
+    fun cycleTheme() {
+        val current = readerPrefs.value
+        val next = ReaderTheme.entries[(current.theme.ordinal + 1) % ReaderTheme.entries.size]
+        viewModelScope.launch { readerSettings.set(current.copy(theme = next)) }
+    }
 
     init {
         viewModelScope.launch { openBook() }

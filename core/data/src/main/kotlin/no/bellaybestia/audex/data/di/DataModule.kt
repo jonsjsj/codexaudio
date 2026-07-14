@@ -12,6 +12,7 @@ import no.bellaybestia.audex.data.AuthRepositoryImpl
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
 import no.bellaybestia.audex.data.DownloadsImpl
 import no.bellaybestia.audex.data.EbookProgressWriterImpl
+import no.bellaybestia.audex.data.ReaderSettingsStoreImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
 import no.bellaybestia.audex.data.StreamTokenResolverImpl
@@ -19,6 +20,7 @@ import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
@@ -53,6 +55,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun alignmentRepository(impl: AlignmentRepositoryImpl): AlignmentRepository
+
+    @Binds
+    abstract fun readerSettingsStore(impl: ReaderSettingsStoreImpl): ReaderSettingsStore
 
     companion object {
         @Provides

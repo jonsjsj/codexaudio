@@ -40,7 +40,11 @@ import androidx.fragment.app.commitNow
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import no.bellaybestia.audex.domain.reader.ReaderPrefs
+import no.bellaybestia.audex.domain.reader.ReaderTheme
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.publication.Locator
 
 private const val READER_FRAGMENT_TAG = "audex_epub_reader"
@@ -84,8 +88,17 @@ private fun EpubReader(
     val followAudio by viewModel.followAudio.collectAsState()
     val currentProgression by viewModel.currentProgression.collectAsState()
     val syncMap by viewModel.syncMap.collectAsState()
+    val prefs by viewModel.readerPrefs.collectAsState()
+    var showAppearance by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize()) {
+        AppearanceBar(
+            prefs = prefs,
+            expanded = showAppearance,
+            onToggle = { showAppearance = !showAppearance },
+            onFontDelta = viewModel::adjustFontSize,
+            onCycleTheme = viewModel::cycleTheme,
+        )
         // Read-along bar (docs/09): only when this work's audio edition is loaded.
         // With a word-sync map (docs/10) the audio position maps through real
         // alignment anchors; otherwise it falls back to the proportional guess.
@@ -186,6 +199,20 @@ private fun EpubReader(
         navigator?.currentLocator?.collect { viewModel.onLocatorChanged(it) }
     }
 
+    // Apply persisted appearance whenever it (or the navigator) changes.
+    LaunchedEffect(prefs, navigator) {
+        navigator?.submitPreferences(
+            EpubPreferences(
+                fontSize = prefs.fontSizePct / 100.0,
+                theme = when (prefs.theme) {
+                    ReaderTheme.LIGHT -> Theme.LIGHT
+                    ReaderTheme.SEPIA -> Theme.SEPIA
+                    ReaderTheme.DARK -> Theme.DARK
+                },
+            ),
+        )
+    }
+
     // Follow-audio: audio is the master clock; jump the page only when the
     // target PAGE changes, so second-by-second ticks don't thrash the
     // navigator. Sync-map progression when aligned, proportional otherwise.
@@ -212,6 +239,77 @@ private fun EpubReader(
             }
             navigator = null
         }
+    }
+}
+
+/**
+ * Flat appearance strip: a collapsed "Aa" affordance expanding to font-size
+ * steppers and a theme cycler. Values persist app-wide (ReaderSettingsStore).
+ */
+@Composable
+private fun AppearanceBar(
+    prefs: ReaderPrefs,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onFontDelta: (Int) -> Unit,
+    onCycleTheme: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+        ) {
+            if (expanded) {
+                Text(
+                    text = "A−",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { onFontDelta(-10) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Text(
+                    text = "${prefs.fontSizePct}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "A+",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { onFontDelta(+10) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = when (prefs.theme) {
+                        ReaderTheme.LIGHT -> "Light"
+                        ReaderTheme.SEPIA -> "Sepia"
+                        ReaderTheme.DARK -> "Dark"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onCycleTheme)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+            Text(
+                text = "Aa",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (expanded) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 

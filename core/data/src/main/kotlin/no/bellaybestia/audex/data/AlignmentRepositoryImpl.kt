@@ -3,7 +3,6 @@ package no.bellaybestia.audex.data
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.security.MessageDigest
@@ -26,7 +25,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-private val Context.appSettingsDataStore by preferencesDataStore(name = "app_settings")
 private val KEY_ALIGN_URL = stringPreferencesKey("align_service_url")
 
 @Serializable

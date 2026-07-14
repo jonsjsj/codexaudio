@@ -43,10 +43,15 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import no.bellaybestia.audex.domain.reader.ReaderPrefs
 import no.bellaybestia.audex.domain.reader.ReaderTheme
+import no.bellaybestia.audex.domain.reader.SyncMap
+import org.readium.r2.navigator.Decoration
+import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.util.Url
 
 private const val READER_FRAGMENT_TAG = "audex_epub_reader"
 
@@ -224,6 +229,33 @@ private fun EpubReader(
     } else {
         null
     }
+
+    // Sentence highlighting (map v1.1): tint the anchor currently being
+    // narrated. Keyed on the anchor's char offset so a highlight is applied
+    // once per sentence, not per playback tick.
+    val narrationAnchor = if (audioNow?.isPlaying == true) {
+        syncMap?.anchorAt(audioNow.positionS)?.takeIf { !it.text.isNullOrBlank() }
+    } else {
+        null
+    }
+    LaunchedEffect(narrationAnchor?.c0, navigator) {
+        val decorable = navigator as? DecorableNavigator ?: return@LaunchedEffect
+        val map = syncMap
+        val decorations = if (narrationAnchor != null && map != null) {
+            narrationLocator(ready.publication, map, narrationAnchor)?.let { locator ->
+                listOf(
+                    Decoration(
+                        id = "narration",
+                        locator = locator,
+                        style = Decoration.Style.Highlight(tint = 0x66FFC107.toInt()),
+                    ),
+                )
+            } ?: emptyList()
+        } else {
+            emptyList()
+        }
+        decorable.applyDecorations(decorations, group = "readalong")
+    }
     LaunchedEffect(followTargetIndex, navigator) {
         val index = followTargetIndex ?: return@LaunchedEffect
         ready.positions.getOrNull(index)?.let { navigator?.go(it) }
@@ -367,6 +399,31 @@ private fun ReadAlongBar(
 private fun targetPositionIndex(positions: List<Locator>, fraction: Double): Int? {
     if (positions.isEmpty()) return null
     return (fraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+}
+
+/**
+ * Locator for a narration anchor: the anchor's chapter link + within-chapter
+ * progression, with the anchored book string as the text highlight (Readium's
+ * decorator resolves the DOM range by text-quote matching). Null when the map
+ * predates v1.1 or the href can't be matched to the publication.
+ */
+private fun narrationLocator(
+    publication: Publication,
+    map: SyncMap,
+    anchor: no.bellaybestia.audex.domain.reader.SyncAnchor,
+): Locator? {
+    val href = anchor.href ?: return null
+    val text = anchor.text ?: return null
+    val link = Url(href)?.let { publication.linkWithHref(it) }
+        ?: publication.readingOrder.firstOrNull {
+            it.href.toString().endsWith(href) || href.endsWith(it.href.toString())
+        }
+        ?: return null
+    val base = publication.locatorFromLink(link) ?: return null
+    return base.copy(
+        locations = base.locations.copy(progression = map.chapterProgression(anchor)),
+        text = Locator.Text(highlight = text),
+    )
 }
 
 private fun locatorForFraction(positions: List<Locator>, fraction: Double): Locator? =

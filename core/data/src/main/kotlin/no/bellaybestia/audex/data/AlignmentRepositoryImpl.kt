@@ -18,6 +18,7 @@ import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.SyncAnchor
+import no.bellaybestia.audex.domain.reader.SyncChapter
 import no.bellaybestia.audex.domain.reader.SyncMap
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 import okhttp3.MediaType.Companion.toMediaType
@@ -33,13 +34,19 @@ private data class WireAnchor(
     val t1: Double,
     val p: Double,
     val href: String? = null,
+    val text: String? = null,
+    val c0: Int = 0,
 )
+
+@Serializable
+private data class WireChapter(val href: String = "", val c0: Int = 0, val c1: Int = 0)
 
 @Serializable
 private data class WireMap(
     val version: Int = 1,
     val durationS: Double = 0.0,
     val entries: List<WireAnchor> = emptyList(),
+    val chapters: List<WireChapter> = emptyList(),
 )
 
 @Serializable
@@ -123,7 +130,10 @@ class AlignmentRepositoryImpl @Inject constructor(
                 val wire = json.decodeFromString(WireMap.serializer(), cached.readText())
                 SyncMap(
                     durationS = wire.durationS,
-                    anchors = wire.entries.map { SyncAnchor(it.t0, it.t1, it.p, it.href) },
+                    anchors = wire.entries.map {
+                        SyncAnchor(it.t0, it.t1, it.p, it.href, it.text, it.c0)
+                    },
+                    chapters = wire.chapters.map { SyncChapter(it.href, it.c0, it.c1) },
                 )
             }.getOrNull()
         }

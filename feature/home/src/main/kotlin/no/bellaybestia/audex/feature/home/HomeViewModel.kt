@@ -25,4 +25,13 @@ class HomeViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Newest arrivals by remote updatedAt — fills Home before any progress exists. */
+    val recentWorks: StateFlow<List<Work>> = catalogRepository.works()
+        .map { works ->
+            works.filter { it.updatedAt != null }
+                .sortedByDescending { it.updatedAt }
+                .take(15)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }

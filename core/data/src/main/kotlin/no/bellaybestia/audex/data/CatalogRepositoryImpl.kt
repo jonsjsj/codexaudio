@@ -137,6 +137,7 @@ private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
     coverUrl = coverKey?.split('|', limit = 2)
         ?.takeIf { it.size == 2 }
         ?.let { (serverId, itemId) -> baseUrls[serverId]?.let { absCoverUrl(it, itemId) } },
+    updatedAt = updatedAtRemote,
 )
 
 internal fun RemoteItemEntity.toRemoteBook(json: Json): RemoteBook {

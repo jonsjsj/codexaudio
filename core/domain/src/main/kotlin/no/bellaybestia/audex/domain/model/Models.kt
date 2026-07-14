@@ -32,6 +32,8 @@ data class Work(
     val readFraction: Double = 0.0,
     /** ABS cover URL of a representative edition (null → placeholder). */
     val coverUrl: String? = null,
+    /** Latest remote updatedAt (epoch ms) across the work's items — "recently added" proxy. */
+    val updatedAt: Long? = null,
 )
 
 /**

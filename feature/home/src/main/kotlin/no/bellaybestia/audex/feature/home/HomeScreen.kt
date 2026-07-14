@@ -44,15 +44,16 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val continueWorks by viewModel.continueWorks.collectAsState()
+    val recentWorks by viewModel.recentWorks.collectAsState()
     val listState = rememberLazyListState()
 
-    Column(modifier.fillMaxSize()) {
-        Text(
-            text = "Continue",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        )
-        if (continueWorks.isEmpty()) {
+    if (continueWorks.isEmpty() && recentWorks.isEmpty()) {
+        Column(modifier.fillMaxSize()) {
+            Text(
+                text = "Continue",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
             Text(
                 text = "Nothing in progress yet — add a server and start listening or " +
                     "reading; books you're partway through appear here to pick back up.",
@@ -60,24 +61,46 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             )
-            return
         }
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(continueWorks, key = { _, work -> work.id }) { index, work ->
+        return
+    }
+
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
+        if (continueWorks.isNotEmpty()) {
+            item(key = "header_continue") { SectionHeader("Continue") }
+            itemsIndexed(continueWorks, key = { _, work -> "c_${work.id}" }) { index, work ->
                 ContinueRow(work = work, onClick = { onWorkClick(work) })
-                if (index < continueWorks.lastIndex) {
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                }
+                if (index < continueWorks.lastIndex) FlatHairline()
+            }
+        }
+        if (recentWorks.isNotEmpty()) {
+            item(key = "header_recent") { SectionHeader("Recently added") }
+            itemsIndexed(recentWorks, key = { _, work -> "r_${work.id}" }) { index, work ->
+                ContinueRow(work = work, onClick = { onWorkClick(work) })
+                if (index < recentWorks.lastIndex) FlatHairline()
             }
         }
     }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+        FlatHairline()
+    }
+}
+
+@Composable
+private fun FlatHairline() {
+    HorizontalDivider(
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
 }
 
 @Composable

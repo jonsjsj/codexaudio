@@ -14,6 +14,9 @@ import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 
+/** Sort orders for the All tab. Author = the canonical shelf order from the DAO. */
+enum class WorkSort { AUTHOR, TITLE, RECENT }
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     catalogRepository: CatalogRepository,
@@ -34,6 +37,13 @@ class LibraryViewModel @Inject constructor(
         savedStateHandle[KEY_QUERY] = value
     }
 
+    /** All-tab sort order, process-death safe (stored as ordinal). */
+    val sort: StateFlow<Int> = savedStateHandle.getStateFlow(KEY_SORT, WorkSort.AUTHOR.ordinal)
+
+    fun setSort(value: WorkSort) {
+        savedStateHandle[KEY_SORT] = value.ordinal
+    }
+
     val authors: StateFlow<List<Author>> =
         combine(catalogRepository.authors(), query) { authors, q ->
             if (q.isBlank()) authors else authors.filter { it.name.contains(q, ignoreCase = true) }
@@ -45,16 +55,23 @@ class LibraryViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val works: StateFlow<List<Work>> =
-        combine(catalogRepository.works(), query) { works, q ->
-            if (q.isBlank()) works else works.filter { work ->
+        combine(catalogRepository.works(), query, sort) { works, q, sortOrdinal ->
+            val filtered = if (q.isBlank()) works else works.filter { work ->
                 work.title.contains(q, ignoreCase = true) ||
                     work.authorName?.contains(q, ignoreCase = true) == true ||
                     work.seriesName?.contains(q, ignoreCase = true) == true
+            }
+            when (WorkSort.entries.getOrElse(sortOrdinal) { WorkSort.AUTHOR }) {
+                // AUTHOR keeps the DAO's canonical shelf order (author → series → position).
+                WorkSort.AUTHOR -> filtered
+                WorkSort.TITLE -> filtered.sortedBy { it.title.lowercase() }
+                WorkSort.RECENT -> filtered.sortedByDescending { it.updatedAt ?: 0L }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private companion object {
         const val KEY_SELECTED_TAB = "library_selected_tab"
         const val KEY_QUERY = "library_query"
+        const val KEY_SORT = "library_sort"
     }
 }

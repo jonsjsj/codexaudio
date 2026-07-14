@@ -58,6 +58,8 @@ data class WorkRow(
     val ebookCount: Int,
     /** Representative edition for the cover, as "serverId|libraryItemId" (split in the repo). */
     val coverKey: String?,
+    /** Latest remote updatedAt across the work's items — proxy for "recently added". */
+    val updatedAtRemote: Long?,
 )
 
 private const val WORK_ROW_SELECT = """
@@ -67,12 +69,14 @@ private const val WORK_ROW_SELECT = """
            MAX(CASE WHEN e.format = 'EBOOK' THEN COALESCE(p.pct, 0) END) AS readPct,
            COUNT(CASE WHEN e.format = 'AUDIO' THEN 1 END) AS audioCount,
            COUNT(CASE WHEN e.format = 'EBOOK' THEN 1 END) AS ebookCount,
-           MIN(e.serverId || '|' || e.libraryItemId) AS coverKey
+           MIN(e.serverId || '|' || e.libraryItemId) AS coverKey,
+           MAX(r.updatedAtRemote) AS updatedAtRemote
     FROM works w
     LEFT JOIN authors a ON a.authorId = w.authorId
     LEFT JOIN series s ON s.seriesId = w.seriesId
     LEFT JOIN editions e ON e.workId = w.workId
     LEFT JOIN progress p ON p.serverId = e.serverId AND p.libraryItemId = e.libraryItemId
+    LEFT JOIN remote_items r ON r.serverId = e.serverId AND r.libraryItemId = e.libraryItemId
 """
 
 @Dao

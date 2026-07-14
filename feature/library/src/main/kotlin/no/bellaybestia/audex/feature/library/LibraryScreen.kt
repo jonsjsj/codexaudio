@@ -64,6 +64,7 @@ fun LibraryScreen(
 ) {
     val selectedTab by viewModel.selectedTab.collectAsState()
     val query by viewModel.query.collectAsState()
+    val sort by viewModel.sort.collectAsState()
     val authors by viewModel.authors.collectAsState()
     val series by viewModel.series.collectAsState()
     val works by viewModel.works.collectAsState()
@@ -85,9 +86,47 @@ fun LibraryScreen(
         when (selectedTab) {
             0 -> AuthorsList(authors, authorsListState, onAuthorClick)
             1 -> SeriesList(series, seriesListState, onSeriesClick)
-            else -> WorksList(works, worksListState, onWorkClick)
+            else -> Column {
+                SortRow(selected = sort, onSelect = viewModel::setSort)
+                WorksList(works, worksListState, onWorkClick)
+            }
         }
     }
+}
+
+/** Flat sort selector for the All tab: plain labels, the active one in accent. */
+@Composable
+private fun SortRow(selected: Int, onSelect: (WorkSort) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Sort",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(12.dp))
+        listOf(
+            WorkSort.AUTHOR to "Author",
+            WorkSort.TITLE to "Title",
+            WorkSort.RECENT to "Recent",
+        ).forEach { (option, label) ->
+            val active = selected == option.ordinal
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable { onSelect(option) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+    FlatDivider()
 }
 
 /**

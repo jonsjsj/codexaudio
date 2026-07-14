@@ -1,5 +1,6 @@
 package no.bellaybestia.audex.data
 
+import dagger.Lazy
 import no.bellaybestia.audex.auth.AbsTokenRefresher
 import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.database.ServerDao
@@ -22,7 +23,12 @@ class AppStartup @Inject constructor(
     private val refresher: AbsTokenRefresher,
     private val serverDao: ServerDao,
     private val sessionDao: SessionDao,
-    private val workScheduler: WorkScheduler,
+    // dagger.Lazy: AppStartup is field-injected into AudexApp BEFORE
+    // workerFactory, and constructing WorkScheduler eagerly initializes
+    // WorkManager, whose Configuration.Provider getter reads the still-lateinit
+    // workerFactory → startup crash (runtime-verified). Deferring to
+    // initialize() (post-onCreate) breaks the ordering hazard.
+    private val workScheduler: Lazy<WorkScheduler>,
 ) {
     suspend fun initialize() {
         tokenStore.load()
@@ -30,6 +36,6 @@ class AppStartup @Inject constructor(
             serverDao.enabled().firstOrNull { it.serverId == serverId }?.baseUrl
         }
         sessionDao.adoptOrphanedRecordings()
-        workScheduler.uploadSessionsNow()
+        workScheduler.get().uploadSessionsNow()
     }
 }

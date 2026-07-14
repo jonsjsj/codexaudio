@@ -72,15 +72,22 @@ pause/exit, debounced), so ABS + Codex stay consistent **without double-counting
 Do not open a second "reading" session, and never route audio position through `/api/me/progress`.
 This keeps the invariant Codex depends on ([03](03-abs-api-usage.md) §3.3) intact.
 
-## Tier 3 — True fragment sync (opt-in / future)
+## Tier 3 — True fragment sync ✅ SHIPPED (2026-07-14, self-hosted)
 
-- **EPUB 3 Media Overlays**: when a downloaded EPUB *does* carry SMIL overlays, use Readium's
-  media-overlay navigator for real fragment-level highlight. Note the overlay's own audio (embedded
-  in the EPUB) is a different asset from the ABS audiobook edition; decide per-book which audio
-  plays. Rare, but the gold standard when present — cheap to support since Readium already does it.
-- **Server-side forced alignment (research)**: a companion/offline tool (possibly Codex-side, since
-  it already owns the library graph) could ASR-align an audiobook to its ebook once and store a sync
-  map the app consumes for word/sentence highlight. Heavy; only if Tier 2 proves insufficient.
+**Implemented via the audex-align service** (`alignment-service/`, [10](10-alignment-service.md)):
+faster-whisper transcribes the audiobook once (CPU default on ventans, GPU option) and the
+recognition is fuzzy-anchored to the EPUB spine text — producing a per-book **sync map**
+(`{t0,t1,c0,c1,p,href,text}` anchors + chapter boundaries). The app consumes it for:
+
+- **precise follow** — Follow-audio maps narration time through real anchors instead of the
+  proportional guess (bar shows "· synced"),
+- **sentence highlighting** — the anchor currently being narrated becomes a Readium
+  `Decoration.Style.Highlight` (chapter link + within-chapter progression + text-quote locator).
+
+Workflow: work detail → "Word sync" → Prepare (server job) → Ready ✓. Maps are cached on-device.
+
+- **EPUB 3 Media Overlays** stay a possible complement when present (rare; publisher-provided
+  timings) — not needed now that alignment is self-hosted.
 
 ## UI
 

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnLayout
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commitNow
@@ -106,14 +107,14 @@ private fun EpubReader(
                 factory = { context ->
                     FragmentContainerView(context).apply { id = R.id.reader_container }
                 },
-                update = {
+                update = { container ->
                     val fm = activity.supportFragmentManager
-                    val existing = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
-                    if (existing == null) {
-                        // The factory must be in place before the fragment is
-                        // instantiated. Known limitation: if the process dies while
-                        // the reader is open, restoration happens before this runs —
-                        // the nav route re-opens the book from scratch instead.
+                    // The factory must be in place before the fragment is
+                    // instantiated. Known limitation: if the process dies while
+                    // the reader is open, restoration happens before this runs —
+                    // the nav route re-opens the book from scratch instead.
+                    fun attachReader() {
+                        if (fm.findFragmentByTag(READER_FRAGMENT_TAG) != null) return
                         fm.fragmentFactory = ready.navigatorFactory.createFragmentFactory(
                             initialLocator = ready.initialLocator,
                         )
@@ -127,8 +128,17 @@ private fun EpubReader(
                             )
                         }
                         navigator = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
-                    } else if (navigator == null) {
-                        navigator = existing
+                    }
+                    val existing = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                    when {
+                        existing != null -> if (navigator == null) navigator = existing
+                        // Attach only after the container has its REAL size:
+                        // committing during the first (unsized) layout pass made
+                        // Readium's JS compute the column grid against a wrong
+                        // viewport — pages misaligned and resource-boundary
+                        // crossing dead (runtime-verified on the emulator).
+                        container.isLaidOut -> attachReader()
+                        else -> container.doOnLayout { attachReader() }
                     }
                 },
             )

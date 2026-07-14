@@ -4,6 +4,9 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -44,6 +47,16 @@ class AbsClientFactory(
     private data class Entry(val baseUrl: String, val api: AbsApi)
 
     private val cache = ConcurrentHashMap<String, Entry>()
+    private val authCache = ConcurrentHashMap<String, Entry>()
+
+    // One cookie jar per server, shared between the auth client (which seeds the
+    // ABS OIDC session + auth_method cookies via GET /auth/openid) and the main
+    // client (which spends them on GET /auth/openid/callback). Without this the
+    // callback has no session cookie → ABS 400s / never returns the JSON payload.
+    private val jars = ConcurrentHashMap<String, CookieJar>()
+
+    private fun jarFor(serverId: String): CookieJar =
+        jars.getOrPut(serverId) { InMemoryCookieJar() }
 
     fun api(serverId: String, baseUrl: String): AbsApi {
         val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
@@ -51,6 +64,7 @@ class AbsClientFactory(
         if (hit != null && hit.baseUrl == normalized) return hit.api
 
         val client = OkHttpClient.Builder()
+            .cookieJar(jarFor(serverId))
             .addInterceptor(authInterceptor(serverId))
             .authenticator(refreshAuthenticator(serverId))
             .build()
@@ -64,8 +78,36 @@ class AbsClientFactory(
         return api
     }
 
+    /**
+     * Client for the OIDC mobile-flow initiation (GET /auth/openid). Redirect
+     * following is disabled so the 302 Location (the IdP authorization URL we
+     * open in the Custom Tab) is readable, and it shares [jarFor] so the session
+     * + auth_method cookies ABS sets here are resent on the callback exchange.
+     */
+    fun authApi(serverId: String, baseUrl: String): AbsApi {
+        val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val hit = authCache[serverId]
+        if (hit != null && hit.baseUrl == normalized) return hit.api
+
+        val client = OkHttpClient.Builder()
+            .cookieJar(jarFor(serverId))
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+        val api = Retrofit.Builder()
+            .baseUrl(normalized)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(AbsApi::class.java)
+        authCache[serverId] = Entry(normalized, api)
+        return api
+    }
+
     fun evict(serverId: String) {
         cache.remove(serverId)
+        authCache.remove(serverId)
+        jars.remove(serverId)
     }
 
     private fun authInterceptor(serverId: String) = Interceptor { chain ->
@@ -103,5 +145,34 @@ class AbsClientFactory(
             prior = prior.priorResponse
         }
         return count
+    }
+}
+
+/**
+ * Minimal in-memory cookie jar (host-scoped, last-write-wins per name), enough
+ * to carry the ABS OIDC session + auth_method cookies from GET /auth/openid to
+ * GET /auth/openid/callback within a login. Not persisted: a login that spans
+ * app-process death has to be restarted (the PendingOidcLogin is discarded too).
+ */
+private class InMemoryCookieJar : CookieJar {
+    private val byHost = ConcurrentHashMap<String, MutableList<Cookie>>()
+
+    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+        val list = byHost.getOrPut(url.host) { mutableListOf() }
+        synchronized(list) {
+            for (cookie in cookies) {
+                list.removeAll { it.name == cookie.name }
+                list.add(cookie)
+            }
+        }
+    }
+
+    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+        val list = byHost[url.host] ?: return emptyList()
+        val now = System.currentTimeMillis()
+        synchronized(list) {
+            list.removeAll { it.expiresAt < now }
+            return list.filter { it.matches(url) }
+        }
     }
 }

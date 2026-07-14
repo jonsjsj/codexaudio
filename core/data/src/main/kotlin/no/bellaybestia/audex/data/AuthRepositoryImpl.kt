@@ -84,8 +84,24 @@ class AuthRepositoryImpl @Inject constructor(
                         codeVerifier = verifier,
                     )
                 )
-                val url = AbsOidcFlow.authorizationUrl(normalized, state, Pkce.challenge(verifier)).toString()
-                _loginStatus.value = LoginStatus.AwaitingBrowser(url)
+                // Kick off ABS's mobile OIDC flow on OUR http client so the
+                // session + auth_method cookies land in the jar that
+                // completeLogin's /callback exchange reuses. ABS 302-redirects
+                // to the IdP; we open THAT (the Location) in the Custom Tab, not
+                // /auth/openid itself (which would strand the cookies in Chrome).
+                val idpUrl = runCatching {
+                    val resp = clientFactory.authApi(serverId, normalized).openidAuthorize(
+                        redirectUri = AbsOidcFlow.REDIRECT_URI,
+                        state = state,
+                        codeChallenge = Pkce.challenge(verifier),
+                    )
+                    if (resp.code() in 300..399) resp.headers()["Location"] else null
+                }.getOrNull()
+                if (idpUrl.isNullOrBlank()) {
+                    fail("Couldn't start sign-in with the server. Please try again.")
+                } else {
+                    _loginStatus.value = LoginStatus.AwaitingBrowser(idpUrl)
+                }
             }
         }
     }

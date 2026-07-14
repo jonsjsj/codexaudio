@@ -1,5 +1,6 @@
 package no.bellaybestia.audex.network.abs
 
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -21,9 +22,29 @@ interface AbsApi {
     @GET("status")
     suspend fun status(): AbsStatus
 
+    // OIDC mobile-flow initiation. ABS sets the express-session cookie + the
+    // auth_method=openid-mobile / auth_cb / auth_state cookies (paramsToCookies)
+    // and 302-redirects to the IdP authorization URL (Location header). We MUST
+    // make this call ourselves (not in the Custom Tab) so those cookies land in
+    // our shared cookie jar — the /auth/openid/callback exchange below requires
+    // req.session[sessionKey] (session cookie) to exist and auth_method to be
+    // "openid-mobile" to get a JSON payload back. Redirect-following is disabled
+    // on the auth client so the Location (the IdP URL we open in the Custom Tab)
+    // is readable. Verified against ABS 2.35.1 (Auth.js GET /auth/openid +
+    // OidcAuthStrategy.getAuthorizationUrl / generatePkce mobile branch).
+    @GET("auth/openid")
+    suspend fun openidAuthorize(
+        @Query("response_type") responseType: String = "code",
+        @Query("redirect_uri") redirectUri: String,
+        @Query("state") state: String,
+        @Query("code_challenge") codeChallenge: String,
+        @Query("code_challenge_method") codeChallengeMethod: String = "S256",
+    ): Response<ResponseBody>
+
     // OIDC token exchange: after ABS bounces the code back to audiobookshelf://oauth, call
-    // the callback with the PKCE code_verifier to get the login payload
-    // (verified against ABS 2.35.1 — see core/auth/AbsOidcFlow.tokenExchangeUrl).
+    // the callback with the PKCE code_verifier to get the login payload. Reuses the
+    // cookie jar seeded by openidAuthorize (session + auth_method cookies) so ABS
+    // returns JSON (verified against ABS 2.35.1 — see core/auth/AbsOidcFlow.tokenExchangeUrl).
     @GET("auth/openid/callback")
     suspend fun oidcCallback(
         @Query("code") code: String,

@@ -5,26 +5,34 @@ import android.net.Uri
 /**
  * Builders for ABS's native OIDC mobile flow (docs/05 diagram a).
  *
- * The app opens {base}/auth/openid in a Custom Tab (NEVER a WebView — Custom
- * Tabs share the default browser's Authentik session cookie, which is what
- * makes login on the second..nth server a silent redirect). ABS bounces the
- * authorization code back through {base}/auth/openid/mobile-redirect to our
- * custom scheme, which must be whitelisted in the server's
- * "Allowed Mobile Redirect URLs" setting.
+ * IMPORTANT: the app issues GET {base}/auth/openid on its OWN http client
+ * (AbsApi.openidAuthorize), NOT in the Custom Tab. That request is where ABS
+ * sets the express-session cookie and the auth_method=openid-mobile / auth_cb /
+ * auth_state cookies (paramsToCookies) and 302-redirects to the IdP. Those
+ * cookies MUST live in our cookie jar because the later /auth/openid/callback
+ * exchange requires req.session[sessionKey] to exist and auth_method to be
+ * "openid-mobile" (else ABS 400s / redirects instead of returning JSON). We then
+ * open only the IdP authorization URL (the 302 Location) in a Custom Tab (NEVER
+ * a WebView — Custom Tabs share the default browser's Authentik session cookie,
+ * which is what makes login on the second..nth server a silent redirect). ABS
+ * bounces the code back through {base}/auth/openid/mobile-redirect to our custom
+ * scheme, which must be whitelisted in the server's "Allowed Mobile Redirect
+ * URLs" setting.
  *
  * Verified against ABS 2.35.1 (server/Auth.js + auth/OidcAuthStrategy.js):
  *  - Authorization: GET {base}/auth/openid with response_type=code (only `code`
  *    is accepted), redirect_uri = our custom scheme, state, and PKCE
  *    code_challenge + code_challenge_method=S256 (S256 is REQUIRED for the
- *    mobile flow — plain is rejected). `client_id`/`nonce`/`scope` are set
- *    server-side from the ABS OIDC config, so the app must NOT send them.
+ *    mobile flow — the server keeps no verifier and uses the client's challenge).
+ *    `client_id`/`nonce`/`scope` are set server-side from the ABS OIDC config, so
+ *    the app must NOT send them.
  *  - ABS runs the whole dance with the IdP, then bounces the code back to our
  *    scheme via {base}/auth/openid/mobile-redirect →
  *    audiobookshelf://oauth?code=…&state=…
  *  - Token exchange: GET {base}/auth/openid/callback?code=…&state=…&code_verifier=…
- *    returns the login payload (AbsLoginResponse) with user.accessToken and
- *    user.refreshToken. The redirect scheme must be whitelisted in each ABS
- *    server's "Allowed Mobile Redirect URLs".
+ *    (with the flow cookies) returns the login payload (AbsLoginResponse) with
+ *    user.accessToken and user.refreshToken. The redirect scheme must be
+ *    whitelisted in each ABS server's "Allowed Mobile Redirect URLs".
  */
 object AbsOidcFlow {
 
@@ -36,19 +44,6 @@ object AbsOidcFlow {
     // the OAuth redirect — a non-issue since Audex replaces it.
     const val REDIRECT_SCHEME = "audiobookshelf"
     const val REDIRECT_URI = "$REDIRECT_SCHEME://oauth"
-
-    /** The URL to open in a Custom Tab to start login against one server. */
-    fun authorizationUrl(baseUrl: String, state: String, codeChallenge: String): Uri =
-        Uri.parse(baseUrl.trimEnd('/'))
-            .buildUpon()
-            .appendPath("auth")
-            .appendPath("openid")
-            .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("redirect_uri", REDIRECT_URI)
-            .appendQueryParameter("state", state)
-            .appendQueryParameter("code_challenge", codeChallenge)
-            .appendQueryParameter("code_challenge_method", "S256")
-            .build()
 
     /**
      * The token-exchange URL called after catching the custom-scheme redirect.

@@ -33,6 +33,7 @@ import kotlin.math.roundToInt
 import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.reader.WordSyncStatus
 
 /**
  * Work detail: title/author header + a flat "editions" card — one row per
@@ -49,6 +50,7 @@ fun WorkDetailScreen(
     val editions by viewModel.editions.collectAsState()
     val playback by viewModel.playback.collectAsState()
     val downloadStates by viewModel.downloadStates.collectAsState()
+    val wordSync by viewModel.wordSync.collectAsState()
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -118,6 +120,59 @@ fun WorkDetailScreen(
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
+        }
+
+        if (wordSync != WordSyncStatus.UNAVAILABLE) {
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            WordSyncRow(status = wordSync, onPrepare = viewModel::requestWordSync)
+        }
+    }
+}
+
+/**
+ * Word-sync row (docs/10): one flat line under the editions. Preparing runs
+ * server-side on audex-align; READY means the reader follows narration
+ * precisely instead of proportionally.
+ */
+@Composable
+private fun WordSyncRow(status: WordSyncStatus, onPrepare: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = "Word sync", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = when (status) {
+                    WordSyncStatus.READY -> "Ready — read-along follows the narration precisely."
+                    WordSyncStatus.RUNNING -> "Preparing on the server — this can take a while."
+                    else -> "Align audio and text for precise read-along."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        when (status) {
+            WordSyncStatus.READY -> Text(
+                text = "Ready ✓",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            WordSyncStatus.RUNNING -> Text(
+                text = "Preparing…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> Text(
+                text = "Prepare",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(onClick = onPrepare)
+                    .padding(vertical = 4.dp, horizontal = 4.dp),
+            )
         }
     }
 }

@@ -52,6 +52,9 @@ class AbsJobRequest(BaseModel):
     serverUrl: str
     token: str
     libraryItemId: str
+    # For works where audio and ebook are SEPARATE ABS items: audio comes from
+    # libraryItemId, the EPUB from this one. Defaults to the same item.
+    ebookLibraryItemId: str | None = None
 
 
 @app.get("/health")
@@ -125,18 +128,23 @@ def _run_abs_job(job_id: str, req: AbsJobRequest):
     try:
         _set(job_id, "downloading")
         base = req.serverUrl.rstrip("/")
+        ebook_item = req.ebookLibraryItemId or req.libraryItemId
         headers = {"Authorization": f"Bearer {req.token}"}
         with httpx.Client(headers=headers, timeout=300, follow_redirects=True) as client:
             item = client.get(f"{base}/api/items/{req.libraryItemId}", params={"expanded": 1})
             item.raise_for_status()
-            media = item.json().get("media", {})
-            ebook = media.get("ebookFile")
-            audio_files = media.get("audioFiles", [])
+            audio_files = item.json().get("media", {}).get("audioFiles", [])
+            if ebook_item == req.libraryItemId:
+                ebook = item.json().get("media", {}).get("ebookFile")
+            else:
+                other = client.get(f"{base}/api/items/{ebook_item}", params={"expanded": 1})
+                other.raise_for_status()
+                ebook = other.json().get("media", {}).get("ebookFile")
             if not ebook or not audio_files:
-                _set(job_id, "error", "book needs BOTH an ebook file and audio files on ABS")
+                _set(job_id, "error", "need audio files on the audio item and an ebook file on the ebook item")
                 return
             epub_path = workdir / "book.epub"
-            _download(client, f"{base}/api/items/{req.libraryItemId}/file/{ebook['ino']}", epub_path)
+            _download(client, f"{base}/api/items/{ebook_item}/file/{ebook['ino']}", epub_path)
             audio_paths: list[str] = []
             for i, af in enumerate(sorted(audio_files, key=lambda a: a.get("index", 0))):
                 p = workdir / f"{i:03d}.audio"

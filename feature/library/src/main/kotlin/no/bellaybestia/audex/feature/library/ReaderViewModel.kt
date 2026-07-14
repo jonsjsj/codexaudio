@@ -21,7 +21,9 @@ import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
+import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.SyncMap
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
@@ -56,6 +58,8 @@ data class AudioCompanion(
     val isPlaying: Boolean,
     /** Overall audio progress 0..1 (position / duration). */
     val fraction: Double,
+    /** Absolute audio position in seconds — the sync-map lookup key. */
+    val positionS: Double,
 )
 
 /**
@@ -75,6 +79,7 @@ class ReaderViewModel @Inject constructor(
     private val downloads: Downloads,
     private val ebookProgressWriter: EbookProgressWriter,
     private val catalogRepository: CatalogRepository,
+    private val alignmentRepository: AlignmentRepository,
     playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -111,11 +116,16 @@ class ReaderViewModel @Inject constructor(
                 AudioCompanion(
                     isPlaying = playback.isPlaying,
                     fraction = (playback.positionMs.toDouble() / playback.durationMs).coerceIn(0.0, 1.0),
+                    positionS = playback.positionMs / 1000.0,
                 )
             } else {
                 null
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Word-sync map for this work's audio (docs/10); null → proportional follow. */
+    private val _syncMap = MutableStateFlow<SyncMap?>(null)
+    val syncMap: StateFlow<SyncMap?> = _syncMap.asStateFlow()
 
     init {
         viewModelScope.launch { openBook() }
@@ -139,10 +149,18 @@ class ReaderViewModel @Inject constructor(
     private suspend fun resolveAudioSiblings() {
         val workId = catalogRepository.workIdForItem(serverId, libraryItemId) ?: return
         catalogRepository.editionsForWork(workId).collect { editions ->
-            audioItemKeys.value = editions
-                .filter { it.format == Format.AUDIO }
-                .map { "${it.serverId}|${it.libraryItemId}" }
-                .toSet()
+            val audio = editions.filter { it.format == Format.AUDIO }
+            audioItemKeys.value = audio.map { "${it.serverId}|${it.libraryItemId}" }.toSet()
+            // Load the word-sync map once (first audio sibling that has one).
+            if (_syncMap.value == null) {
+                for (edition in audio) {
+                    val map = alignmentRepository.syncMap(edition.serverId, edition.libraryItemId)
+                    if (map != null) {
+                        _syncMap.value = map
+                        break
+                    }
+                }
+            }
         }
     }
 

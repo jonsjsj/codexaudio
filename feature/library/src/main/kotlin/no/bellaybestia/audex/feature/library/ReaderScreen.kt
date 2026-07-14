@@ -78,18 +78,23 @@ private fun EpubReader(
     val companion by viewModel.audioCompanion.collectAsState()
     val followAudio by viewModel.followAudio.collectAsState()
     val currentProgression by viewModel.currentProgression.collectAsState()
+    val syncMap by viewModel.syncMap.collectAsState()
 
     Column(modifier.fillMaxSize()) {
         // Read-along bar (docs/09): only when this work's audio edition is loaded.
+        // With a word-sync map (docs/10) the audio position maps through real
+        // alignment anchors; otherwise it falls back to the proportional guess.
         companion?.let { audio ->
+            val audioProgression = syncMap?.progressionAt(audio.positionS) ?: audio.fraction
             ReadAlongBar(
                 audio = audio,
+                precise = syncMap != null,
                 following = followAudio,
                 showJump = !followAudio &&
-                    abs((currentProgression ?: 0.0) - audio.fraction) > 0.02,
+                    abs((currentProgression ?: 0.0) - audioProgression) > 0.02,
                 onToggleFollow = { viewModel.setFollowAudio(!followAudio) },
                 onJump = {
-                    locatorForFraction(ready.positions, audio.fraction)
+                    locatorForFraction(ready.positions, audioProgression)
                         ?.let { navigator?.go(it) }
                 },
             )
@@ -135,12 +140,13 @@ private fun EpubReader(
         navigator?.currentLocator?.collect { viewModel.onLocatorChanged(it) }
     }
 
-    // Follow-audio (Tier 2 proportional): audio is the master clock; jump the
-    // page only when the target PAGE changes, so second-by-second ticks don't
-    // thrash the navigator.
+    // Follow-audio: audio is the master clock; jump the page only when the
+    // target PAGE changes, so second-by-second ticks don't thrash the
+    // navigator. Sync-map progression when aligned, proportional otherwise.
     val audioNow = companion
     val followTargetIndex = if (followAudio && audioNow?.isPlaying == true) {
-        targetPositionIndex(ready.positions, audioNow.fraction)
+        val progression = syncMap?.progressionAt(audioNow.positionS) ?: audioNow.fraction
+        targetPositionIndex(ready.positions, progression)
     } else {
         null
     }
@@ -167,6 +173,7 @@ private fun EpubReader(
 @Composable
 private fun ReadAlongBar(
     audio: AudioCompanion,
+    precise: Boolean,
     following: Boolean,
     showJump: Boolean,
     onToggleFollow: () -> Unit,
@@ -180,12 +187,10 @@ private fun ReadAlongBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            val playGlyph = if (audio.isPlaying) "▶" else "⏸"
             Text(
-                text = if (audio.isPlaying) {
-                    "Audio ${(audio.fraction * 100).roundToInt()}% ▶"
-                } else {
-                    "Audio ${(audio.fraction * 100).roundToInt()}% ⏸"
-                },
+                text = "Audio ${(audio.fraction * 100).roundToInt()}% $playGlyph" +
+                    if (precise) " · synced" else "",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),

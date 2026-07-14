@@ -4,8 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.DownloadFormat
@@ -15,6 +17,8 @@ import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
+import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.reader.WordSyncStatus
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import javax.inject.Inject
 
@@ -23,6 +27,7 @@ class WorkDetailViewModel @Inject constructor(
     catalogRepository: CatalogRepository,
     private val playbackController: PlaybackController,
     private val downloads: Downloads,
+    private val alignmentRepository: AlignmentRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -39,6 +44,39 @@ class WorkDetailViewModel @Inject constructor(
 
     val downloadStates: StateFlow<List<DownloadInfo>> = downloads.all()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Word-sync (docs/10) status; UNAVAILABLE when no service URL or no dual-format. */
+    private val _wordSync = MutableStateFlow(WordSyncStatus.UNAVAILABLE)
+    val wordSync: StateFlow<WordSyncStatus> = _wordSync.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            editions.collect { eds ->
+                val audio = eds.firstOrNull { it.format == Format.AUDIO }
+                val ebook = eds.firstOrNull { it.format == Format.EBOOK }
+                _wordSync.value = if (audio == null || ebook == null) {
+                    WordSyncStatus.UNAVAILABLE
+                } else {
+                    alignmentRepository.status(audio.serverId, audio.libraryItemId)
+                }
+            }
+        }
+    }
+
+    /** Queue the alignment job for this work (audio item + same-server ebook item). */
+    fun requestWordSync() {
+        val eds = editions.value
+        val audio = eds.firstOrNull { it.format == Format.AUDIO } ?: return
+        val ebook = eds.firstOrNull { it.format == Format.EBOOK } ?: return
+        viewModelScope.launch {
+            _wordSync.value = WordSyncStatus.RUNNING
+            val ebookItem = ebook.libraryItemId
+                .takeIf { ebook.serverId == audio.serverId && it != audio.libraryItemId }
+            alignmentRepository
+                .requestAlignment(audio.serverId, audio.libraryItemId, ebookItem)
+                .onFailure { _wordSync.value = WordSyncStatus.NONE }
+        }
+    }
 
     fun play(edition: Edition) {
         viewModelScope.launch {

@@ -2,6 +2,7 @@ package no.bellaybestia.audex.feature.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val servers by viewModel.servers.collectAsState()
+    val alignUrl by viewModel.alignServiceUrl.collectAsState()
     val listState = rememberLazyListState()
 
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
@@ -54,6 +58,41 @@ fun SettingsScreen(
                     .clickable(onClick = onAddServer)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
+        }
+        item(key = "wordsync-header") { SectionHeader("Word sync") }
+        item(key = "wordsync-url") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = "Alignment service URL",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Box(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    if (alignUrl.isEmpty()) {
+                        Text(
+                            text = "http://192.168.68.212:8590 (blank = off)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    BasicTextField(
+                        value = alignUrl,
+                        onValueChange = viewModel::setAlignServiceUrl,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Text(
+                    text = "Self-hosted audex-align service that prepares audio↔text " +
+                        "sync maps for precise read-along.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
         item(key = "about-header") { SectionHeader("About") }
         item(key = "about-version") {

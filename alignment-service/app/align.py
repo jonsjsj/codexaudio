@@ -135,6 +135,13 @@ def build_map(
         "device": device,
         "durationS": round(duration_s, 2),
         "totalChars": total,
+        # Chapter char boundaries: lets a client turn a global char offset into
+        # (href, within-chapter progression) — the shape Readium locators and
+        # decorations want. Additive (clients ignore unknown keys).
+        "chapters": [
+            {"href": ch.href, "c0": ch.char_start, "c1": ch.char_end}
+            for ch in book.chapters
+        ],
         "entries": [
             {
                 "t0": e.t0,
@@ -143,6 +150,9 @@ def build_map(
                 "c1": e.c1,
                 "p": round(e.c0 / total, 6),
                 "href": book.href_at(e.c0),
+                # The anchored book text — future sentence-highlighting needs
+                # the exact string to build a text locator/decoration.
+                "text": book.text[e.c0 : min(e.c1 + 1, e.c0 + 240)],
             }
             for e in entries
         ],

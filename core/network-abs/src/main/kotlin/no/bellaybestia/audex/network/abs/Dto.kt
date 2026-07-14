@@ -84,9 +84,17 @@ data class AbsFileMetadata(
 data class AbsMetadata(
     val title: String? = null,
     val subtitle: String? = null,
+    // Full arrays: present on the expanded item detail (GET /api/items/{id}?expanded=1).
     val authors: List<AbsAuthorRef> = emptyList(),
     val narrators: List<String> = emptyList(),
     val series: List<AbsSeriesRef> = emptyList(),
+    // Minified strings: the library-items LIST endpoint returns ONLY these (the
+    // arrays above are absent in the minified projection), comma-joined, with the
+    // series sequence embedded as "Name #3". LibrarySyncer falls back to these
+    // when the arrays are empty (verified against ABS 2.35.1 Book minified JSON).
+    val authorName: String? = null,
+    val narratorName: String? = null,
+    val seriesName: String? = null,
     val isbn: String? = null,
     val asin: String? = null,
     val publishedYear: String? = null,

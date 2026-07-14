@@ -122,10 +122,13 @@ interface CatalogDao {
     @Query("DELETE FROM series") suspend fun clearSeries()
     @Query("DELETE FROM works") suspend fun clearWorks()
     @Query("DELETE FROM editions") suspend fun clearEditions()
-    @Insert suspend fun insertAuthors(rows: List<AuthorEntity>)
-    @Insert suspend fun insertSeries(rows: List<SeriesEntity>)
-    @Insert suspend fun insertWorks(rows: List<WorkEntity>)
-    @Insert suspend fun insertEditions(rows: List<EditionEntity>)
+    // IGNORE (not the default ABORT): the graph ids are content hashes, so a rare
+    // collision between two groups the builder couldn't distinguish must drop the
+    // duplicate row — never abort the transaction and wipe the whole library.
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAuthors(rows: List<AuthorEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertSeries(rows: List<SeriesEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertWorks(rows: List<WorkEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertEditions(rows: List<EditionEntity>)
 }
 
 data class AuthorRow(val id: String, val name: String, val workCount: Int)

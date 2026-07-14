@@ -84,6 +84,15 @@ class LibrarySyncer @Inject constructor(
 
 internal fun AbsLibraryItem.toEntity(serverId: String, libraryId: String, json: Json): RemoteItemEntity {
     val md = media.metadata
+    // The library-items LIST endpoint returns MINIFIED metadata: the authors/
+    // narrators/series arrays are absent, replaced by comma-joined *Name strings
+    // (series sequence embedded as "Name #3"). Fall back to those so the catalog
+    // graph gets real authors/series instead of empty lists (which collapse
+    // distinct books to one work id and abort the graph rebuild).
+    val authors = md.authors.map { it.name }.ifEmpty { splitJoinedNames(md.authorName) }
+    val narrators = md.narrators.ifEmpty { splitJoinedNames(md.narratorName) }
+    val series = md.series.map { StoredSeriesRef(it.name, it.sequence?.toDoubleOrNull()) }
+        .ifEmpty { parseMinifiedSeries(md.seriesName) }
     return RemoteItemEntity(
         serverId = serverId,
         libraryItemId = id,
@@ -91,11 +100,9 @@ internal fun AbsLibraryItem.toEntity(serverId: String, libraryId: String, json: 
         mediaType = mediaType,
         title = md.title.orEmpty().ifBlank { "(untitled)" },
         subtitle = md.subtitle,
-        authorsJson = json.encodeToString(md.authors.map { it.name }),
-        seriesJson = json.encodeToString(
-            md.series.map { StoredSeriesRef(it.name, it.sequence?.toDoubleOrNull()) }
-        ),
-        narratorsJson = json.encodeToString(md.narrators),
+        authorsJson = json.encodeToString(authors),
+        seriesJson = json.encodeToString(series),
+        narratorsJson = json.encodeToString(narrators),
         asin = md.asin,
         isbn = md.isbn,
         publishedYear = md.publishedYear?.toIntOrNull(),
@@ -112,6 +119,30 @@ internal fun AbsLibraryItem.chapterEntities(serverId: String): List<RemoteChapte
     media.chapters.mapIndexed { idx, c ->
         RemoteChapterEntity(serverId, id, idx, c.title, c.start, c.end)
     }
+
+/** Split ABS minified `authorName`/`narratorName` ("A, B, C") into names. */
+internal fun splitJoinedNames(joined: String?): List<String> =
+    joined?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+
+/**
+ * Parse ABS minified `seriesName` ("Wheel of Time #3, Legends #1") into refs.
+ * Sequence is embedded after the LAST " #"; a series with no sequence keeps
+ * position null. Names containing ", " degrade (rare); the expanded item detail
+ * has the exact structured data for the work screen.
+ */
+internal fun parseMinifiedSeries(joined: String?): List<StoredSeriesRef> =
+    joined?.split(",")?.mapNotNull { part ->
+        val s = part.trim()
+        if (s.isBlank()) return@mapNotNull null
+        val at = s.lastIndexOf(" #")
+        if (at >= 0) {
+            val name = s.substring(0, at).trim()
+            val seq = s.substring(at + 2).trim().toDoubleOrNull()
+            StoredSeriesRef(name.ifBlank { s }, seq)
+        } else {
+            StoredSeriesRef(s, null)
+        }
+    } ?: emptyList()
 
 internal fun AbsMediaProgress.toProgressEntity(serverId: String): ProgressEntity =
     ProgressEntity(

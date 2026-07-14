@@ -5,10 +5,13 @@ import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -102,6 +106,20 @@ private fun EpubReader(
         }
 
         Box(Modifier.fillMaxSize()) {
+            // Turn one page-position forward/back via navigator.go(locator).
+            // The WebView's own swipe paging is unreliable: readium-css can
+            // leave a few px of sub-page overflow in a resource, and its JS
+            // then "handles" every swipe without moving OR handing over to the
+            // pager (runtime-verified: scrollRight()==true forever at 364px
+            // scrollWidth on a 360px viewport). Position locators cross
+            // resource boundaries through scrollToLocator instead.
+            fun turnPage(delta: Int) {
+                val current = navigator?.currentLocator?.value ?: return
+                val position = current.locations.position ?: return // 1-based
+                val target = ready.positions.getOrNull(position - 1 + delta) ?: return
+                navigator?.go(target)
+            }
+
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
@@ -142,6 +160,24 @@ private fun EpubReader(
                     }
                 },
             )
+
+            // Edge tap zones (left = back, right = forward), the reliable page
+            // turn. Center stays untouched for the WebView (links, selection).
+            Row(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier
+                        .weight(0.22f)
+                        .fillMaxHeight()
+                        .pointerInput(Unit) { detectTapGestures { turnPage(-1) } },
+                )
+                Spacer(Modifier.weight(0.56f))
+                Box(
+                    Modifier
+                        .weight(0.22f)
+                        .fillMaxHeight()
+                        .pointerInput(Unit) { detectTapGestures { turnPage(1) } },
+                )
+            }
         }
     }
 

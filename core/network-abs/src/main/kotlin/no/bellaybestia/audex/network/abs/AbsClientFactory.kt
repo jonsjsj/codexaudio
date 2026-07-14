@@ -43,6 +43,11 @@ class AbsClientFactory(
         ignoreUnknownKeys = true
         coerceInputValues = true
         explicitNulls = false
+        // Request DTOs rely on defaults (AbsPlayRequest.supportedMimeTypes,
+        // mediaPlayer, …). Without this they are OMITTED from the JSON —
+        // runtime-verified: ABS logged "supportedMimeTypes is not an array
+        // undefined" and transcoded everything because the body was {}.
+        encodeDefaults = true
     }
 
     private data class Entry(val baseUrl: String, val api: AbsApi)

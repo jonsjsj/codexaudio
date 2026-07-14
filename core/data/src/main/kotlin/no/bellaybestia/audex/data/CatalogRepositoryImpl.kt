@@ -90,6 +90,9 @@ class CatalogRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun workIdForItem(serverId: String, libraryItemId: String): String? =
+        catalogDao.workIdForItem(serverId, libraryItemId)
+
     override suspend fun rebuildGraph() = withContext(dispatcher) {
         val items = remoteItemDao.all().map { it.toRemoteBook(json) }
         val overrides = overrideDao.all().mapNotNull { row ->

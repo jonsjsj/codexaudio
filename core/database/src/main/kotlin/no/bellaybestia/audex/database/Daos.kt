@@ -112,6 +112,9 @@ interface CatalogDao {
     )
     fun observeEditionsForWork(workId: String): Flow<List<EditionWithProgress>>
 
+    @Query("SELECT workId FROM editions WHERE serverId = :serverId AND libraryItemId = :itemId LIMIT 1")
+    suspend fun workIdForItem(serverId: String, itemId: String): String?
+
     // -- graph rebuild (full replace, in one transaction) --
 
     @Transaction

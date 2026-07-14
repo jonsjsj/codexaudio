@@ -10,17 +10,24 @@ import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.Downloads
+import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.repository.CatalogRepository
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.http.DefaultHttpClient
@@ -36,20 +43,39 @@ sealed interface ReaderUiState {
         val publication: Publication,
         val navigatorFactory: EpubNavigatorFactory,
         val initialLocator: Locator?,
+        /** Page-level locators (Readium positions service) for fraction→page jumps. */
+        val positions: List<Locator>,
     ) : ReaderUiState
 }
+
+/**
+ * The same work's AUDIO edition as seen from the reader (docs/09 read-along):
+ * present whenever playback has that edition loaded, playing or paused.
+ */
+data class AudioCompanion(
+    val isPlaying: Boolean,
+    /** Overall audio progress 0..1 (position / duration). */
+    val fraction: Double,
+)
 
 /**
  * Opens the downloaded EPUB with the Readium streamer and exposes an
  * [EpubNavigatorFactory] for the screen to embed. Locator changes stream in via
  * [onLocatorChanged], are debounced (~1.2s of no page turns), and flow out
  * through the offline-safe ebook queue — never the audio path (docs/03).
+ *
+ * Read-along (docs/09 Tier 1/2, proportional — no timing data needed): when the
+ * SAME WORK's audio edition is loaded in the player, [audioCompanion] carries
+ * its live fraction; with [followAudio] on, the screen keeps the page in step
+ * (audio stays the master clock). Word-level sync is Tier 3 (forced alignment).
  */
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloads: Downloads,
     private val ebookProgressWriter: EbookProgressWriter,
+    private val catalogRepository: CatalogRepository,
+    playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -63,8 +89,37 @@ class ReaderViewModel @Inject constructor(
     private val latestLocator = MutableStateFlow<Locator?>(null)
     private var publication: Publication? = null
 
+    /** Where the reader currently is (totalProgression 0..1), for the jump chip. */
+    private val _currentProgression = MutableStateFlow<Double?>(null)
+    val currentProgression: StateFlow<Double?> = _currentProgression.asStateFlow()
+
+    /** Audio↔ebook bridging: itemIds of this work's AUDIO editions (any server). */
+    private val audioItemKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Follow-audio toggle (off by default; the reader is manual until asked). */
+    private val _followAudio = MutableStateFlow(false)
+    val followAudio: StateFlow<Boolean> = _followAudio.asStateFlow()
+
+    fun setFollowAudio(enabled: Boolean) {
+        _followAudio.value = enabled
+    }
+
+    val audioCompanion: StateFlow<AudioCompanion?> =
+        combine(playbackController.state, audioItemKeys) { playback, keys ->
+            val playingKey = playback.serverId?.let { s -> playback.libraryItemId?.let { "$s|$it" } }
+            if (playingKey != null && playingKey in keys && playback.durationMs > 0) {
+                AudioCompanion(
+                    isPlaying = playback.isPlaying,
+                    fraction = (playback.positionMs.toDouble() / playback.durationMs).coerceIn(0.0, 1.0),
+                )
+            } else {
+                null
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     init {
         viewModelScope.launch { openBook() }
+        viewModelScope.launch { resolveAudioSiblings() }
         // Debounced position sync: each page turn resets the timer, so a burst
         // of flips writes once. collectLatest keeps this free of @FlowPreview.
         viewModelScope.launch {
@@ -78,6 +133,16 @@ class ReaderViewModel @Inject constructor(
                     progress = progress,
                 )
             }
+        }
+    }
+
+    private suspend fun resolveAudioSiblings() {
+        val workId = catalogRepository.workIdForItem(serverId, libraryItemId) ?: return
+        catalogRepository.editionsForWork(workId).collect { editions ->
+            audioItemKeys.value = editions
+                .filter { it.format == Format.AUDIO }
+                .map { "${it.serverId}|${it.libraryItemId}" }
+                .toSet()
         }
     }
 
@@ -110,6 +175,7 @@ class ReaderViewModel @Inject constructor(
             publication = publication,
             navigatorFactory = EpubNavigatorFactory(publication),
             initialLocator = restoreLocator(),
+            positions = publication.positions(),
         )
     }
 
@@ -127,6 +193,7 @@ class ReaderViewModel @Inject constructor(
     /** Called by the screen on every navigator locator change. */
     fun onLocatorChanged(locator: Locator) {
         latestLocator.value = locator
+        _currentProgression.value = locator.locations.totalProgression
     }
 
     override fun onCleared() {

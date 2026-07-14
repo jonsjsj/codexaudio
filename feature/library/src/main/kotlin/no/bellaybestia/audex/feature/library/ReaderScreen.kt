@@ -3,11 +3,16 @@ package no.bellaybestia.audex.feature.library
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Bundle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +33,10 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commitNow
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.publication.Locator
 
 private const val READER_FRAGMENT_TAG = "audex_epub_reader"
 
@@ -67,43 +75,78 @@ private fun EpubReader(
     val activity = LocalContext.current.findFragmentActivity() ?: return
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
 
-    Box(modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                FragmentContainerView(context).apply { id = R.id.reader_container }
-            },
-            update = {
-                val fm = activity.supportFragmentManager
-                val existing = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
-                if (existing == null) {
-                    // The factory must be in place before the fragment is
-                    // instantiated. Known limitation: if the process dies while
-                    // the reader is open, restoration happens before this runs —
-                    // the nav route re-opens the book from scratch instead.
-                    fm.fragmentFactory = ready.navigatorFactory.createFragmentFactory(
-                        initialLocator = ready.initialLocator,
-                    )
-                    fm.commitNow {
-                        setReorderingAllowed(true)
-                        add(
-                            R.id.reader_container,
-                            EpubNavigatorFragment::class.java,
-                            Bundle.EMPTY,
-                            READER_FRAGMENT_TAG,
+    val companion by viewModel.audioCompanion.collectAsState()
+    val followAudio by viewModel.followAudio.collectAsState()
+    val currentProgression by viewModel.currentProgression.collectAsState()
+
+    Column(modifier.fillMaxSize()) {
+        // Read-along bar (docs/09): only when this work's audio edition is loaded.
+        companion?.let { audio ->
+            ReadAlongBar(
+                audio = audio,
+                following = followAudio,
+                showJump = !followAudio &&
+                    abs((currentProgression ?: 0.0) - audio.fraction) > 0.02,
+                onToggleFollow = { viewModel.setFollowAudio(!followAudio) },
+                onJump = {
+                    locatorForFraction(ready.positions, audio.fraction)
+                        ?.let { navigator?.go(it) }
+                },
+            )
+        }
+
+        Box(Modifier.fillMaxSize()) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    FragmentContainerView(context).apply { id = R.id.reader_container }
+                },
+                update = {
+                    val fm = activity.supportFragmentManager
+                    val existing = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                    if (existing == null) {
+                        // The factory must be in place before the fragment is
+                        // instantiated. Known limitation: if the process dies while
+                        // the reader is open, restoration happens before this runs —
+                        // the nav route re-opens the book from scratch instead.
+                        fm.fragmentFactory = ready.navigatorFactory.createFragmentFactory(
+                            initialLocator = ready.initialLocator,
                         )
+                        fm.commitNow {
+                            setReorderingAllowed(true)
+                            add(
+                                R.id.reader_container,
+                                EpubNavigatorFragment::class.java,
+                                Bundle.EMPTY,
+                                READER_FRAGMENT_TAG,
+                            )
+                        }
+                        navigator = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                    } else if (navigator == null) {
+                        navigator = existing
                     }
-                    navigator = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
-                } else if (navigator == null) {
-                    navigator = existing
-                }
-            },
-        )
+                },
+            )
+        }
     }
 
     // Stream locator changes (page turns, chapter jumps) into the debounced sync.
     LaunchedEffect(navigator) {
         navigator?.currentLocator?.collect { viewModel.onLocatorChanged(it) }
+    }
+
+    // Follow-audio (Tier 2 proportional): audio is the master clock; jump the
+    // page only when the target PAGE changes, so second-by-second ticks don't
+    // thrash the navigator.
+    val audioNow = companion
+    val followTargetIndex = if (followAudio && audioNow?.isPlaying == true) {
+        targetPositionIndex(ready.positions, audioNow.fraction)
+    } else {
+        null
+    }
+    LaunchedEffect(followTargetIndex, navigator) {
+        val index = followTargetIndex ?: return@LaunchedEffect
+        ready.positions.getOrNull(index)?.let { navigator?.go(it) }
     }
 
     // Leaving the screen tears the fragment down; the VM keeps the publication.
@@ -119,6 +162,65 @@ private fun EpubReader(
         }
     }
 }
+
+/** Flat read-along strip: audio %, follow toggle, and a one-tap catch-up jump. */
+@Composable
+private fun ReadAlongBar(
+    audio: AudioCompanion,
+    following: Boolean,
+    showJump: Boolean,
+    onToggleFollow: () -> Unit,
+    onJump: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = if (audio.isPlaying) {
+                    "Audio ${(audio.fraction * 100).roundToInt()}% ▶"
+                } else {
+                    "Audio ${(audio.fraction * 100).roundToInt()}% ⏸"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (showJump) {
+                Text(
+                    text = "Jump to audio",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onJump)
+                        .padding(vertical = 4.dp),
+                )
+            }
+            Text(
+                text = if (following) "Following ✓" else "Follow audio",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (following) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onToggleFollow)
+                    .padding(vertical = 4.dp),
+            )
+        }
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+private fun targetPositionIndex(positions: List<Locator>, fraction: Double): Int? {
+    if (positions.isEmpty()) return null
+    return (fraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+}
+
+private fun locatorForFraction(positions: List<Locator>, fraction: Double): Locator? =
+    targetPositionIndex(positions, fraction)?.let { positions[it] }
 
 @Composable
 private fun ReaderMessage(title: String, message: String, modifier: Modifier = Modifier) {

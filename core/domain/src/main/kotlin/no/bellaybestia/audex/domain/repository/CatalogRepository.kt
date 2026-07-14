@@ -15,6 +15,9 @@ interface CatalogRepository {
     fun worksForSeries(seriesId: String): Flow<List<Work>>
     fun editionsForWork(workId: String): Flow<List<Edition>>
 
+    /** The work an item's edition belongs to — bridges audio↔ebook editions of one work. */
+    suspend fun workIdForItem(serverId: String, libraryItemId: String): String?
+
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()
 }

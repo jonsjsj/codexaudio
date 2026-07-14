@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import no.bellaybestia.audex.common.DefaultDispatcher
 import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.ServerDao
+import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.network.abs.AbsApi
@@ -65,6 +66,7 @@ class PlaybackControllerImpl @Inject constructor(
     private var activeApi: AbsApi? = null
     private var activeSessionId: String? = null
     private var activeOffsets: List<Double> = emptyList()
+    private var activeChapters: List<Chapter> = emptyList()
     private var totalDurationS: Double = 0.0
     private var syncJob: Job? = null
     private var tickJob: Job? = null
@@ -114,10 +116,13 @@ class PlaybackControllerImpl @Inject constructor(
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }
+        activeChapters = session.chapters.map {
+            Chapter(it.title, (it.start * 1000).toLong(), (it.end * 1000).toLong())
+        }
         totalDurationS = tracks.sumOf { it.duration }
         sessionRecorder.start(serverId, libraryItemId, resumeAt)
         startPlayback(items, resumeAt)
-        _state.update { it.copy(isLoading = false) }
+        _state.update { it.copy(isLoading = false, chapters = activeChapters) }
         startSyncLoop()
         startTicker()
     }
@@ -138,10 +143,11 @@ class PlaybackControllerImpl @Inject constructor(
         activeApi = null
         activeSessionId = null
         activeOffsets = tracks.map { it.startOffset }
+        activeChapters = downloadManager.localAudioChapters(serverId, libraryItemId)
         totalDurationS = tracks.sumOf { it.duration }
         sessionRecorder.start(serverId, libraryItemId, resumeAt)
         startPlayback(items, resumeAt)
-        _state.update { it.copy(isLoading = false) }
+        _state.update { it.copy(isLoading = false, chapters = activeChapters) }
         startTicker()
     }
 
@@ -219,6 +225,12 @@ class PlaybackControllerImpl @Inject constructor(
         c.seekTo(idx, withinMs)
     }
 
+    override fun seekToChapter(index: Int) {
+        scope.launch(main) {
+            activeChapters.getOrNull(index)?.let { seekOverall(it.startMs / 1000.0) }
+        }
+    }
+
     override fun stop() {
         val api = activeApi
         val sessionId = activeSessionId
@@ -258,8 +270,14 @@ class PlaybackControllerImpl @Inject constructor(
                 val (posMs, playing) = withContext(main) {
                     (overallPositionS() * 1000).toLong() to (controller?.isPlaying == true)
                 }
+                val chapterIdx = activeChapters.indexOfLast { it.startMs <= posMs }
                 _state.update {
-                    it.copy(positionMs = posMs, durationMs = (totalDurationS * 1000).toLong(), isPlaying = playing)
+                    it.copy(
+                        positionMs = posMs,
+                        durationMs = (totalDurationS * 1000).toLong(),
+                        isPlaying = playing,
+                        currentChapterIndex = chapterIdx,
+                    )
                 }
                 delay(1000)
             }

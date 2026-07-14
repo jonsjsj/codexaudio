@@ -2,6 +2,9 @@ package no.bellaybestia.audex.domain.playback
 
 import kotlinx.coroutines.flow.StateFlow
 
+/** One audiobook chapter (times are ms from the start of the whole book). */
+data class Chapter(val title: String, val startMs: Long, val endMs: Long)
+
 /** Snapshot of the current playback for the mini-player / player UI. */
 data class PlaybackState(
     val isPlaying: Boolean = false,
@@ -14,9 +17,12 @@ data class PlaybackState(
     val durationMs: Long = 0,
     val speed: Float = 1f,
     val sleepTimerRemainingMs: Long? = null,
+    val chapters: List<Chapter> = emptyList(),
+    val currentChapterIndex: Int = -1,
     val error: String? = null,
 ) {
     val hasItem: Boolean get() = libraryItemId != null
+    val currentChapter: Chapter? get() = chapters.getOrNull(currentChapterIndex)
 }
 
 /**
@@ -48,6 +54,9 @@ interface PlaybackController {
 
     /** Pause after [minutes] (0 cancels the timer). */
     fun setSleepTimer(minutes: Int)
+
+    /** Jump to the start of chapter [index]. */
+    fun seekToChapter(index: Int)
 
     fun stop()
 }

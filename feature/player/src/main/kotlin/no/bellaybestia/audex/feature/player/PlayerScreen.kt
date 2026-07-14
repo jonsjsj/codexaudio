@@ -5,10 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -27,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,10 +64,11 @@ fun PlayerScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.Center,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Spacer(Modifier.height(16.dp))
         Text(
             text = state.title.orEmpty(),
             style = MaterialTheme.typography.headlineSmall,
@@ -79,13 +85,24 @@ fun PlayerScreen(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+        state.currentChapter?.let {
+            Text(
+                text = it.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
 
-        SeekBar(state = state, onSeek = viewModel::seekTo, modifier = Modifier.padding(top = 40.dp))
+        SeekBar(state = state, onSeek = viewModel::seekTo, modifier = Modifier.padding(top = 32.dp))
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
+                .padding(top = 20.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -105,10 +122,9 @@ fun PlayerScreen(
             }
         }
 
-        // Speed + sleep timer, flat text controls (no filled buttons).
         var sleepIdx by remember { mutableStateOf(0) }
         Row(
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(28.dp),
         ) {
             Text(
@@ -132,6 +148,53 @@ fun PlayerScreen(
                     }
                     .padding(8.dp),
             )
+        }
+
+        if (state.chapters.isNotEmpty()) {
+            ChapterSection(state = state, onJump = viewModel::seekToChapter)
+        }
+    }
+}
+
+@Composable
+private fun ChapterSection(state: PlaybackState, onJump: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
+        Text(
+            text = if (expanded) "Chapters (${state.chapters.size}) ▲" else "Chapters (${state.chapters.size}) ▼",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+        )
+        if (expanded) {
+            state.chapters.forEachIndexed { index, chapter ->
+                val current = index == state.currentChapterIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onJump(index) }
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = chapter.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = formatTime(chapter.startMs),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                }
+            }
         }
     }
 }

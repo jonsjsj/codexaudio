@@ -11,6 +11,7 @@ import no.bellaybestia.audex.common.DefaultDispatcher
 import no.bellaybestia.audex.database.DownloadDao
 import no.bellaybestia.audex.database.DownloadEntity
 import no.bellaybestia.audex.database.ServerDao
+import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,7 +29,13 @@ data class LocalTrack(val file: File, val index: Int, val startOffset: Double, v
 private data class ManifestTrack(val index: Int, val filename: String, val duration: Double)
 
 @Serializable
-private data class DownloadManifest(val tracks: List<ManifestTrack>)
+private data class ManifestChapter(val title: String, val startMs: Long, val endMs: Long)
+
+@Serializable
+private data class DownloadManifest(
+    val tracks: List<ManifestTrack>,
+    val chapters: List<ManifestChapter> = emptyList(),
+)
 
 /**
  * Per-file offline downloads (the Phase-2 backbone). Files stream to app-private
@@ -76,7 +83,10 @@ class DownloadManager @Inject constructor(
                         )
                     }
                     manifest = DownloadManifest(
-                        files.map { ManifestTrack(it.index, "%03d_%s".format(it.index, safeName(it.metadata.filename.ifBlank { "track.mp3" })), it.duration) }
+                        tracks = files.map { ManifestTrack(it.index, "%03d_%s".format(it.index, safeName(it.metadata.filename.ifBlank { "track.mp3" })), it.duration) },
+                        chapters = item.media.chapters.map {
+                            ManifestChapter(it.title, (it.start * 1000).toLong(), (it.end * 1000).toLong())
+                        },
                     )
                 }
                 DownloadKind.EBOOK -> {
@@ -145,6 +155,20 @@ class DownloadManager @Inject constructor(
                 offset += track.duration
                 local
             }
+        }
+
+    /** Chapters saved with a downloaded audiobook (empty if none/not downloaded). */
+    suspend fun localAudioChapters(serverId: String, libraryItemId: String): List<Chapter> =
+        withContext(dispatcher) {
+            val row = downloadDao.get(serverId, libraryItemId, DownloadKind.AUDIO.name)
+                ?: return@withContext emptyList()
+            if (row.state != "DONE" || row.dirPath == null) return@withContext emptyList()
+            val manifestFile = File(row.dirPath, "manifest.json")
+            if (!manifestFile.exists()) return@withContext emptyList()
+            val manifest = runCatching {
+                json.decodeFromString(DownloadManifest.serializer(), manifestFile.readText())
+            }.getOrNull() ?: return@withContext emptyList()
+            manifest.chapters.map { Chapter(it.title, it.startMs, it.endMs) }
         }
 
     /** The local ebook file if fully downloaded, else null. */

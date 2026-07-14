@@ -24,6 +24,8 @@ hiltWork = "1.2.0"
 media3 = "1.7.1"
 coil = "2.7.0"
 browser = "1.8.0"
+readium = "3.1.1"
+fragment = "1.8.6"
 junitJupiter = "5.11.4"
 junit4 = "4.13.2"
 
@@ -73,6 +75,11 @@ media3-session = { module = "androidx.media3:media3-session", version.ref = "med
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
 
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+
+readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
+readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
+readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", version.ref = "readium" }
+androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
 junit-jupiter-launcher = { module = "org.junit.platform:junit-platform-launcher" }

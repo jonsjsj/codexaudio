@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Stable view id for the Readium EpubNavigatorFragment container
+         (FragmentManager needs a fixed id to find the fragment across commits). -->
+    <item name="reader_container" type="id" />
+</resources>

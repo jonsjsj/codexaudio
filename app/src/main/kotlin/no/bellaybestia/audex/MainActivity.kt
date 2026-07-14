@@ -2,8 +2,8 @@ package no.bellaybestia.audex
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -12,8 +12,10 @@ import no.bellaybestia.audex.designsystem.AudexTheme
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import javax.inject.Inject
 
+// FragmentActivity (not plain ComponentActivity) so the Readium
+// EpubNavigatorFragment has a FragmentManager to live in.
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var authRepository: AuthRepository

@@ -5,6 +5,7 @@ import no.bellaybestia.audex.database.PendingEbookProgressEntity
 import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.SavedEbookPosition
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,4 +51,9 @@ class EbookProgressWriterImpl @Inject constructor(
         )
         workScheduler.uploadEbookProgressNow()
     }
+
+    override suspend fun lastPosition(serverId: String, libraryItemId: String): SavedEbookPosition? =
+        progressDao.get(serverId, libraryItemId)?.let {
+            SavedEbookPosition(location = it.ebookLocation, progress = it.ebookProgress)
+        }
 }

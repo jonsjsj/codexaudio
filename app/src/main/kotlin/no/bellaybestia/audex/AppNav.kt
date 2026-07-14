@@ -95,7 +95,7 @@ fun AppNav() {
                 .padding(innerPadding),
         ) {
             composable(Routes.HOME) {
-                HomeScreen()
+                HomeScreen(onWorkClick = { work -> navController.navigateToWork(work) })
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(

@@ -1,5 +1,6 @@
 package no.bellaybestia.audex.feature.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +38,7 @@ import no.bellaybestia.audex.domain.model.Work
  */
 @Composable
 fun HomeScreen(
+    onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -49,20 +51,23 @@ fun HomeScreen(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
-        Text(
-            text = "Server sync isn't wired up yet — once a server is added and " +
-                "synced, anything in progress shows up here to pick back up.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-        )
+        if (continueWorks.isEmpty()) {
+            Text(
+                text = "Nothing in progress yet — add a server and start listening or " +
+                    "reading; books you're partway through appear here to pick back up.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            )
+            return
+        }
         HorizontalDivider(
             thickness = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant,
         )
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(continueWorks, key = { _, work -> work.id }) { index, work ->
-                ContinueRow(work = work)
+                ContinueRow(work = work, onClick = { onWorkClick(work) })
                 if (index < continueWorks.lastIndex) {
                     HorizontalDivider(
                         thickness = 1.dp,
@@ -75,10 +80,11 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ContinueRow(work: Work, modifier: Modifier = Modifier) {
+private fun ContinueRow(work: Work, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {

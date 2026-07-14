@@ -18,6 +18,19 @@ android {
         versionName = "0.1.0"
     }
 
+    // Fixed debug signing (committed keystore, standard debug passwords): CI
+    // runners otherwise mint a fresh debug key per build, which makes every
+    // update INSTALL_FAILED_UPDATE_INCOMPATIBLE — forcing uninstall (and losing
+    // login + downloads) on each new APK. Debug-only; release will use a real key.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("audex-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -9,3 +9,6 @@ captures/
 .cxx/
 *.keystore
 *.jks
+
+# Committed DEBUG-ONLY keystore so every CI build is update-compatible (see app/build.gradle.kts)
+!app/audex-debug.keystore

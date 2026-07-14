@@ -153,9 +153,24 @@ data class AbsPlaybackSession(
 data class AbsPlayRequest(
     val deviceInfo: AbsDeviceInfo = AbsDeviceInfo(),
     val mediaPlayer: String = "exoplayer",
-    val forceDirectPlay: Boolean = true,
+    val forceDirectPlay: Boolean = false,
     val forceTranscode: Boolean = false,
-    val supportedMimeTypes: List<String> = emptyList(),
+    // Everything ExoPlayer decodes natively: ABS direct-plays files whose mime
+    // is listed here and falls back to HLS otherwise (runtime-verified: an
+    // EMPTY list made ABS transcode even common m4b/mp3 to HLS).
+    val supportedMimeTypes: List<String> = listOf(
+        "audio/flac",
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/aac",
+        "audio/x-m4a",
+        "audio/x-m4b",
+        "audio/ogg",
+        "audio/opus",
+        "audio/webm",
+        "audio/wav",
+    ),
 )
 
 /**

@@ -192,6 +192,12 @@ interface SessionDao {
     @Query("UPDATE pending_sessions SET state = :state, attempts = attempts + 1 WHERE localId IN (:ids)")
     suspend fun setState(ids: List<String>, state: String)
 
+    // Sessions stuck in RECORDING because the process died before
+    // finalizeActive (force-stop, crash, task-kill) — safe to adopt at process
+    // start, when no recording can be active yet.
+    @Query("UPDATE pending_sessions SET state = 'PENDING' WHERE state = 'RECORDING'")
+    suspend fun adoptOrphanedRecordings()
+
     @Query("DELETE FROM pending_sessions WHERE state = 'SYNCED' AND updatedAt < :olderThan")
     suspend fun purgeSynced(olderThan: Long)
 }

@@ -78,5 +78,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.okhttp)
     implementation(libs.androidx.fragment.ktx)
+    implementation(libs.timber)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

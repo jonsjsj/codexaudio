@@ -1,11 +1,14 @@
 package no.bellaybestia.audex
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
+import android.webkit.WebView
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +39,14 @@ class AudexApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) {
+            // Readium logs exclusively through Timber — without a planted tree
+            // every navigator/JS-console diagnostic is silently dropped.
+            Timber.plant(Timber.DebugTree())
+            // Lets chrome://inspect (via adb forward) attach to the reader WebView.
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         appScope.launch {
             appStartup.initialize()   // hydrate tokens + wire the refresher
             workScheduler.scheduleAll() // periodic library sync + session drain

@@ -34,6 +34,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Readium 3.x uses java.time & friends below minSdk 26's native support.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures { compose = true }
 }
@@ -76,4 +78,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.okhttp)
     implementation(libs.androidx.fragment.ktx)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

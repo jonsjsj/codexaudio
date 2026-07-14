@@ -13,6 +13,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by Readium 3.x (java.time below API 26 support baseline).
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures { compose = true }
 }
@@ -46,4 +48,5 @@ dependencies {
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
     implementation(libs.androidx.fragment.ktx)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

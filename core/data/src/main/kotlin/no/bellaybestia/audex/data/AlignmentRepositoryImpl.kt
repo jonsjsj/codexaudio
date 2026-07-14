@@ -129,18 +129,14 @@ class AlignmentRepositoryImpl @Inject constructor(
         }
 
     override suspend fun status(serverId: String, audioItemId: String): WordSyncStatus {
-        val service = serviceUrl() ?: return WordSyncStatus.UNAVAILABLE
+        serviceUrl() ?: return WordSyncStatus.UNAVAILABLE
         val baseUrl = baseUrlFor(serverId) ?: return WordSyncStatus.UNAVAILABLE
         val key = bookKey(baseUrl, audioItemId)
         if (File(cacheDir, "$key.json").exists()) return WordSyncStatus.READY
-        val remote = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder().url("$service/maps/$key").head().build()
-                http.newCall(request).execute().use { it.isSuccessful }
-            }.getOrDefault(false)
-        }
+        // Full fetch instead of HEAD: it doubles as warming the cache, and the
+        // service's GET routes don't answer HEAD (FastAPI: 405).
         return when {
-            remote -> WordSyncStatus.READY
+            syncMap(serverId, audioItemId) != null -> WordSyncStatus.READY
             key in requested -> WordSyncStatus.RUNNING
             else -> WordSyncStatus.NONE
         }

@@ -108,7 +108,7 @@ def job_status(job_id: str):
     return job
 
 
-@app.get("/maps/{key}")
+@app.api_route("/maps/{key}", methods=["GET", "HEAD"])
 def get_map(key: str):
     path = MAPS_DIR / f"{key}.json"
     if not path.exists():

@@ -12,19 +12,19 @@ the entities are defined in [04 — Android architecture](04-android-architectur
 App              CustomTab                 ABS-1                 Authentik              ABS-2
  |-- add server https://abs.bellaybestia.no
  |-- GET /status (version >= 2.26, oidc enabled?) -->|
- |-- open ------->| {abs1}/auth/openid?...redirect_uri=audex://oauth&state=s1
+ |-- open ------->| {abs1}/auth/openid?...redirect_uri=audiobookshelf://oauth&state=s1
  |                |------------------------>|--302 authorize------>|
  |                |   user enters Authentik credentials + MFA (FIRST and ONLY prompt)
  |                |   Authentik sets its SSO session cookie IN THE CUSTOM TAB's browser
  |                |<--302 callback----------|<--code---------------|
- |<-audex://oauth?code=...&state=s1  (via /auth/openid/mobile-redirect)
+ |<-audiobookshelf://oauth?code=...&state=s1  (via /auth/openid/mobile-redirect)
  |-- complete code exchange with ABS-1 --->| → {access, refresh(rotating)}
  |   store tokens[server1] in Keystore-backed DataStore
  |-- add server https://abs2.bellaybestia.no
  |-- open ------->| {abs2}/auth/openid?... (SAME browser = SAME Authentik cookie)
  |                |------------------------------------------------>|          |
  |                |   session valid → NO prompt, instant 302 back              |
- |<-audex://oauth?code=...&state=s2 --------------------------------------|
+ |<-audiobookshelf://oauth?code=...&state=s2 --------------------------------------|
  |-- exchange with ABS-2 → tokens[server2]
  |-- per server: GET /api/me ; GET /api/libraries
  |-- LibrarySyncWorker: walk items → RemoteItemEntity

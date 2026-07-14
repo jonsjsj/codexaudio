@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         handleOAuthRedirect(intent)
     }
 
-    /** Catch the `audex://oauth?...` Custom Tab redirect and finish the login. */
+    /** Catch the `audiobookshelf://oauth?...` Custom Tab redirect and finish the login. */
     private fun handleOAuthRedirect(intent: Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != AbsOidcFlow.REDIRECT_SCHEME) return

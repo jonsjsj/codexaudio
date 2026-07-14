@@ -19,7 +19,7 @@ socket.io-client, AppAuth, Hilt. Min SDK 26. Multi-server support is MVP scope; 
 hard requirement; podcasts are a later phase.
 
 Proposed applicationId is `no.bellaybestia.audex` (the generic default in code should be
-configurable), with OAuth custom scheme `audex://oauth` — the scheme must be whitelisted in
+configurable), with OAuth custom scheme `audiobookshelf://oauth` — the scheme must be whitelisted in
 each ABS server's "Allowed Mobile Redirect URLs" (see [08 — open questions](08-open-questions.md),
 question 1).
 

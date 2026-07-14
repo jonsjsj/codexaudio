@@ -7,7 +7,7 @@ version before the phase that depends on them (phases per [07 — build plan](07
 
 ## Owner decisions
 
-1. **App name / applicationId / custom scheme** (proposal `audex://oauth`) — the scheme must
+1. **App name / applicationId / custom scheme** (proposal `audiobookshelf://oauth`) — the scheme must
    be whitelisted in every ABS server's "Allowed Mobile Redirect URLs"; pick once and document it
    in the setup guide.
 2. **Expo Companion fate**: keep it as the tracker/agenda app alongside this one, or fold and
@@ -39,11 +39,11 @@ floor. All Phase-1 `[verify]` flags below were resolved by reading the ABS sourc
 to match (see the RESOLVED notes). Phase-2/4 items remain open.
 
 9. **RESOLVED** — Native OIDC mobile flow. `GET {base}/auth/openid` with
-   `response_type=code` (only `code` accepted), `redirect_uri=audex://oauth`, `state`,
+   `response_type=code` (only `code` accepted), `redirect_uri=audiobookshelf://oauth`, `state`,
    and PKCE `code_challenge` + `code_challenge_method=S256` (**S256 required** for mobile;
    plain rejected). Do **not** send `client_id`/`scope`/`nonce` — ABS sets them server-side
    from its OIDC config. ABS runs the IdP dance, then bounces the code to the scheme via
-   `/auth/openid/mobile-redirect` → `audex://oauth?code=…&state=…`. Token exchange:
+   `/auth/openid/mobile-redirect` → `audiobookshelf://oauth?code=…&state=…`. Token exchange:
    `GET {base}/auth/openid/callback?code=…&state=…&code_verifier=…` → login payload. Builders
    added in `core/auth/AbsOidcFlow.kt` (incl. new `tokenExchangeUrl`). (Phase 1)
 10. **RESOLVED** — `POST /auth/refresh`. The refresh token goes in the **`x-refresh-token`

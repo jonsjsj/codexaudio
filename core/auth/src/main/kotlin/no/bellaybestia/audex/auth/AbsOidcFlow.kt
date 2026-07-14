@@ -20,7 +20,7 @@ import android.net.Uri
  *    server-side from the ABS OIDC config, so the app must NOT send them.
  *  - ABS runs the whole dance with the IdP, then bounces the code back to our
  *    scheme via {base}/auth/openid/mobile-redirect →
- *    audex://oauth?code=…&state=…
+ *    audiobookshelf://oauth?code=…&state=…
  *  - Token exchange: GET {base}/auth/openid/callback?code=…&state=…&code_verifier=…
  *    returns the login payload (AbsLoginResponse) with user.accessToken and
  *    user.refreshToken. The redirect scheme must be whitelisted in each ABS
@@ -28,7 +28,13 @@ import android.net.Uri
  */
 object AbsOidcFlow {
 
-    const val REDIRECT_SCHEME = "audex"
+    // Reuse the STANDARD Audiobookshelf mobile scheme: every ABS server ships
+    // `audiobookshelf://oauth` in its default authOpenIDMobileRedirectURIs, so
+    // Audex logs in against any server with zero server-side config (unlike a
+    // custom scheme, which each server would have to whitelist). Trade-off: if
+    // the official ABS app is also installed, Android shows an app chooser on
+    // the OAuth redirect — a non-issue since Audex replaces it.
+    const val REDIRECT_SCHEME = "audiobookshelf"
     const val REDIRECT_URI = "$REDIRECT_SCHEME://oauth"
 
     /** The URL to open in a Custom Tab to start login against one server. */
@@ -62,7 +68,7 @@ object AbsOidcFlow {
 
     data class Callback(val code: String, val state: String)
 
-    /** Parse the audex://oauth?code=…&state=… redirect. */
+    /** Parse the audiobookshelf://oauth?code=…&state=… redirect. */
     fun parseCallback(uri: Uri): Callback? {
         if (uri.scheme != REDIRECT_SCHEME) return null
         val code = uri.getQueryParameter("code") ?: return null

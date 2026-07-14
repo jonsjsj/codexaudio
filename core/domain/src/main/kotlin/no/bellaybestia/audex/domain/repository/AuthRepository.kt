@@ -42,7 +42,7 @@ interface AuthRepository {
     suspend fun beginLogin(baseUrl: String, name: String)
 
     /**
-     * Complete login from the `audex://oauth?...` redirect: validate state,
+     * Complete login from the `audiobookshelf://oauth?...` redirect: validate state,
      * exchange the code, persist tokens + the server, and kick off a first sync.
      */
     suspend fun completeLogin(callbackUrl: String)

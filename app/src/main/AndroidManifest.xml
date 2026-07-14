@@ -22,12 +22,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- OIDC Custom Tab redirect: audex://oauth?code=…&state=… -->
+            <!-- OIDC Custom Tab redirect: audiobookshelf://oauth?code=…&state=…
+                 (the standard ABS mobile scheme, so any server accepts it). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="audex" android:host="oauth" />
+                <data android:scheme="audiobookshelf" android:host="oauth" />
             </intent-filter>
         </activity>
 

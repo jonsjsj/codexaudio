@@ -219,15 +219,32 @@ private fun EpubReader(
         )
     }
 
-    // Follow-audio: audio is the master clock; jump the page only when the
-    // target PAGE changes, so second-by-second ticks don't thrash the
-    // navigator. Sync-map progression when aligned, proportional otherwise.
+    // Follow-audio: audio is the master clock; jump only when the target
+    // CHANGES, so second-by-second ticks don't thrash the navigator. With a
+    // v1.1 map the target is the narrated anchor's chapter locator (exact —
+    // char-based progression inside the right resource); otherwise fall back
+    // to the byte-based positions list, which is only proportional.
     val audioNow = companion
-    val followTargetIndex = if (followAudio && audioNow?.isPlaying == true) {
+    val followAnchor = if (followAudio && audioNow?.isPlaying == true) {
+        syncMap?.takeIf { it.chapters.isNotEmpty() }?.anchorAt(audioNow.positionS)
+    } else {
+        null
+    }
+    val followTargetIndex = if (followAudio && audioNow?.isPlaying == true && followAnchor == null) {
         val progression = syncMap?.progressionAt(audioNow.positionS) ?: audioNow.fraction
         targetPositionIndex(ready.positions, progression)
     } else {
         null
+    }
+    LaunchedEffect(followAnchor?.c0, followTargetIndex, navigator) {
+        val map = syncMap
+        when {
+            followAnchor != null && map != null ->
+                narrationLocator(ready.publication, map, followAnchor)
+                    ?.let { navigator?.go(it) }
+            followTargetIndex != null ->
+                ready.positions.getOrNull(followTargetIndex)?.let { navigator?.go(it) }
+        }
     }
 
     // Sentence highlighting (map v1.1): tint the anchor currently being
@@ -255,10 +272,6 @@ private fun EpubReader(
             emptyList()
         }
         decorable.applyDecorations(decorations, group = "readalong")
-    }
-    LaunchedEffect(followTargetIndex, navigator) {
-        val index = followTargetIndex ?: return@LaunchedEffect
-        ready.positions.getOrNull(index)?.let { navigator?.go(it) }
     }
 
     // Leaving the screen tears the fragment down; the VM keeps the publication.
@@ -413,7 +426,6 @@ private fun narrationLocator(
     anchor: no.bellaybestia.audex.domain.reader.SyncAnchor,
 ): Locator? {
     val href = anchor.href ?: return null
-    val text = anchor.text ?: return null
     val link = Url(href)?.let { publication.linkWithHref(it) }
         ?: publication.readingOrder.firstOrNull {
             it.href.toString().endsWith(href) || href.endsWith(it.href.toString())
@@ -422,7 +434,7 @@ private fun narrationLocator(
     val base = publication.locatorFromLink(link) ?: return null
     return base.copy(
         locations = base.locations.copy(progression = map.chapterProgression(anchor)),
-        text = Locator.Text(highlight = text),
+        text = anchor.text?.let { Locator.Text(highlight = it) } ?: base.text,
     )
 }
 

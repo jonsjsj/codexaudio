@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.domain.playback.PlaybackState
 
 private val SPEEDS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
@@ -69,6 +70,12 @@ fun PlayerScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(16.dp))
+        CoverImage(
+            url = state.coverUrl,
+            contentDescription = state.title,
+            modifier = Modifier.size(width = 200.dp, height = 300.dp),
+        )
+        Spacer(Modifier.height(20.dp))
         Text(
             text = state.title.orEmpty(),
             style = MaterialTheme.typography.headlineSmall,

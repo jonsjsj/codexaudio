@@ -2,6 +2,7 @@ package no.bellaybestia.audex.data
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
@@ -19,6 +20,7 @@ import no.bellaybestia.audex.database.OverrideDao
 import no.bellaybestia.audex.database.RemoteItemDao
 import no.bellaybestia.audex.database.RemoteItemEntity
 import no.bellaybestia.audex.database.SeriesEntity
+import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.database.WorkEntity
 import no.bellaybestia.audex.database.WorkRow
 import no.bellaybestia.audex.domain.model.Author
@@ -26,6 +28,7 @@ import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
+import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,11 +43,17 @@ class CatalogRepositoryImpl @Inject constructor(
     private val catalogDao: CatalogDao,
     private val remoteItemDao: RemoteItemDao,
     private val overrideDao: OverrideDao,
+    serverDao: ServerDao,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val builder = GraphBuilder()
+
+    // serverId → baseUrl, kept reactive so covers appear as soon as a server is
+    // added (and switch URLs if a server's base ever changes).
+    private val baseUrls: Flow<Map<String, String>> =
+        serverDao.observeAll().map { rows -> rows.associate { it.serverId to it.baseUrl } }
 
     override fun authors(): Flow<List<Author>> =
         catalogDao.observeAuthors().map { rows -> rows.map { Author(it.id, it.name, it.workCount) } }
@@ -53,16 +62,20 @@ class CatalogRepositoryImpl @Inject constructor(
         catalogDao.observeSeries().map { rows -> rows.map { Series(it.id, it.name, workCount = it.workCount) } }
 
     override fun works(): Flow<List<Work>> =
-        catalogDao.observeWorks().map { rows -> rows.map { it.toDomain() } }
+        combine(catalogDao.observeWorks(), baseUrls) { rows, urls -> rows.map { it.toDomain(urls) } }
 
     override fun worksForAuthor(authorId: String): Flow<List<Work>> =
-        catalogDao.observeWorksForAuthor(authorId).map { rows -> rows.map { it.toDomain() } }
+        combine(catalogDao.observeWorksForAuthor(authorId), baseUrls) { rows, urls ->
+            rows.map { it.toDomain(urls) }
+        }
 
     override fun worksForSeries(seriesId: String): Flow<List<Work>> =
-        catalogDao.observeWorksForSeries(seriesId).map { rows -> rows.map { it.toDomain() } }
+        combine(catalogDao.observeWorksForSeries(seriesId), baseUrls) { rows, urls ->
+            rows.map { it.toDomain(urls) }
+        }
 
     override fun editionsForWork(workId: String): Flow<List<Edition>> =
-        catalogDao.observeEditionsForWork(workId).map { rows ->
+        combine(catalogDao.observeEditionsForWork(workId), baseUrls) { rows, urls ->
             rows.map {
                 Edition(
                     id = it.editionId,
@@ -72,6 +85,7 @@ class CatalogRepositoryImpl @Inject constructor(
                     libraryItemId = it.libraryItemId,
                     durationS = it.durationS,
                     fraction = it.fraction,
+                    coverUrl = urls[it.serverId]?.let { base -> absCoverUrl(base, it.libraryItemId) },
                 )
             }
         }
@@ -108,7 +122,7 @@ class CatalogRepositoryImpl @Inject constructor(
     }
 }
 
-private fun WorkRow.toDomain() = Work(
+private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
     id = workId,
     title = title,
     authorName = authorName,
@@ -120,6 +134,9 @@ private fun WorkRow.toDomain() = Work(
     hasEbook = ebookCount > 0,
     listenFraction = listenPct ?: 0.0,
     readFraction = readPct ?: 0.0,
+    coverUrl = coverKey?.split('|', limit = 2)
+        ?.takeIf { it.size == 2 }
+        ?.let { (serverId, itemId) -> baseUrls[serverId]?.let { absCoverUrl(it, itemId) } },
 )
 
 internal fun RemoteItemEntity.toRemoteBook(json: Json): RemoteBook {

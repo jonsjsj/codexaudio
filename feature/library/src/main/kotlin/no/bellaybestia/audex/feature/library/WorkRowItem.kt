@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.domain.model.Work
 
 /** "2.0" → "2", "2.5" → "2.5" — for "series #position" sublines. */
@@ -48,48 +49,55 @@ fun WorkRowItem(
     } else {
         modifier.fillMaxWidth()
     }
-    Column(
+    Row(
         modifier = rowModifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = work.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        CoverImage(
+            url = work.coverUrl,
+            contentDescription = null,
+            modifier = Modifier.size(width = 52.dp, height = 78.dp),
         )
-        val subline = buildList {
-            work.authorName?.takeIf { it.isNotBlank() }?.let { add(it) }
-            work.seriesName?.takeIf { it.isNotBlank() }?.let { series ->
-                val position = work.seriesPosition
-                    ?.let { " #${formatSeriesPosition(it)}" }
-                    .orEmpty()
-                add(series + position)
-            }
-            work.year?.let { add(it.toString()) }
-        }.joinToString(" · ")
-        if (subline.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
             Text(
-                text = subline,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = work.title,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        if (work.hasAudio) {
-            FormatProgressBar(
-                icon = Icons.Outlined.Headphones,
-                contentDescription = "Listen progress",
-                fraction = work.listenFraction,
-            )
-        }
-        if (work.hasEbook) {
-            FormatProgressBar(
-                icon = Icons.Outlined.MenuBook,
-                contentDescription = "Read progress",
-                fraction = work.readFraction,
-            )
+            val subline = buildList {
+                work.authorName?.takeIf { it.isNotBlank() }?.let { add(it) }
+                work.seriesName?.takeIf { it.isNotBlank() }?.let { series ->
+                    val position = work.seriesPosition
+                        ?.let { " #${formatSeriesPosition(it)}" }
+                        .orEmpty()
+                    add(series + position)
+                }
+                work.year?.let { add(it.toString()) }
+            }.joinToString(" · ")
+            if (subline.isNotEmpty()) {
+                Text(
+                    text = subline,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (work.hasAudio) {
+                FormatProgressBar(
+                    icon = Icons.Outlined.Headphones,
+                    contentDescription = "Listen progress",
+                    fraction = work.listenFraction,
+                )
+            }
+            if (work.hasEbook) {
+                FormatProgressBar(
+                    icon = Icons.Outlined.MenuBook,
+                    contentDescription = "Read progress",
+                    fraction = work.readFraction,
+                )
+            }
         }
     }
 }

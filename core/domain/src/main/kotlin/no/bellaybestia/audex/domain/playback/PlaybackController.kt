@@ -13,6 +13,7 @@ data class PlaybackState(
     val libraryItemId: String? = null,
     val title: String? = null,
     val author: String? = null,
+    val coverUrl: String? = null,
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val speed: Float = 1f,

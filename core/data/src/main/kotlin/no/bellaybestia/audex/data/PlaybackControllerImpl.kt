@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import no.bellaybestia.audex.common.DefaultDispatcher
 import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.ServerDao
+import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
@@ -81,6 +82,7 @@ class PlaybackControllerImpl @Inject constructor(
             _state.update { it.copy(isLoading = false, error = "Server not connected.") }
             return
         }
+        _state.update { it.copy(coverUrl = absCoverUrl(server.baseUrl, libraryItemId)) }
 
         // Offline-first: play downloaded files if present, otherwise stream.
         val local = downloadManager.localAudioTracks(serverId, libraryItemId)

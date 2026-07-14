@@ -30,7 +30,17 @@ data class Work(
     val hasEbook: Boolean = false,
     val listenFraction: Double = 0.0,
     val readFraction: Double = 0.0,
+    /** ABS cover URL of a representative edition (null → placeholder). */
+    val coverUrl: String? = null,
 )
+
+/**
+ * The ABS cover endpoint for an item. The app-wide image loader attaches the
+ * right Bearer per host, so this is safe to hand straight to Coil
+ * (ABS 2.35.1: GET /api/items/{id}/cover?width=).
+ */
+fun absCoverUrl(baseUrl: String, libraryItemId: String, width: Int = 400): String =
+    "${baseUrl.trimEnd('/')}/api/items/$libraryItemId/cover?width=$width"
 
 enum class Format { AUDIO, EBOOK }
 
@@ -42,6 +52,7 @@ data class Edition(
     val libraryItemId: String,
     val durationS: Long? = null,
     val fraction: Double = 0.0,
+    val coverUrl: String? = null,
 )
 
 data class ServerAccount(

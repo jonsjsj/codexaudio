@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Series
@@ -26,16 +27,34 @@ class LibraryViewModel @Inject constructor(
         savedStateHandle[KEY_SELECTED_TAB] = index
     }
 
-    val authors: StateFlow<List<Author>> = catalogRepository.authors()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** Search text, applied across all three tabs; process-death safe. */
+    val query: StateFlow<String> = savedStateHandle.getStateFlow(KEY_QUERY, "")
 
-    val series: StateFlow<List<Series>> = catalogRepository.series()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun setQuery(value: String) {
+        savedStateHandle[KEY_QUERY] = value
+    }
 
-    val works: StateFlow<List<Work>> = catalogRepository.works()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val authors: StateFlow<List<Author>> =
+        combine(catalogRepository.authors(), query) { authors, q ->
+            if (q.isBlank()) authors else authors.filter { it.name.contains(q, ignoreCase = true) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val series: StateFlow<List<Series>> =
+        combine(catalogRepository.series(), query) { series, q ->
+            if (q.isBlank()) series else series.filter { it.name.contains(q, ignoreCase = true) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val works: StateFlow<List<Work>> =
+        combine(catalogRepository.works(), query) { works, q ->
+            if (q.isBlank()) works else works.filter { work ->
+                work.title.contains(q, ignoreCase = true) ||
+                    work.authorName?.contains(q, ignoreCase = true) == true ||
+                    work.seriesName?.contains(q, ignoreCase = true) == true
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private companion object {
         const val KEY_SELECTED_TAB = "library_selected_tab"
+        const val KEY_QUERY = "library_query"
     }
 }

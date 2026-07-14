@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
+import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 
@@ -50,22 +51,33 @@ fun WorkDetailScreen(
     val downloadStates by viewModel.downloadStates.collectAsState()
 
     Column(modifier.fillMaxSize()) {
-        Text(
-            text = viewModel.title,
-            style = MaterialTheme.typography.headlineSmall,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 2.dp),
-        )
-        viewModel.author?.let { author ->
-            Text(
-                text = author,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp),
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            CoverImage(
+                url = editions.firstNotNullOfOrNull { it.coverUrl },
+                contentDescription = viewModel.title,
+                modifier = Modifier.size(width = 88.dp, height = 132.dp),
             )
+            Column {
+                Text(
+                    text = viewModel.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+                viewModel.author?.let { author ->
+                    Text(
+                        text = author,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         Text(

@@ -56,6 +56,8 @@ data class WorkRow(
     val readPct: Double?,
     val audioCount: Int,
     val ebookCount: Int,
+    /** Representative edition for the cover, as "serverId|libraryItemId" (split in the repo). */
+    val coverKey: String?,
 )
 
 private const val WORK_ROW_SELECT = """
@@ -64,7 +66,8 @@ private const val WORK_ROW_SELECT = """
            MAX(CASE WHEN e.format = 'AUDIO' THEN COALESCE(p.pct, 0) END) AS listenPct,
            MAX(CASE WHEN e.format = 'EBOOK' THEN COALESCE(p.pct, 0) END) AS readPct,
            COUNT(CASE WHEN e.format = 'AUDIO' THEN 1 END) AS audioCount,
-           COUNT(CASE WHEN e.format = 'EBOOK' THEN 1 END) AS ebookCount
+           COUNT(CASE WHEN e.format = 'EBOOK' THEN 1 END) AS ebookCount,
+           MIN(e.serverId || '|' || e.libraryItemId) AS coverKey
     FROM works w
     LEFT JOIN authors a ON a.authorId = w.authorId
     LEFT JOIN series s ON s.seriesId = w.seriesId

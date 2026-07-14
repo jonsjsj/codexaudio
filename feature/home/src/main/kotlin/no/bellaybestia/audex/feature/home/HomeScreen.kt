@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
+import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.domain.model.Work
 
 /**
@@ -81,49 +82,59 @@ fun HomeScreen(
 
 @Composable
 private fun ContinueRow(work: Work, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = work.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        CoverImage(
+            url = work.coverUrl,
+            contentDescription = null,
+            modifier = Modifier.size(width = 48.dp, height = 72.dp),
         )
-        work.authorName?.takeIf { it.isNotBlank() }?.let { author ->
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(1f),
+        ) {
             Text(
-                text = author,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = work.title,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (work.hasAudio) {
-                InlineProgress(
-                    icon = Icons.Outlined.Headphones,
-                    contentDescription = "Listen progress",
-                    fraction = work.listenFraction,
-                )
-            }
-            if (work.hasAudio && work.hasEbook) {
+            work.authorName?.takeIf { it.isNotBlank() }?.let { author ->
                 Text(
-                    text = " · ",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = author,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (work.hasEbook) {
-                InlineProgress(
-                    icon = Icons.Outlined.MenuBook,
-                    contentDescription = "Read progress",
-                    fraction = work.readFraction,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (work.hasAudio) {
+                    InlineProgress(
+                        icon = Icons.Outlined.Headphones,
+                        contentDescription = "Listen progress",
+                        fraction = work.listenFraction,
+                    )
+                }
+                if (work.hasAudio && work.hasEbook) {
+                    Text(
+                        text = " · ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (work.hasEbook) {
+                    InlineProgress(
+                        icon = Icons.Outlined.MenuBook,
+                        contentDescription = "Read progress",
+                        fraction = work.readFraction,
+                    )
+                }
             }
         }
     }

@@ -13,6 +13,7 @@ data class PlaybackState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val speed: Float = 1f,
+    val sleepTimerRemainingMs: Long? = null,
     val error: String? = null,
 ) {
     val hasItem: Boolean get() = libraryItemId != null
@@ -44,6 +45,9 @@ interface PlaybackController {
 
     /** Set the playback speed (0.5–3.0×). */
     fun setSpeed(speed: Float)
+
+    /** Pause after [minutes] (0 cancels the timer). */
+    fun setSleepTimer(minutes: Int)
 
     fun stop()
 }

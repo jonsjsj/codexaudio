@@ -68,6 +68,7 @@ class PlaybackControllerImpl @Inject constructor(
     private var totalDurationS: Double = 0.0
     private var syncJob: Job? = null
     private var tickJob: Job? = null
+    private var sleepJob: Job? = null
 
     override suspend fun play(serverId: String, libraryItemId: String, title: String, author: String?) {
         _state.update {
@@ -189,6 +190,27 @@ class PlaybackControllerImpl @Inject constructor(
         }
     }
 
+    override fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        if (minutes <= 0) {
+            _state.update { it.copy(sleepTimerRemainingMs = null) }
+            return
+        }
+        val endAt = System.currentTimeMillis() + minutes * 60_000L
+        sleepJob = scope.launch {
+            while (true) {
+                val remaining = endAt - System.currentTimeMillis()
+                if (remaining <= 0) {
+                    withContext(main) { controller?.pause() }
+                    _state.update { it.copy(sleepTimerRemainingMs = null) }
+                    break
+                }
+                _state.update { it.copy(sleepTimerRemainingMs = remaining) }
+                delay(1000)
+            }
+        }
+    }
+
     /** Seek to an overall second, mapping onto the right track. Runs on main. */
     private fun seekOverall(targetS: Double) {
         val c = controller ?: return
@@ -202,6 +224,7 @@ class PlaybackControllerImpl @Inject constructor(
         val sessionId = activeSessionId
         syncJob?.cancel(); syncJob = null
         tickJob?.cancel(); tickJob = null
+        sleepJob?.cancel(); sleepJob = null
         scope.launch(main) {
             val position = overallPositionS()
             controller?.stop()

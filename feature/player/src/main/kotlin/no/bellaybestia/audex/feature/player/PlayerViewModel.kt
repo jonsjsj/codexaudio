@@ -17,5 +17,6 @@ class PlayerViewModel @Inject constructor(
     fun skipForward() = playbackController.skipForward()
     fun seekTo(positionMs: Long) = playbackController.seekTo(positionMs)
     fun setSpeed(speed: Float) = playbackController.setSpeed(speed)
+    fun setSleepTimer(minutes: Int) = playbackController.setSleepTimer(minutes)
     fun stop() = playbackController.stop()
 }

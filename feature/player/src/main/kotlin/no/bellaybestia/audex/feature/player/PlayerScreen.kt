@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.domain.playback.PlaybackState
 
 private val SPEEDS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+private val SLEEP_MINUTES = listOf(0, 15, 30, 45, 60)
 
 @Composable
 fun PlayerScreen(
@@ -104,16 +105,34 @@ fun PlayerScreen(
             }
         }
 
-        // Speed cycles through common rates (flat text — no filled control).
-        Text(
-            text = "${trimSpeed(state.speed)}×",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .clickable { viewModel.setSpeed(nextSpeed(state.speed)) }
-                .padding(8.dp),
-        )
+        // Speed + sleep timer, flat text controls (no filled buttons).
+        var sleepIdx by remember { mutableStateOf(0) }
+        Row(
+            modifier = Modifier.padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+        ) {
+            Text(
+                text = "${trimSpeed(state.speed)}×",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { viewModel.setSpeed(nextSpeed(state.speed)) }
+                    .padding(8.dp),
+            )
+            val remaining = state.sleepTimerRemainingMs
+            Text(
+                text = if (remaining != null) "Sleep ${formatTime(remaining)}" else "Sleep off",
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (remaining != null) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable {
+                        sleepIdx = (sleepIdx + 1) % SLEEP_MINUTES.size
+                        viewModel.setSleepTimer(SLEEP_MINUTES[sleepIdx])
+                    }
+                    .padding(8.dp),
+            )
+        }
     }
 }
 

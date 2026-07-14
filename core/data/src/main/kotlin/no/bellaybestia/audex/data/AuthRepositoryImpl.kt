@@ -75,15 +75,6 @@ class AuthRepositoryImpl @Inject constructor(
                 val serverId = deriveServerId(normalized)
                 val verifier = Pkce.newVerifier()
                 val state = Pkce.newState()
-                pendingStore.save(
-                    PendingOidcLogin(
-                        serverId = serverId,
-                        baseUrl = normalized,
-                        name = name.trim().ifBlank { Uri.parse(normalized).host ?: normalized },
-                        state = state,
-                        codeVerifier = verifier,
-                    )
-                )
                 // Kick off ABS's mobile OIDC flow on OUR http client so the
                 // session + auth_method cookies land in the jar that
                 // completeLogin's /callback exchange reuses. ABS 302-redirects
@@ -100,6 +91,19 @@ class AuthRepositoryImpl @Inject constructor(
                 if (idpUrl.isNullOrBlank()) {
                     fail("Couldn't start sign-in with the server. Please try again.")
                 } else {
+                    // Persist the cookies ABS just set alongside the pending
+                    // login, so the callback exchange survives the app being
+                    // killed while the Custom Tab is foregrounded.
+                    pendingStore.save(
+                        PendingOidcLogin(
+                            serverId = serverId,
+                            baseUrl = normalized,
+                            name = name.trim().ifBlank { Uri.parse(normalized).host ?: normalized },
+                            state = state,
+                            codeVerifier = verifier,
+                            cookies = clientFactory.capturedCookies(serverId, normalized),
+                        )
+                    )
                     _loginStatus.value = LoginStatus.AwaitingBrowser(idpUrl)
                 }
             }
@@ -122,6 +126,10 @@ class AuthRepositoryImpl @Inject constructor(
             fail("Login could not be verified (state mismatch). Please try again.")
             return
         }
+        // Restore the flow cookies (session + auth_method) in case the app was
+        // killed during the browser step and this is a fresh process with an
+        // empty jar; the callback exchange needs them to get a JSON token payload.
+        clientFactory.seedCookies(pending.serverId, pending.baseUrl, pending.cookies)
         val result = runCatching {
             clientFactory.api(pending.serverId, pending.baseUrl)
                 .oidcCallback(callback.code, callback.state, pending.codeVerifier)

@@ -7,6 +7,7 @@ import okhttp3.Authenticator
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -102,6 +103,29 @@ class AbsClientFactory(
             .create(AbsApi::class.java)
         authCache[serverId] = Entry(normalized, api)
         return api
+    }
+
+    /**
+     * Serialize the cookies currently in [serverId]'s jar (Set-Cookie form) so
+     * the caller can persist them across the Custom Tab round trip. Call after
+     * [authApi].openidAuthorize seeds the session + auth_method cookies.
+     */
+    fun capturedCookies(serverId: String, baseUrl: String): List<String> {
+        val url = baseUrl.toHttpUrlOrNull() ?: return emptyList()
+        return jarFor(serverId).loadForRequest(url).map { it.toString() }
+    }
+
+    /**
+     * Restore persisted cookies into [serverId]'s jar before the callback
+     * exchange — the path that rescues a login whose process was killed during
+     * the browser step (a fresh jar would otherwise have no session cookie).
+     * Idempotent: re-seeding cookies the jar already holds just overwrites them.
+     */
+    fun seedCookies(serverId: String, baseUrl: String, cookies: List<String>) {
+        if (cookies.isEmpty()) return
+        val url = baseUrl.toHttpUrlOrNull() ?: return
+        val parsed = cookies.mapNotNull { Cookie.parse(url, it) }
+        if (parsed.isNotEmpty()) jarFor(serverId).saveFromResponse(url, parsed)
     }
 
     fun evict(serverId: String) {

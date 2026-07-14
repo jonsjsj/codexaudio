@@ -24,6 +24,11 @@ data class PendingOidcLogin(
     val name: String,
     val state: String,
     val codeVerifier: String,
+    // Serialized (Set-Cookie form) session + auth_method cookies captured from
+    // GET /auth/openid. Persisted here so the /auth/openid/callback exchange still
+    // has them even if the app process was killed during the Custom Tab (the
+    // in-memory cookie jar dies with the process; this survives it).
+    val cookies: List<String> = emptyList(),
 )
 
 private val Context.pendingOidcDataStore by preferencesDataStore(name = "pending_oidc")

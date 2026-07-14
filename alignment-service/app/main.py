@@ -57,6 +57,35 @@ class AbsJobRequest(BaseModel):
     ebookLibraryItemId: str | None = None
 
 
+@app.get("/", include_in_schema=False)
+def index():
+    from fastapi.responses import HTMLResponse
+
+    return HTMLResponse(
+        "<title>Audex</title><body style='font-family:sans-serif;max-width:32em;margin:4em auto'>"
+        "<h2>Audex</h2><p>Native Android app for Audiobookshelf — audio + ebooks, offline-first, "
+        "word-sync read-along.</p><p><a href='/audex.apk'>Download the app (APK)</a></p>"
+        "<p style='color:#777'>This box also runs the audex-align word-sync service "
+        "(<a href='/health'>health</a>).</p></body>"
+    )
+
+
+@app.api_route("/audex.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_apk():
+    """The current Audex build, dropped into /data by the deploy flow."""
+    from fastapi.responses import FileResponse
+
+    apk = DATA_DIR / "audex.apk"
+    if not apk.exists():
+        raise HTTPException(404, "no APK published yet")
+    return FileResponse(
+        apk,
+        media_type="application/vnd.android.package-archive",
+        filename="audex.apk",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 @app.get("/health")
 def health():
     return {

@@ -4,6 +4,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -44,7 +45,12 @@ class PlaybackService : MediaLibraryService() {
                 chain.proceed(authed)
             }
             .build()
-        val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
+        // DefaultDataSource routes by scheme: file:// (downloaded audio) goes to
+        // FileDataSource, http(s) delegates to the authenticated OkHttp source.
+        // Feeding local paths straight into OkHttpDataSource broke ALL offline
+        // playback with "Malformed URL" (runtime-verified with network off).
+        val httpFactory = OkHttpDataSource.Factory(httpClient)
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
 
         val exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))

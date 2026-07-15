@@ -1,0 +1,32 @@
+# audex-align — GPU build for the ventans 4070 Ti.
+# Prereq (one-time, on the ventans HOST): NVIDIA driver + nvidia-container-toolkit,
+#   sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+# Build:  tar -cf ctx.tar -C alignment-service . && curl -X POST --data-binary @ctx.tar \
+#           -H 'Content-Type: application/x-tar' \
+#           'http://192.168.68.212:2375/build?t=audex-align:cuda&dockerfile=Dockerfile.cuda'
+# Run: same create payload as CPU plus
+#   "HostConfig": { ..., "Runtime": "nvidia",
+#     "DeviceRequests": [{"Driver":"nvidia","Count":-1,"Capabilities":[["gpu"]]}] }
+#   and Env ALIGN_DEVICE=cuda (compute_type flips to float16 automatically).
+# ctranslate2's CUDA path needs cuDNN 9 + cuBLAS at runtime — this base has both.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3.11 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt || \
+    pip3 install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+ENV HF_HOME=/data/hf \
+    ALIGN_DEVICE=cuda \
+    ALIGN_MODEL=small \
+    ALIGN_DATA=/data
+
+VOLUME /data
+EXPOSE 8585
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8585"]

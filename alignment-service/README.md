@@ -44,13 +44,11 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-Then recreate the container with the GPU attached and `ALIGN_DEVICE=cuda`
-(compute type flips to float16 automatically). `small` aligns roughly 8-15x
-faster than CPU; `medium`/`large-v3` become practical for accuracy.
-
-Note: the CUDA path also needs cuDNN/cuBLAS libs in the image — swap the base
-image to `nvidia/cuda:12.x-cudnn-runtime-ubuntu22.04` + python when flipping to
-GPU (tracked in docs/10).
+Then build `Dockerfile.cuda` (ready in this directory — CUDA 12.4 + cuDNN base,
+`ALIGN_DEVICE=cuda` baked in) and recreate the container with
+`"Runtime":"nvidia"` + a gpu DeviceRequest — exact build/run commands are in
+the Dockerfile.cuda header. `small` aligns roughly 8-15x faster than CPU;
+`medium`/`large-v3` become practical for accuracy.
 
 ## Sizing
 

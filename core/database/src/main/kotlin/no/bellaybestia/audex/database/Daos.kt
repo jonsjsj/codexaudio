@@ -260,4 +260,11 @@ interface DownloadDao {
 
     @Query("DELETE FROM downloads WHERE serverId = :serverId AND libraryItemId = :itemId AND kind = :kind")
     suspend fun delete(serverId: String, itemId: String, kind: String)
+
+    // Downloads orphaned in QUEUED/RUNNING by a process death would otherwise
+    // show "Downloading…" forever (the UI offers no action while active). Flip
+    // them to FAILED at startup; a genuinely-running worker re-asserts RUNNING
+    // on its next progress write.
+    @Query("UPDATE downloads SET state = 'FAILED' WHERE state IN ('QUEUED', 'RUNNING')")
+    suspend fun adoptOrphanedActive()
 }

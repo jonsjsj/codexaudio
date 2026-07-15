@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Offline downloads run as foreground dataSync work so Android doesn't
+         kill a long audiobook download when the app is backgrounded. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- In-app OTA: fetch the newer APK and hand it to the package installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -33,6 +36,13 @@
                 <data android:scheme="audiobookshelf" android:host="oauth" />
             </intent-filter>
         </activity>
+
+        <!-- WorkManager's foreground service needs its type declared for the
+             DownloadWorker's setForeground(dataSync) on API 29+. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- Serves the downloaded OTA APK to the system installer via content://. -->
         <provider

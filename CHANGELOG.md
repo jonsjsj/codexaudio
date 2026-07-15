@@ -1,0 +1,36 @@
+# Audex changelog
+
+Source of truth for release notes: the in-app update page and the OTA
+manifest's notes derive from this file — never hand-maintain copies.
+
+## 0.1.2
+
+- Downloads no longer get stuck: a download interrupted by the app being
+  killed now shows Retry instead of "Downloading…" forever, tapping Download
+  again always restarts it, and retries stop after a few attempts instead of
+  looping against an unreachable server.
+- Long downloads survive the app being backgrounded (they now run as a
+  foreground job with a notification).
+- Download progress moves during a file, not only between files — a
+  single-file audiobook no longer sits at 0% until it finishes.
+- Ebooks: the Read action now explains itself — "Get to read" starts the
+  download, "Fetching…" while it saves, "Read" opens the reader.
+- Stalled connections time out instead of hanging the download forever.
+- Versioning renumbered to the alpha scheme (this app is pre-1.0): earlier
+  builds "1.0.0"/"1.1.0" are 0.1 and 0.1.1.
+
+## 0.1.1
+
+- Fixed the layout so buttons no longer sit under the Android system bars
+  (edge-to-edge insets).
+- Adopted the Codex color palette (near-black background, monochrome accent).
+- In-app updates: the app checks for a newer build on launch, downloads it,
+  and hands it to the installer.
+
+## 0.1
+
+- First working build: Audiobookshelf login (OIDC), library browsing with
+  covers, search and sorting, streaming and offline audio playback, per-file
+  downloads, EPUB reader (Readium) with fonts/themes, read-along with
+  sentence highlighting (word-sync via the self-hosted alignment service),
+  progress sync with the server, offline session upload.

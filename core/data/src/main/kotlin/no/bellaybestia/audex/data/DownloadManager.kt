@@ -52,7 +52,14 @@ class DownloadManager @Inject constructor(
     private val downloadDao: DownloadDao,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) {
-    private val http = OkHttpClient()
+    // callTimeout stays unset (whole-file transfers can take arbitrarily long);
+    // read/write timeouts cut a *stalled* connection (e.g. a proxy that accepts
+    // then goes silent) instead of hanging the worker forever.
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(java.time.Duration.ofSeconds(20))
+        .readTimeout(java.time.Duration.ofSeconds(30))
+        .writeTimeout(java.time.Duration.ofSeconds(30))
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun itemDir(serverId: String, itemId: String, kind: DownloadKind): File =
@@ -117,7 +124,28 @@ class DownloadManager @Inject constructor(
                     http.newCall(requestBuilder.build()).execute().use { response ->
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${target.name}")
                         val body = response.body ?: throw IOException("Empty body for ${target.name}")
-                        File(dir, target.name).outputStream().use { out -> body.byteStream().copyTo(out) }
+                        // Stream with throttled in-flight progress: most audiobooks
+                        // are a single big m4b, so per-file updates alone would sit
+                        // at 0% for the whole download and look stuck.
+                        var lastFlush = 0L
+                        var fileDone = 0L
+                        File(dir, target.name).outputStream().use { out ->
+                            val input = body.byteStream()
+                            val buf = ByteArray(1 shl 16)
+                            var n = input.read(buf)
+                            while (n >= 0) {
+                                out.write(buf, 0, n)
+                                fileDone += n
+                                if (fileDone - lastFlush >= 4L * 1024 * 1024) {
+                                    lastFlush = fileDone
+                                    downloadDao.updateProgress(
+                                        serverId, libraryItemId, kind.name, "RUNNING",
+                                        done + fileDone, totalBytes, dir.absolutePath,
+                                    )
+                                }
+                                n = input.read(buf)
+                            }
+                        }
                     }
                     done += target.size
                     downloadDao.updateProgress(serverId, libraryItemId, kind.name, "RUNNING", done, totalBytes, dir.absolutePath)

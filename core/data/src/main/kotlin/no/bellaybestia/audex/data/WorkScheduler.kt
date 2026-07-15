@@ -84,9 +84,12 @@ class WorkScheduler @Inject constructor(
             DownloadWorker.KEY_ITEM to libraryItemId,
             DownloadWorker.KEY_KIND to kind.name,
         )
+        // REPLACE, not KEEP: with KEEP a work request stuck in retry backoff (or
+        // orphaned by a process death) silently swallows the user's re-tap and
+        // the download can never be restarted from the UI.
         workManager.enqueueUniqueWork(
             "download-$serverId-$libraryItemId-${kind.name}",
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<DownloadWorker>()
                 .setInputData(data)
                 .setConstraints(connected)

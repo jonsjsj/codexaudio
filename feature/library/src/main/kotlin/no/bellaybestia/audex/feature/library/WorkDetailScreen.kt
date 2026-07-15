@@ -258,15 +258,28 @@ private fun EditionRow(
                         .padding(vertical = 4.dp, horizontal = 4.dp),
                 )
             } else {
-                // Ebook is readable once downloaded (offline reader).
+                // Ebook is readable once downloaded (offline reader). Before
+                // that, the same tap kicks off the download — a dead grey
+                // "Read" with no explanation read as "can't open ebooks".
                 val readable = download?.isComplete == true
+                val fetching = download?.isActive == true
                 Text(
-                    text = "Read",
+                    text = when {
+                        readable -> "Read"
+                        fetching -> "Fetching…"
+                        else -> "Get to read"
+                    },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (readable) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    color = if (fetching) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .then(if (readable) Modifier.clickable(onClick = onRead) else Modifier)
+                        .then(
+                            when {
+                                readable -> Modifier.clickable(onClick = onRead)
+                                fetching -> Modifier
+                                else -> Modifier.clickable(onClick = onDownload)
+                            },
+                        )
                         .padding(vertical = 4.dp, horizontal = 4.dp),
                 )
             }

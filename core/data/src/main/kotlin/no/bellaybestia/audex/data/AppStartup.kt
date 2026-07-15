@@ -3,6 +3,7 @@ package no.bellaybestia.audex.data
 import dagger.Lazy
 import no.bellaybestia.audex.auth.AbsTokenRefresher
 import no.bellaybestia.audex.auth.ServerTokenStore
+import no.bellaybestia.audex.database.DownloadDao
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.database.SessionDao
 import javax.inject.Inject
@@ -23,6 +24,7 @@ class AppStartup @Inject constructor(
     private val refresher: AbsTokenRefresher,
     private val serverDao: ServerDao,
     private val sessionDao: SessionDao,
+    private val downloadDao: DownloadDao,
     // dagger.Lazy: AppStartup is field-injected into AudexApp BEFORE
     // workerFactory, and constructing WorkScheduler eagerly initializes
     // WorkManager, whose Configuration.Provider getter reads the still-lateinit
@@ -36,6 +38,9 @@ class AppStartup @Inject constructor(
             serverDao.enabled().firstOrNull { it.serverId == serverId }?.baseUrl
         }
         sessionDao.adoptOrphanedRecordings()
+        // Same idea for downloads: a process death mid-download leaves RUNNING
+        // rows the UI can never act on. FAILED shows "Retry".
+        downloadDao.adoptOrphanedActive()
         workScheduler.get().uploadSessionsNow()
     }
 }

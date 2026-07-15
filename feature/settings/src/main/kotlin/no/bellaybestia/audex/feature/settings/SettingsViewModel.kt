@@ -16,9 +16,14 @@ import no.bellaybestia.audex.domain.repository.ServerRepository
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    serverRepository: ServerRepository,
+    private val serverRepository: ServerRepository,
     private val alignmentRepository: AlignmentRepository,
 ) : ViewModel() {
+
+    /** Remove a server entirely (tokens, items, progress, graph rebuild). */
+    fun removeServer(serverId: String) {
+        viewModelScope.launch { serverRepository.removeServer(serverId) }
+    }
 
     val servers: StateFlow<List<ServerAccount>> = serverRepository.servers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

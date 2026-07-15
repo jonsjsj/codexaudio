@@ -32,6 +32,9 @@ interface RemoteItemDao {
 
     @Query("DELETE FROM remote_items WHERE serverId = :serverId AND libraryItemId NOT IN (:keep)")
     suspend fun pruneMissing(serverId: String, keep: List<String>)
+
+    @Query("DELETE FROM remote_items WHERE serverId = :serverId")
+    suspend fun deleteForServer(serverId: String)
 }
 
 @Dao
@@ -179,6 +182,9 @@ interface ProgressDao {
 
     @Query("SELECT * FROM progress WHERE serverId = :serverId AND libraryItemId = :itemId")
     suspend fun get(serverId: String, itemId: String): ProgressEntity?
+
+    @Query("DELETE FROM progress WHERE serverId = :serverId")
+    suspend fun deleteForServer(serverId: String)
 }
 
 @Dao

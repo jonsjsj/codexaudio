@@ -8,6 +8,8 @@ import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -41,6 +44,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val SYNC_INTERVAL_MS = 15_000L
+private val KEY_PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 
 @Singleton
 class PlaybackControllerImpl @Inject constructor(
@@ -156,13 +160,18 @@ class PlaybackControllerImpl @Inject constructor(
     private suspend fun startPlayback(items: List<MediaItem>, resumeAtS: Double) {
         val startIndex = activeOffsets.indexOfLast { it <= resumeAtS }.coerceAtLeast(0)
         val withinMs = ((resumeAtS - (activeOffsets.getOrNull(startIndex) ?: 0.0)).coerceAtLeast(0.0) * 1000).toLong()
+        // The chosen speed is a listening preference, not per-book: restore it
+        // on every start so it survives sessions and process restarts.
+        val savedSpeed = context.appSettingsDataStore.data.first()[KEY_PLAYBACK_SPEED]
         withContext(main) {
             val c = awaitController()
             c.addListener(playerListener)
             c.setMediaItems(items, startIndex, withinMs)
             c.prepare()
             c.play()
+            savedSpeed?.let { c.setPlaybackSpeed(it) }
         }
+        savedSpeed?.let { speed -> _state.update { it.copy(speed = speed) } }
     }
 
     private fun mediaItem(uri: String, serverId: String, libraryItemId: String, title: String, author: String?): MediaItem =
@@ -195,6 +204,12 @@ class PlaybackControllerImpl @Inject constructor(
         scope.launch(main) {
             controller?.setPlaybackSpeed(speed)
             _state.update { it.copy(speed = speed) }
+        }
+        // Persist so the chosen speed survives sessions and process restarts.
+        scope.launch {
+            context.appSettingsDataStore.edit { prefs ->
+                prefs[KEY_PLAYBACK_SPEED] = speed
+            }
         }
     }
 

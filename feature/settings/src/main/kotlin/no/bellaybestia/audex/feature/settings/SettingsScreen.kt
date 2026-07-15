@@ -18,6 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -44,7 +47,7 @@ fun SettingsScreen(
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         item(key = "servers-header") { SectionHeader("Servers") }
         itemsIndexed(servers, key = { _, server -> server.serverId }) { index, server ->
-            ServerRow(server)
+            ServerRow(server, onRemove = { viewModel.removeServer(server.serverId) })
             if (index < servers.lastIndex) FlatDivider()
         }
         item(key = "add-server") {
@@ -108,7 +111,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    text = "0.1.0 (pre-release)",
+                    text = "1.0.0",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -130,7 +133,13 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun ServerRow(server: ServerAccount, modifier: Modifier = Modifier) {
+private fun ServerRow(
+    server: ServerAccount,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Two-tap confirm, flat style: "Remove" arms it, "Remove?" fires it.
+    var armed by remember(server.serverId) { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -163,6 +172,15 @@ private fun ServerRow(server: ServerAccount, modifier: Modifier = Modifier) {
                 modifier = Modifier.padding(start = 12.dp),
             )
         }
+        Text(
+            text = if (armed) "Remove?" else "Remove",
+            style = MaterialTheme.typography.labelLarge,
+            color = if (armed) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clickable { if (armed) onRemove() else armed = true }
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+        )
     }
 }
 

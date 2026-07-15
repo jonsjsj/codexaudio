@@ -210,11 +210,17 @@ class ReaderViewModel @Inject constructor(
             return
         }
         this.publication = publication
+        val positions = publication.positions()
+        android.util.Log.i(
+            "AudexReader",
+            "openBook ready: readingOrder=${publication.readingOrder.size} positions=${positions.size} " +
+                "file=${File(path).name} (${File(path).length()} bytes)",
+        )
         _state.value = ReaderUiState.Ready(
             publication = publication,
             navigatorFactory = EpubNavigatorFactory(publication),
             initialLocator = restoreLocator(),
-            positions = publication.positions(),
+            positions = positions,
         )
     }
 

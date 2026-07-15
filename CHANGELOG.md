@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.3
+
+- Fixed the blank ebook reader: the book view was never given a size when the
+  reader opened without audio playing, so every ebook looked like an empty
+  page. The reader now lays the book out correctly on open.
+
 ## 0.1.2
 
 - Downloads no longer get stuck: a download interrupted by the app being

@@ -151,24 +151,73 @@ private fun EpubReader(
                     // the reader is open, restoration happens before this runs —
                     // the nav route re-opens the book from scratch instead.
                     fun attachReader() {
-                        if (fm.findFragmentByTag(READER_FRAGMENT_TAG) != null) return
+                        if (fm.findFragmentByTag(READER_FRAGMENT_TAG) != null) {
+                            android.util.Log.i("AudexReader", "reader: attach skipped, fragment already present")
+                            return
+                        }
+                        android.util.Log.i(
+                            "AudexReader",
+                            "reader: attaching fragment (container ${container.width}x${container.height}, laidOut=${container.isLaidOut})",
+                        )
                         fm.fragmentFactory = ready.navigatorFactory.createFragmentFactory(
                             initialLocator = ready.initialLocator,
                         )
-                        fm.commitNow {
-                            setReorderingAllowed(true)
-                            add(
-                                R.id.reader_container,
-                                EpubNavigatorFragment::class.java,
-                                Bundle.EMPTY,
-                                READER_FRAGMENT_TAG,
+                        runCatching {
+                            fm.commitNow {
+                                setReorderingAllowed(true)
+                                add(
+                                    R.id.reader_container,
+                                    EpubNavigatorFragment::class.java,
+                                    Bundle.EMPTY,
+                                    READER_FRAGMENT_TAG,
+                                )
+                            }
+                        }.onFailure { android.util.Log.e("AudexReader", "reader: fragment commit FAILED", it) }
+                        navigator = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                        android.util.Log.i("AudexReader", "reader: attached, navigator=${navigator != null}")
+                        // Compose interop trap: a child added to an AndroidView AFTER
+                        // composition never gets measured — Compose drives the holder's
+                        // measurement and ignores the late child's requestLayout, so
+                        // Readium's view stays 0x0 and the reader looks blank
+                        // (runtime-verified: ConstraintLayout/R2ViewPager 0x0 inside a
+                        // full-size container). Force one measure+layout pass at the
+                        // container's real bounds.
+                        container.post {
+                            // forceLayout defeats View.measure()'s cache — without it
+                            // the container "measures" via the cached pass and the
+                            // late-added child is skipped entirely.
+                            fun forceAll(v: android.view.View) {
+                                v.forceLayout()
+                                if (v is android.view.ViewGroup) {
+                                    for (i in 0 until v.childCount) forceAll(v.getChildAt(i))
+                                }
+                            }
+                            forceAll(container)
+                            container.measure(
+                                android.view.View.MeasureSpec.makeMeasureSpec(
+                                    container.width, android.view.View.MeasureSpec.EXACTLY,
+                                ),
+                                android.view.View.MeasureSpec.makeMeasureSpec(
+                                    container.height, android.view.View.MeasureSpec.EXACTLY,
+                                ),
+                            )
+                            container.layout(
+                                container.left, container.top, container.right, container.bottom,
+                            )
+                            val child = container.getChildAt(0)
+                            android.util.Log.i(
+                                "AudexReader",
+                                "reader: forced layout, child=${child?.javaClass?.simpleName} " +
+                                    "${child?.width}x${child?.height}",
                             )
                         }
-                        navigator = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
                     }
                     val existing = fm.findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
                     when {
-                        existing != null -> if (navigator == null) navigator = existing
+                        existing != null -> if (navigator == null) {
+                            android.util.Log.i("AudexReader", "reader: reusing existing fragment")
+                            navigator = existing
+                        }
                         // Attach only after the container has its REAL size:
                         // committing during the first (unsized) layout pass made
                         // Readium's JS compute the column grid against a wrong

@@ -65,6 +65,51 @@ data class SyncMap(
         val f = ((seconds - a.t0) / span).coerceIn(0.0, 1.0)
         return a.p + (b.p - a.p) * f
     }
+
+    /**
+     * Inverse of [progressionAt]: the audio second at which global char offset
+     * [char] is narrated, interpolated between the surrounding anchors' (t0, c0)
+     * pairs. Null when the map has no usable anchors.
+     */
+    fun timeAtChar(char: Int): Double? {
+        val usable = anchors.filter { it.c0 > 0 || it.p > 0.0 }
+        if (usable.isEmpty()) return null
+        if (char <= usable.first().c0) return usable.first().t0
+        if (char >= usable.last().c0) return usable.last().t0
+        var lo = 0
+        var hi = usable.size - 1
+        while (lo + 1 < hi) {
+            val mid = (lo + hi) / 2
+            if (usable[mid].c0 <= char) lo = mid else hi = mid
+        }
+        val a = usable[lo]
+        val b = usable[hi]
+        val span = (b.c0 - a.c0).takeIf { it > 0 } ?: return a.t0
+        val f = ((char - a.c0).toDouble() / span).coerceIn(0.0, 1.0)
+        return a.t0 + (b.t0 - a.t0) * f
+    }
+
+    /**
+     * Synthesize audio chapter markers for books whose audio files carry none:
+     * the EPUB's chapter boundaries mapped through the alignment onto the audio
+     * timeline. Front matter (tiny spine items — cover, toc, copyright) is
+     * dropped via [minChars]; markers are forced monotonic. Returns start
+     * seconds, one per kept chapter, or empty when the map can't support it.
+     */
+    fun synthesizedChapterStarts(minChars: Int = 1_500): List<Double> {
+        if (chapters.isEmpty() || anchors.isEmpty()) return emptyList()
+        val starts = mutableListOf<Double>()
+        var lastT = -1.0
+        for (chapter in chapters) {
+            if (chapter.c1 - chapter.c0 < minChars) continue
+            val t = timeAtChar(chapter.c0) ?: continue
+            if (t > lastT + 1.0) {
+                starts.add(t)
+                lastT = t
+            }
+        }
+        return starts
+    }
 }
 
 /** Job/availability status of word sync for one work. */

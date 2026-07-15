@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.5
+
+- Chapters where none exist: audiobooks without chapter markers now get them
+  synthesized from the word-sync alignment — the ebook's chapter boundaries
+  projected onto the audio timeline. Works offline once the sync map is cached.
+
 ## 0.1.4
 
 - New look: dark theme by default with a choice of accent color (mono, blue,

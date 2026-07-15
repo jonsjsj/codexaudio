@@ -34,6 +34,7 @@ import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
+import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.network.abs.AbsApi
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import no.bellaybestia.audex.network.abs.AbsSessionSyncBody
@@ -54,6 +55,7 @@ class PlaybackControllerImpl @Inject constructor(
     private val downloadManager: DownloadManager,
     private val progressDao: ProgressDao,
     private val sessionRecorder: SessionRecorder,
+    private val alignmentRepository: AlignmentRepository,
     @DefaultDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackController {
 
@@ -122,9 +124,13 @@ class PlaybackControllerImpl @Inject constructor(
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }
-        activeChapters = session.chapters.map {
-            Chapter(it.title, (it.start * 1000).toLong(), (it.end * 1000).toLong())
-        }
+        activeChapters = withSynthesizedFallback(
+            serverId,
+            libraryItemId,
+            session.chapters.map {
+                Chapter(it.title, (it.start * 1000).toLong(), (it.end * 1000).toLong())
+            },
+        )
         totalDurationS = tracks.sumOf { it.duration }
         sessionRecorder.start(serverId, libraryItemId, resumeAt)
         startPlayback(items, resumeAt)
@@ -149,12 +155,42 @@ class PlaybackControllerImpl @Inject constructor(
         activeApi = null
         activeSessionId = null
         activeOffsets = tracks.map { it.startOffset }
-        activeChapters = downloadManager.localAudioChapters(serverId, libraryItemId)
+        activeChapters = withSynthesizedFallback(
+            serverId,
+            libraryItemId,
+            downloadManager.localAudioChapters(serverId, libraryItemId),
+        )
         totalDurationS = tracks.sumOf { it.duration }
         sessionRecorder.start(serverId, libraryItemId, resumeAt)
         startPlayback(items, resumeAt)
         _state.update { it.copy(isLoading = false, chapters = activeChapters) }
         startTicker()
+    }
+
+    /**
+     * Chapters where none exist: when the audio files carry no chapter markers
+     * but the work has a word-sync map, project the EPUB's chapter boundaries
+     * through the alignment onto the audio timeline. Cached maps make this work
+     * offline too; any failure just means "no chapters", like before.
+     */
+    private suspend fun withSynthesizedFallback(
+        serverId: String,
+        libraryItemId: String,
+        fromSource: List<Chapter>,
+    ): List<Chapter> {
+        if (fromSource.isNotEmpty()) return fromSource
+        val map = runCatching { alignmentRepository.syncMap(serverId, libraryItemId) }
+            .getOrNull() ?: return emptyList()
+        val starts = map.synthesizedChapterStarts()
+        if (starts.size < 2) return emptyList()
+        val totalMs = (map.durationS * 1000).toLong()
+        return starts.mapIndexed { index, startS ->
+            Chapter(
+                title = "Chapter ${index + 1}",
+                startMs = (startS * 1000).toLong(),
+                endMs = starts.getOrNull(index + 1)?.let { (it * 1000).toLong() } ?: totalMs,
+            )
+        }
     }
 
     private suspend fun startPlayback(items: List<MediaItem>, resumeAtS: Double) {

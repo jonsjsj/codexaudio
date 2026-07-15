@@ -142,6 +142,48 @@ def audex_beta_latest():
     )
 
 
+class ReportRequest(BaseModel):
+    kind: str  # bug | idea | feedback
+    title: str
+    body: str = ""
+    appVersion: str = ""
+
+
+@app.post("/reports")
+def create_report(req: ReportRequest):
+    """File a user report as a GitHub issue (Codex's reporter pattern). The
+    token lives in DATA_DIR/report.json ({"repo": "owner/name", "token": "…"})
+    so the app never embeds credentials; 503 until that file exists."""
+    cfg_path = DATA_DIR / "report.json"
+    if not cfg_path.exists():
+        raise HTTPException(503, "report service not configured")
+    cfg = json.loads(cfg_path.read_text())
+    repo, token = cfg.get("repo"), cfg.get("token")
+    if not repo or not token:
+        raise HTTPException(503, "report service not configured")
+    kind = req.kind if req.kind in ("bug", "idea", "feedback") else "feedback"
+    title = req.title.strip()[:200]
+    if not title:
+        raise HTTPException(422, "title required")
+    body = (req.body.strip() or "(no details)")[:8000]
+    footer = f"\n\n---\nAudex {req.appVersion or '?'} · filed from the in-app reporter"
+    r = httpx.post(
+        f"https://api.github.com/repos/{repo}/issues",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+        },
+        json={"title": f"[{kind}] {title}", "body": body + footer,
+              "labels": [f"audex-{kind}"]},
+        timeout=30,
+    )
+    if r.status_code != 201:
+        log.error("report create failed: %s %s", r.status_code, r.text[:300])
+        raise HTTPException(502, "couldn't file the report")
+    issue = r.json()
+    return {"number": issue["number"], "url": issue["html_url"]}
+
+
 @app.on_event("startup")
 def _resume_batch_on_startup():
     # Resume any registered batch after a restart (CPU→GPU flip, reboot).

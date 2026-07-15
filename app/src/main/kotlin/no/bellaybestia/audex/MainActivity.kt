@@ -4,13 +4,21 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.auth.AbsOidcFlow
+import no.bellaybestia.audex.designsystem.AudexAccent
 import no.bellaybestia.audex.designsystem.AudexTheme
 import no.bellaybestia.audex.domain.repository.AuthRepository
+import no.bellaybestia.audex.domain.settings.AccentChoice
+import no.bellaybestia.audex.domain.settings.ThemeMode
+import no.bellaybestia.audex.domain.settings.ThemePrefs
+import no.bellaybestia.audex.domain.settings.ThemeSettings
 import javax.inject.Inject
 
 // FragmentActivity (not plain ComponentActivity) so the Readium
@@ -21,6 +29,9 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var authRepository: AuthRepository
 
+    @Inject
+    lateinit var themeSettings: ThemeSettings
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // targetSdk 35 forces edge-to-edge on Android 15; opt in explicitly so
         // every version behaves the same. AppNav then consumes the system-bar
@@ -30,7 +41,18 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         handleOAuthRedirect(intent)
         setContent {
-            AudexTheme {
+            val prefs by themeSettings.prefs.collectAsState(initial = ThemePrefs())
+            val dark = when (prefs.mode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            val accent = when (prefs.accent) {
+                AccentChoice.MONO -> AudexAccent.MONO
+                AccentChoice.BLUE -> AudexAccent.BLUE
+                AccentChoice.GOLD -> AudexAccent.GOLD
+            }
+            AudexTheme(darkTheme = dark, accent = accent) {
                 AppNav()
             }
         }

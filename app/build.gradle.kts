@@ -18,8 +18,8 @@ android {
         // versionCode strictly +1 every build (the OTA check compares it).
         // Earlier builds shipped as "1.0.0"/"1.1.0" — renumbered: vc2=0.1,
         // vc3=0.1.1. versionName is free-form so this is safe.
-        versionCode = 5
-        versionName = "0.1.3"
+        versionCode = 6
+        versionName = "0.1.4"
 
         // Default OTA endpoint (the public audex-align host). It serves
         // /audex-latest.json (the version manifest) and /audex.apk. Overridable
@@ -50,7 +50,18 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Bundle the repo-root CHANGELOG.md into assets on every build so the
+    // in-app update page can never drift from the real release notes (the
+    // Codex changelog-drift lesson: never hand-maintain copies).
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/changelog"))
 }
+
+val syncChangelog = tasks.register<Copy>("syncChangelog") {
+    from(rootProject.layout.projectDirectory.file("CHANGELOG.md"))
+    into(layout.buildDirectory.dir("generated/changelog"))
+}
+tasks.named("preBuild") { dependsOn(syncChangelog) }
 
 kotlin {
     compilerOptions {

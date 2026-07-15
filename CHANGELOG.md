@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.4
+
+- New look: dark theme by default with a choice of accent color (mono, blue,
+  gold — the same palette themes as Codex) under Settings → Appearance.
+- Update page: Settings → Version now opens the full release history with
+  notes for every version.
+- Report a problem: file a bug, idea, or feedback straight from Settings —
+  reports go to the developer and fixed ones are referenced on the update page.
+
 ## 0.1.3
 
 - Fixed the blank ebook reader: the book view was never given a size when the

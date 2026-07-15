@@ -36,7 +36,9 @@ import no.bellaybestia.audex.feature.library.SeriesDetailScreen
 import no.bellaybestia.audex.feature.library.WorkDetailScreen
 import no.bellaybestia.audex.feature.player.MiniPlayer
 import no.bellaybestia.audex.feature.player.PlayerScreen
+import no.bellaybestia.audex.feature.settings.AboutScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
+import no.bellaybestia.audex.feature.settings.ReportScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
 
 private object Routes {
@@ -45,6 +47,8 @@ private object Routes {
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
     const val ADD_SERVER = "add_server"
+    const val ABOUT = "about"
+    const val REPORT = "report"
     const val PLAYER = "player"
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
@@ -78,7 +82,7 @@ fun AppNav() {
         Routes.HOME -> 0
         Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER -> 1
         Routes.DOWNLOADS -> 2
-        Routes.SETTINGS, Routes.ADD_SERVER -> 3
+        Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.REPORT -> 3
         else -> 0
     }
 
@@ -126,10 +130,19 @@ fun AppNav() {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onAddServer = { navController.navigate(Routes.ADD_SERVER) },
+                    appVersion = BuildConfig.VERSION_NAME,
+                    onAbout = { navController.navigate(Routes.ABOUT) },
+                    onReport = { navController.navigate(Routes.REPORT) },
                 )
             }
             composable(Routes.ADD_SERVER) {
                 AddServerScreen(onDone = { navController.popBackStack() })
+            }
+            composable(Routes.ABOUT) {
+                AboutScreen(appVersion = BuildConfig.VERSION_NAME)
+            }
+            composable(Routes.REPORT) {
+                ReportScreen(appVersion = BuildConfig.VERSION_NAME)
             }
             composable(
                 route = Routes.AUTHOR,

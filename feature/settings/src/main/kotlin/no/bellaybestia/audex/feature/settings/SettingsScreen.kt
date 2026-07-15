@@ -27,21 +27,33 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.domain.model.ServerAccount
+import no.bellaybestia.audex.domain.settings.AccentChoice
+import no.bellaybestia.audex.domain.settings.ThemeMode
 
 /**
  * Settings: flat SERVERS list (small-caps section headers, hairline dividers,
- * a plain-text "needs login" tag — no chips) plus an ABOUT section.
+ * a plain-text "needs login" tag — no chips), APPEARANCE (theme + accent),
+ * WORD SYNC, and ABOUT (version → update page, report a problem).
  */
 @Composable
 fun SettingsScreen(
     onAddServer: () -> Unit,
     modifier: Modifier = Modifier,
+    appVersion: String = "",
+    onAbout: () -> Unit = {},
+    onReport: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val servers by viewModel.servers.collectAsState()
     val alignUrl by viewModel.alignServiceUrl.collectAsState()
+    val themePrefs by viewModel.themePrefs.collectAsState()
     val listState = rememberLazyListState()
 
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
@@ -61,6 +73,57 @@ fun SettingsScreen(
                     .clickable(onClick = onAddServer)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
+        }
+        item(key = "appearance-header") { SectionHeader("Appearance") }
+        item(key = "appearance-theme") {
+            ChoiceRow(
+                label = "Theme",
+                options = listOf("System", "Light", "Dark"),
+                selectedIndex = themePrefs.mode.ordinal,
+                onSelect = { viewModel.setThemeMode(ThemeMode.entries[it]) },
+            )
+        }
+        item(key = "appearance-accent") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Accent",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                AccentChoice.entries.forEach { choice ->
+                    val selected = themePrefs.accent == choice
+                    val dot = when (choice) {
+                        AccentChoice.MONO -> Color(0xFFEDEDED)
+                        AccentChoice.BLUE -> Color(0xFF5A9FE6)
+                        AccentChoice.GOLD -> Color(0xFFDCA85F)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { viewModel.setAccent(choice) }
+                            .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(dot),
+                        )
+                        Text(
+                            text = choice.name.lowercase().replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 5.dp),
+                        )
+                    }
+                }
+            }
         }
         item(key = "wordsync-header") { SectionHeader("Word sync") }
         item(key = "wordsync-url") {
@@ -102,20 +165,89 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(onClick = onAbout)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Column {
+                    Text(
+                        text = "Version ${appVersion.ifBlank { "?" }}",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "What's new, all releases",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    text = "Version",
+                    text = "View",
                     style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = "1.0.0",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
+        }
+        item(key = "about-report") {
+            FlatDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onReport)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = "Report a problem",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Bug, idea or feedback — goes straight to the developer",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = "Open",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+/** Flat inline single-choice row: label left, options right, active = accent. */
+@Composable
+private fun ChoiceRow(
+    label: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        options.forEachIndexed { index, option ->
+            Text(
+                text = option,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (index == selectedIndex) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable { onSelect(index) }
+                    .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+            )
         }
     }
 }

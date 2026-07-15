@@ -13,12 +13,28 @@ import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.model.ServerAccount
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
+import no.bellaybestia.audex.domain.settings.AccentChoice
+import no.bellaybestia.audex.domain.settings.ThemeMode
+import no.bellaybestia.audex.domain.settings.ThemePrefs
+import no.bellaybestia.audex.domain.settings.ThemeSettings
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val serverRepository: ServerRepository,
     private val alignmentRepository: AlignmentRepository,
+    private val themeSettings: ThemeSettings,
 ) : ViewModel() {
+
+    val themePrefs: StateFlow<ThemePrefs> = themeSettings.prefs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemePrefs())
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { themeSettings.set(themePrefs.value.copy(mode = mode)) }
+    }
+
+    fun setAccent(accent: AccentChoice) {
+        viewModelScope.launch { themeSettings.set(themePrefs.value.copy(accent = accent)) }
+    }
 
     /** Remove a server entirely (tokens, items, progress, graph rebuild). */
     fun removeServer(serverId: String) {

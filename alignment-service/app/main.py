@@ -115,6 +115,33 @@ def audex_latest():
     )
 
 
+@app.api_route("/audex-beta.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_beta_apk():
+    """The current BETA build — published by the autofix flow, promoted by hand."""
+    from fastapi.responses import FileResponse
+
+    apk = DATA_DIR / "audex-beta.apk"
+    if not apk.exists():
+        raise HTTPException(404, "no beta APK published yet")
+    return FileResponse(
+        apk,
+        media_type="application/vnd.android.package-archive",
+        filename="audex-beta.apk",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
+@app.api_route("/audex-beta-latest.json", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_beta_latest():
+    manifest = DATA_DIR / "audex-beta-latest.json"
+    if not manifest.exists():
+        raise HTTPException(404, "no beta manifest published yet")
+    return JSONResponse(
+        json.loads(manifest.read_text()),
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 @app.on_event("startup")
 def _resume_batch_on_startup():
     # Resume any registered batch after a restart (CPU→GPU flip, reboot).

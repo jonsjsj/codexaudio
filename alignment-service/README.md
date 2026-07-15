@@ -30,19 +30,27 @@ curl -X POST --data-binary @ctx.tar -H 'Content-Type: application/x-tar' \
 # create container: port 8590→8585, volume audex-align-data:/data
 ```
 
-## GPU (ventans 4070 Ti) — host wiring needed once
+## GPU (ventans 4070 Ti) — one Windows-side step, then automated
 
-The container is GPU-ready (`ALIGN_DEVICE=cuda` → CTranslate2 CUDA path), but
-Docker on ventans currently has **no `nvidia` runtime**. One-time host setup
-(shell on ventans):
+Diagnosed 2026-07-15: ventans is **Ubuntu 22.04 in WSL2**. The Windows NVIDIA
+driver is installed (nv_dispi in the driver store, libcuda mounted at
+/usr/lib/wsl/lib, /dev/dxg present) **but the WSL VM booted without GPU
+paravirtualization** — /sys/class/dxg never registered, `nvidia-smi` says
+"GPU access blocked by the operating system", CUDA enumerates 0 devices.
+Typical cause: the VM autostarts headless (session 0) under an older WSL.
 
-```bash
-# 1. NVIDIA driver present? nvidia-smi should list the 4070 Ti.
-# 2. Install the container toolkit:
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+**One-time fix on the ventans Windows machine (PowerShell as Administrator):**
+
+```powershell
+wsl --update
+wsl --shutdown     # brief outage: Codex/audex-align/etc restart when WSL returns
+wsl -d Ubuntu-22.04 -e /usr/lib/wsl/lib/nvidia-smi   # must list the 4070 Ti
 ```
+
+If nvidia-smi lists the card, everything else (container toolkit install via
+the Docker API, CUDA image build, service flip + benchmark) is automated —
+just say the word. If it still says "blocked", the WSL autostart mechanism
+needs to launch from an interactive session, or update the NVIDIA driver.
 
 Then build `Dockerfile.cuda` (ready in this directory — CUDA 12.4 + cuDNN base,
 `ALIGN_DEVICE=cuda` baked in) and recreate the container with

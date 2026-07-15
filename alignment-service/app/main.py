@@ -43,6 +43,11 @@ executor = ThreadPoolExecutor(max_workers=1)
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 
+# Persistent, resumable batch: a manifest on the data volume so a full series
+# keeps aligning across container restarts (e.g. the CPU→GPU flip) — books whose
+# map already exists are skipped, so nothing is redone.
+BATCH_FILE = DATA_DIR / "batch.json"
+
 
 def book_key(server_url: str, item_id: str) -> str:
     return hashlib.sha1(f"{server_url}|{item_id}".encode()).hexdigest()[:16]
@@ -55,6 +60,17 @@ class AbsJobRequest(BaseModel):
     # For works where audio and ebook are SEPARATE ABS items: audio comes from
     # libraryItemId, the EPUB from this one. Defaults to the same item.
     ebookLibraryItemId: str | None = None
+
+
+class BatchItem(BaseModel):
+    audioItemId: str
+    ebookItemId: str | None = None
+
+
+class BatchRequest(BaseModel):
+    serverUrl: str
+    token: str
+    items: list[BatchItem]
 
 
 @app.get("/", include_in_schema=False)
@@ -84,6 +100,14 @@ def audex_apk():
         filename="audex.apk",
         headers={"Cache-Control": "no-cache, must-revalidate"},
     )
+
+
+@app.on_event("startup")
+def _resume_batch_on_startup():
+    # Resume any registered batch after a restart (CPU→GPU flip, reboot).
+    threading.Thread(
+        target=lambda: (time.sleep(5), enqueue_batch()), daemon=True
+    ).start()
 
 
 @app.get("/health")
@@ -137,6 +161,55 @@ def job_status(job_id: str):
     return job
 
 
+@app.get("/batch")
+def batch_status():
+    if not BATCH_FILE.exists():
+        return {"count": 0, "done": 0, "items": []}
+    b = json.loads(BATCH_FILE.read_text())
+    items = []
+    for it in b.get("items", []):
+        key = book_key(b["serverUrl"], it["audioItemId"])
+        done = (MAPS_DIR / f"{key}.json").exists()
+        state = next((j["state"] for j in jobs.values() if j.get("bookKey") == key), "pending")
+        items.append({"audioItemId": it["audioItemId"], "bookKey": key,
+                      "done": done, "state": "done" if done else state})
+    return {"count": len(items), "done": sum(1 for i in items if i["done"]), "items": items}
+
+
+@app.post("/batch")
+def create_batch(req: BatchRequest):
+    """Register a resumable batch and enqueue everything not yet aligned."""
+    BATCH_FILE.write_text(json.dumps(req.model_dump()))
+    enqueued = enqueue_batch()
+    return {"registered": len(req.items), "enqueued": enqueued}
+
+
+def enqueue_batch() -> int:
+    """Submit every manifest book whose map is missing and isn't already queued."""
+    if not BATCH_FILE.exists():
+        return 0
+    b = json.loads(BATCH_FILE.read_text())
+    count = 0
+    for it in b.get("items", []):
+        key = book_key(b["serverUrl"], it["audioItemId"])
+        if (MAPS_DIR / f"{key}.json").exists():
+            continue
+        with jobs_lock:
+            busy = any(j.get("bookKey") == key and j["state"] not in ("done", "error")
+                       for j in jobs.values())
+        if busy:
+            continue
+        job_id = uuid.uuid4().hex[:12]
+        with jobs_lock:
+            jobs[job_id] = {"state": "queued", "bookKey": key,
+                            "createdAt": time.time(), "detail": "batch"}
+        job = AbsJobRequest(serverUrl=b["serverUrl"], token=b["token"],
+                            libraryItemId=it["audioItemId"], ebookLibraryItemId=it.get("ebookItemId"))
+        executor.submit(_run_abs_job, job_id, job)
+        count += 1
+    return count
+
+
 @app.api_route("/maps/{key}", methods=["GET", "HEAD"])
 def get_map(key: str):
     path = MAPS_DIR / f"{key}.json"
@@ -153,6 +226,12 @@ def _set(job_id: str, state: str, detail: str = ""):
 
 
 def _run_abs_job(job_id: str, req: AbsJobRequest):
+    # Idempotent: a book already aligned (e.g. after a restart mid-batch) is a
+    # no-op, so re-enqueueing the whole manifest is cheap.
+    key = jobs.get(job_id, {}).get("bookKey") or book_key(req.serverUrl, req.libraryItemId)
+    if (MAPS_DIR / f"{key}.json").exists():
+        _set(job_id, "done", "already aligned")
+        return
     workdir = Path(tempfile.mkdtemp(prefix="alignabs_"))
     try:
         _set(job_id, "downloading")

@@ -14,8 +14,13 @@ android {
         applicationId = "no.bellaybestia.audex"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.1.0"
+
+        // Default OTA endpoint (the public audex-align host). It serves
+        // /audex-latest.json (the version manifest) and /audex.apk. Overridable
+        // at runtime by the configured word-sync service URL, if set.
+        buildConfigField("String", "UPDATE_URL", "\"https://audex.bellaybestia.no\"")
     }
 
     // Fixed debug signing (committed keystore, standard debug passwords): CI
@@ -37,7 +42,10 @@ android {
         // Readium 3.x uses java.time & friends below minSdk 26's native support.
         isCoreLibraryDesugaringEnabled = true
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 kotlin {

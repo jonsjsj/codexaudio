@@ -102,6 +102,19 @@ def audex_apk():
     )
 
 
+@app.api_route("/audex-latest.json", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_latest():
+    """Version manifest for the app's in-app updater: {versionCode, versionName,
+    url, notes}. The deploy flow writes it to /data next to the APK."""
+    manifest = DATA_DIR / "audex-latest.json"
+    if not manifest.exists():
+        raise HTTPException(404, "no update manifest published yet")
+    return JSONResponse(
+        json.loads(manifest.read_text()),
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 @app.on_event("startup")
 def _resume_batch_on_startup():
     # Resume any registered batch after a restart (CPU→GPU flip, reboot).

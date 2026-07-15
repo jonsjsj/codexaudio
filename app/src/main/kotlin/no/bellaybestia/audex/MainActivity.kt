@@ -3,6 +3,7 @@ package no.bellaybestia.audex
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
@@ -21,6 +22,11 @@ class MainActivity : FragmentActivity() {
     lateinit var authRepository: AuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // targetSdk 35 forces edge-to-edge on Android 15; opt in explicitly so
+        // every version behaves the same. AppNav then consumes the system-bar
+        // insets (status bar on content, gesture nav under the tab bar) so no
+        // control ever sits beneath an Android system element.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleOAuthRedirect(intent)
         setContent {

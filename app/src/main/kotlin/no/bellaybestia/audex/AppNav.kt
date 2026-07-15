@@ -3,11 +3,20 @@ package no.bellaybestia.audex
 import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.update.UpdateViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -75,7 +84,10 @@ fun AppNav() {
 
     Scaffold(
         bottomBar = {
-            Column {
+            // navigationBarsPadding lifts the tab row above the Android gesture
+            // bar so its tap targets aren't stolen by the system (the inset is
+            // 0 when not edge-to-edge, so this is safe on every device).
+            Column(Modifier.navigationBarsPadding()) {
                 if (currentRoute != Routes.PLAYER) {
                     MiniPlayer(onExpand = { navController.navigate(Routes.PLAYER) })
                 }
@@ -193,6 +205,42 @@ fun AppNav() {
                 PlayerScreen()
             }
         }
+    }
+
+    UpdateGate()
+}
+
+/**
+ * Watches for a newer published APK on launch and, when one exists, offers a
+ * one-tap in-app update (download + hand off to the system installer).
+ */
+@Composable
+private fun UpdateGate(vm: UpdateViewModel = hiltViewModel()) {
+    val state by vm.state.collectAsState()
+    when (val s = state) {
+        is UpdateViewModel.State.Available -> AlertDialog(
+            onDismissRequest = vm::dismiss,
+            title = { Text("Update available") },
+            text = {
+                val notes = s.info.notes
+                Text("Audex ${s.info.versionName} is ready to install." +
+                    if (notes.isNotBlank()) "\n\n$notes" else "")
+            },
+            confirmButton = { TextButton(onClick = vm::install) { Text("Update") } },
+            dismissButton = { TextButton(onClick = vm::dismiss) { Text("Later") } },
+        )
+        is UpdateViewModel.State.Downloading -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Downloading update") },
+            text = {
+                LinearProgressIndicator(
+                    progress = { s.progress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {},
+        )
+        UpdateViewModel.State.Idle -> Unit
     }
 }
 

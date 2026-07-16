@@ -8,6 +8,11 @@ manifest's notes derive from this file — never hand-maintain copies.
 - Work detail got a proper hero: larger cover, series and position, year and
   duration, and the full book description (tap More/Less) pulled live from
   your server with HTML cleaned away. The page scrolls now.
+- Author and series on the detail page are tappable — jump straight to that
+  author's or series' books.
+- Update channel choice (Settings → Updates): Stable follows releases, Beta
+  gets fixes for in-app reports early.
+- Covers got softly rounded corners app-wide.
 
 ## 0.1.5
 

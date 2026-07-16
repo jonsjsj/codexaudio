@@ -92,6 +92,16 @@ interface AbsApi {
 
     // --- ebook position (legitimate PATCH usage; never for audio) ---
 
+    // Session history — the durable truth for "furthest position reached"
+    // (the progress field can be reset by sync mishaps; sessions never lie —
+    // that's how Crystal World's lost progress was recovered).
+    @GET("api/me/item/listening-sessions/{libraryItemId}")
+    suspend fun itemListeningSessions(
+        @Path("libraryItemId") libraryItemId: String,
+        @Query("itemsPerPage") itemsPerPage: Int = 100,
+        @Query("page") page: Int = 0,
+    ): AbsListeningSessionsResponse
+
     @PATCH("api/me/progress/{libraryItemId}")
     suspend fun patchEbookProgress(
         @Path("libraryItemId") libraryItemId: String,

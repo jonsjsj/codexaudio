@@ -79,6 +79,17 @@ class CatalogRepositoryImpl @Inject constructor(
             }.getOrNull()?.let(::cleanHtml)?.takeIf { it.isNotBlank() }
         }
 
+    override suspend fun furthestPositionS(serverId: String, libraryItemId: String): Double? =
+        withContext(dispatcher) {
+            val server = serverDao.enabled().firstOrNull { it.serverId == serverId }
+                ?: return@withContext null
+            runCatching {
+                clientFactory.api(serverId, server.baseUrl)
+                    .itemListeningSessions(libraryItemId)
+                    .sessions.maxOfOrNull { it.currentTime }
+            }.getOrNull()
+        }
+
     /** ABS descriptions are HTML-ish; strip tags, decode common entities (Codex rule). */
     private fun cleanHtml(raw: String): String = raw
         .replace(Regex("<br ?/?>", RegexOption.IGNORE_CASE), "\n")

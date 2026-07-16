@@ -105,6 +105,22 @@ data class AbsMetadata(
 )
 
 @Serializable
+data class AbsListeningSessionsResponse(
+    val total: Int = 0,
+    val numPages: Int = 0,
+    val page: Int = 0,
+    val sessions: List<AbsListeningSession> = emptyList(),
+)
+
+@Serializable
+data class AbsListeningSession(
+    val id: String = "",
+    val libraryItemId: String = "",
+    /** The position (seconds) this session ended at. */
+    val currentTime: Double = 0.0,
+)
+
+@Serializable
 data class AbsAuthorRef(val id: String = "", val name: String = "")
 
 @Serializable

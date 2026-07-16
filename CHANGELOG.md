@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.7
+
+- Furthest-listened bookmark: the work page now shows the furthest point you
+  ever reached in an audiobook (from your server's listening history — it
+  survives progress resets) with a one-tap Jump to resume there.
+
 ## 0.1.6
 
 - Work detail got a proper hero: larger cover, series and position, year and

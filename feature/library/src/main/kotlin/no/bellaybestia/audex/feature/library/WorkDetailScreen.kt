@@ -176,6 +176,42 @@ fun WorkDetailScreen(
             }
         }
 
+        // Furthest-ever bookmark (ABS session history — survives progress
+        // resets). Only shown when it's meaningfully ahead of the current spot.
+        val audioEdition = editions.firstOrNull { it.format == Format.AUDIO }
+        val furthest by viewModel.furthestS.collectAsState()
+        val furthestFraction = furthest?.let { f ->
+            audioEdition?.durationS?.takeIf { it > 0 }?.let { (f / it).coerceIn(0.0, 1.0) }
+        }
+        if (audioEdition != null && furthestFraction != null &&
+            furthestFraction > audioEdition.fraction + 0.01
+        ) {
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(text = "Furthest listened", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = "${(furthestFraction * 100).roundToInt()}% — from your listening history",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = "Jump",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = viewModel::jumpToFurthest)
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                )
+            }
+        }
+
         if (wordSync != WordSyncStatus.UNAVAILABLE) {
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             WordSyncRow(status = wordSync, onPrepare = viewModel::requestWordSync)

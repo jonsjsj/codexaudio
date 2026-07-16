@@ -49,6 +49,14 @@ class WorkDetailViewModel @Inject constructor(
     private val _description = MutableStateFlow<String?>(null)
     val description: StateFlow<String?> = _description.asStateFlow()
 
+    /**
+     * Furthest audio position ever reached (seconds), from ABS session history —
+     * the durable bookmark that survives progress-field resets. Null offline
+     * or when there's no audio edition / no sessions.
+     */
+    private val _furthestS = MutableStateFlow<Double?>(null)
+    val furthestS: StateFlow<Double?> = _furthestS.asStateFlow()
+
     val playback: StateFlow<PlaybackState> = playbackController.state
 
     val downloadStates: StateFlow<List<DownloadInfo>> = downloads.all()
@@ -77,7 +85,21 @@ class WorkDetailViewModel @Inject constructor(
                             catalogRepository.description(source.serverId, source.libraryItemId)
                     }
                 }
+                if (_furthestS.value == null && audio != null) {
+                    _furthestS.value =
+                        catalogRepository.furthestPositionS(audio.serverId, audio.libraryItemId)
+                }
             }
+        }
+    }
+
+    /** Resume the audio edition at the furthest position ever reached. */
+    fun jumpToFurthest() {
+        val audio = editions.value.firstOrNull { it.format == Format.AUDIO } ?: return
+        val target = _furthestS.value ?: return
+        viewModelScope.launch {
+            playbackController.play(audio.serverId, audio.libraryItemId, title, author)
+            playbackController.seekTo((target * 1000).toLong())
         }
     }
 

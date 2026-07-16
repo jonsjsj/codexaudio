@@ -28,6 +28,13 @@ interface CatalogRepository {
      */
     suspend fun description(serverId: String, libraryItemId: String): String?
 
+    /**
+     * The furthest position (seconds) ever reached in this audio item, from ABS
+     * session history — durable even when the progress field gets reset. Null
+     * offline or with no sessions.
+     */
+    suspend fun furthestPositionS(serverId: String, libraryItemId: String): Double?
+
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()
 }

@@ -3,6 +3,16 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.0.1
+
+- New-version notification: the app now checks in the background and posts a
+  tappable "Audex X is ready" notification when an update is published — the
+  same pattern as the Codex Companion.
+- Versions gained a fourth digit (0.MAJOR.FEATURE.PATCH) so numbers stop
+  burning through so fast.
+- Update downloads are version-stamped: the file saves as
+  audex-<version>.apk instead of a generic name.
+
 ## 0.2.0
 
 - Smart rewind: resuming after a pause backs up a little (5–30s, scaled by how

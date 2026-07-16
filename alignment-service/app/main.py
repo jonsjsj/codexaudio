@@ -102,6 +102,25 @@ def audex_apk():
     )
 
 
+@app.api_route("/audex-{version}.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_versioned_apk(version: str):
+    """Version-stamped download names (the Codex Companion pattern): every
+    audex-<version>.apk serves the single current APK, so the saved file is
+    tellable apart without keeping N copies. audex-beta-<v>.apk works too."""
+    from fastapi.responses import FileResponse
+
+    name = "audex-beta.apk" if version.startswith("beta") else "audex.apk"
+    apk = DATA_DIR / name
+    if not apk.exists():
+        raise HTTPException(404, "no APK published yet")
+    return FileResponse(
+        apk,
+        media_type="application/vnd.android.package-archive",
+        filename=f"audex-{version}.apk",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 @app.api_route("/audex-latest.json", methods=["GET", "HEAD"], include_in_schema=False)
 def audex_latest():
     """Version manifest for the app's in-app updater: {versionCode, versionName,

@@ -1,9 +1,20 @@
 package no.bellaybestia.audex
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
+import no.bellaybestia.audex.update.UpdateCheckWorker
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +51,8 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleOAuthRedirect(intent)
+        requestNotificationPermission()
+        scheduleUpdateCheck()
         setContent {
             val prefs by themeSettings.prefs.collectAsState(initial = ThemePrefs())
             val dark = when (prefs.mode) {
@@ -62,6 +75,32 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleOAuthRedirect(intent)
+    }
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** API 33+ needs a runtime grant for the update + download notifications. */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /** Periodic "new version ready" notification check (Codex Companion pattern). */
+    private fun scheduleUpdateCheck() {
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            UpdateCheckWorker.UNIQUE_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<UpdateCheckWorker>(6, TimeUnit.HOURS)
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
+                )
+                .build(),
+        )
     }
 
     /** Catch the `audiobookshelf://oauth?...` Custom Tab redirect and finish the login. */

@@ -14,12 +14,13 @@ android {
         applicationId = "no.bellaybestia.audex"
         minSdk = 26
         targetSdk = 35
-        // Alpha scheme (owner rule): 0.1 → 0.1.1 → …; patch digit per build,
-        // versionCode strictly +1 every build (the OTA check compares it).
-        // Earlier builds shipped as "1.0.0"/"1.1.0" — renumbered: vc2=0.1,
-        // vc3=0.1.1. versionName is free-form so this is safe.
-        versionCode = 12
-        versionName = "0.2.0"
+        // Alpha scheme (owner rule, expanded 2026-07-16 to FOUR digits because
+        // three burned too fast): 0.MAJOR.FEATURE.PATCH — bump the last digit
+        // per release, roll into the third for feature batches. versionCode
+        // strictly +1 every build (the OTA check compares it). History: vc2=0.1,
+        // vc3=0.1.1 (shipped as "1.0.0"/"1.1.0", renumbered), …, vc12=0.2.0.
+        versionCode = 13
+        versionName = "0.2.0.1"
 
         // Default OTA endpoint (the public audex-align host). It serves
         // /audex-latest.json (the version manifest) and /audex.apk. Overridable

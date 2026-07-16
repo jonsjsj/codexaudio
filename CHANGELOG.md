@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.2.0
+
+- Table of contents in the reader: tap "Contents" in the top bar to see the
+  book's chapters and jump anywhere.
+
 ## 0.2.1.0
 
 - Manual bookmarks: tap "Add bookmark" in the player to save the current

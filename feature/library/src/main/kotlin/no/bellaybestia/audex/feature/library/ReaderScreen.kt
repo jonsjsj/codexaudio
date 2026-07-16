@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.doOnLayout
@@ -49,6 +52,7 @@ import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
@@ -96,6 +100,7 @@ private fun EpubReader(
     val syncMap by viewModel.syncMap.collectAsState()
     val prefs by viewModel.readerPrefs.collectAsState()
     var showAppearance by remember { mutableStateOf(false) }
+    var showToc by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize()) {
         AppearanceBar(
@@ -104,7 +109,56 @@ private fun EpubReader(
             onToggle = { showAppearance = !showAppearance },
             onFontDelta = viewModel::adjustFontSize,
             onCycleTheme = viewModel::cycleTheme,
+            onToc = { showToc = !showToc },
+            tocOpen = showToc,
         )
+        // In-reader table of contents (flat list, tap to jump) — the Kindle
+        // affordance the reader was missing.
+        if (showToc) {
+            val toc = remember(ready.publication) {
+                flattenToc(ready.publication.tableOfContents)
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                if (toc.isEmpty()) {
+                    Text(
+                        text = "This book has no table of contents.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+                toc.forEach { (link, depth) ->
+                    Text(
+                        text = link.title ?: link.href.toString().substringAfterLast('/'),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                navigator?.go(link)
+                                showToc = false
+                            }
+                            .padding(
+                                start = (16 + depth * 16).dp,
+                                end = 16.dp,
+                                top = 10.dp,
+                                bottom = 10.dp,
+                            ),
+                    )
+                }
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+            }
+        }
         // Read-along bar (docs/09): only when this work's audio edition is loaded.
         // With a word-sync map (docs/10) the audio position maps through real
         // alignment anchors; otherwise it falls back to the proportional guess.
@@ -362,6 +416,8 @@ private fun AppearanceBar(
     onToggle: () -> Unit,
     onFontDelta: (Int) -> Unit,
     onCycleTheme: () -> Unit,
+    onToc: () -> Unit = {},
+    tocOpen: Boolean = false,
 ) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
         Row(
@@ -371,6 +427,16 @@ private fun AppearanceBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End,
         ) {
+            Text(
+                text = "Contents",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (tocOpen) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onToc)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            Spacer(Modifier.weight(1f))
             if (expanded) {
                 Text(
                     text = "A−",
@@ -503,6 +569,14 @@ private fun narrationLocator(
 
 private fun locatorForFraction(positions: List<Locator>, fraction: Double): Locator? =
     targetPositionIndex(positions, fraction)?.let { positions[it] }
+
+/** TOC tree → flat (link, depth) list, two levels deep (chapters + sections). */
+private fun flattenToc(links: List<Link>): List<Pair<Link, Int>> = buildList {
+    for (link in links) {
+        add(link to 0)
+        for (child in link.children) add(child to 1)
+    }
+}
 
 @Composable
 private fun ReaderMessage(title: String, message: String, modifier: Modifier = Modifier) {

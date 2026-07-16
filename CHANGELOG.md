@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.8
+
+- Word sync is discoverable now: the row appears on every book that has both
+  an audiobook and an ebook — with instructions — even before the service is
+  set up; Settings → Word sync gained a one-tap "Use default" URL; and the
+  reader explains how to start read-along when the audiobook isn't playing.
+
 ## 0.1.7
 
 - Furthest-listened bookmark: the work page now shows the furthest point you

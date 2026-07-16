@@ -264,8 +264,13 @@ private fun WordSyncRow(status: WordSyncStatus, onPrepare: () -> Unit) {
             Text(text = "Word sync", style = MaterialTheme.typography.bodyLarge)
             Text(
                 text = when (status) {
-                    WordSyncStatus.READY -> "Ready — read-along follows the narration precisely."
+                    WordSyncStatus.READY ->
+                        "Ready — play the audiobook, then open the ebook and turn on " +
+                            "\"Follow audio\": the text highlights as it's narrated."
                     WordSyncStatus.RUNNING -> "Preparing on the server — this can take a while."
+                    WordSyncStatus.NOT_CONFIGURED ->
+                        "Aligns narration with the ebook text for precise read-along. " +
+                            "Set the alignment service URL in Settings → Word sync to enable."
                     else -> "Align audio and text for precise read-along."
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -283,6 +288,7 @@ private fun WordSyncRow(status: WordSyncStatus, onPrepare: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            WordSyncStatus.NOT_CONFIGURED -> Unit
             else -> Text(
                 text = "Prepare",
                 style = MaterialTheme.typography.bodyLarge,

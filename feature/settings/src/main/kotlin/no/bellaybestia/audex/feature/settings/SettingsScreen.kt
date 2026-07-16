@@ -160,6 +160,18 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
                 )
+                if (alignUrl.isEmpty()) {
+                    Text(
+                        text = "Use default (http://192.168.68.212:8590)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable {
+                                viewModel.setAlignServiceUrl("http://192.168.68.212:8590")
+                            }
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
         }
         item(key = "updates-header") { SectionHeader("Updates") }

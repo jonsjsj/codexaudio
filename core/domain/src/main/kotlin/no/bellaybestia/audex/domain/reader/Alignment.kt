@@ -113,7 +113,15 @@ data class SyncMap(
 }
 
 /** Job/availability status of word sync for one work. */
-enum class WordSyncStatus { UNAVAILABLE, NONE, RUNNING, READY }
+enum class WordSyncStatus {
+    /** The work doesn't have both an audio and an ebook edition. */
+    UNAVAILABLE,
+    /** Both formats exist, but no alignment service URL is configured. */
+    NOT_CONFIGURED,
+    NONE,
+    RUNNING,
+    READY,
+}
 
 /**
  * Client for the self-hosted audex-align service (alignment-service/ in this

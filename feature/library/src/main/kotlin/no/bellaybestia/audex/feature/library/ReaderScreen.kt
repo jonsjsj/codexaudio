@@ -123,6 +123,20 @@ private fun EpubReader(
                 },
             )
         }
+        // Discoverability: a sync map exists but the audiobook isn't loaded —
+        // tell the reader how to activate read-along instead of hiding it.
+        if (companion == null && syncMap != null) {
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                Text(
+                    text = "Word sync ready — start the audiobook (Play on the book page) " +
+                        "and the text will follow the narration here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
 
         Box(Modifier.fillMaxSize()) {
             // Turn one page-position forward/back via navigator.go(locator).

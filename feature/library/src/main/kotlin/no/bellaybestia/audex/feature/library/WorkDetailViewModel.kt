@@ -71,10 +71,12 @@ class WorkDetailViewModel @Inject constructor(
             editions.collect { eds ->
                 val audio = eds.firstOrNull { it.format == Format.AUDIO }
                 val ebook = eds.firstOrNull { it.format == Format.EBOOK }
-                _wordSync.value = if (audio == null || ebook == null) {
-                    WordSyncStatus.UNAVAILABLE
-                } else {
-                    alignmentRepository.status(audio.serverId, audio.libraryItemId)
+                _wordSync.value = when {
+                    audio == null || ebook == null -> WordSyncStatus.UNAVAILABLE
+                    // Both formats exist — surface the feature even before the
+                    // service is configured, or nobody ever discovers it.
+                    alignmentRepository.serviceUrl() == null -> WordSyncStatus.NOT_CONFIGURED
+                    else -> alignmentRepository.status(audio.serverId, audio.libraryItemId)
                 }
                 // One live fetch is enough; ebook items usually carry the
                 // richer metadata, so prefer that edition.

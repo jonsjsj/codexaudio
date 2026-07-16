@@ -1,4 +1,4 @@
-package no.bellaybestia.audex.data.di
+﻿package no.bellaybestia.audex.data.di
 
 import dagger.Binds
 import dagger.Module
@@ -9,6 +9,7 @@ import no.bellaybestia.audex.auth.AbsTokenRefresher
 import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.data.AlignmentRepositoryImpl
 import no.bellaybestia.audex.data.AuthRepositoryImpl
+import no.bellaybestia.audex.data.BookmarksRepositoryImplnimport no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
 import no.bellaybestia.audex.data.DownloadsImpl
 import no.bellaybestia.audex.data.EbookProgressWriterImpl
@@ -20,6 +21,7 @@ import no.bellaybestia.audex.data.StreamTokenResolverImpl
 import no.bellaybestia.audex.data.ThemeSettingsImpl
 import no.bellaybestia.audex.data.UpdateSettingsImpl
 import no.bellaybestia.audex.domain.download.Downloads
+import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
@@ -55,6 +57,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun downloads(impl: DownloadsImpl): Downloads
+
+    @Binds
+    abstract fun bookmarksRepository(impl: BookmarksRepositoryImpl): BookmarksRepository
 
     @Binds
     abstract fun ebookProgressWriter(impl: EbookProgressWriterImpl): EbookProgressWriter

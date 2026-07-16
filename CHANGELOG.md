@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.1.0
+
+- Manual bookmarks: tap "Add bookmark" in the player to save the current
+  moment with an optional note; bookmarks list under the chapters, tap to
+  jump back, and they're stored on your server so they sync with every
+  Audiobookshelf client.
+
 ## 0.2.0.2
 
 - Your reports: the report page now lists everything you've filed from this

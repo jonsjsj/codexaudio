@@ -3,6 +3,7 @@ package no.bellaybestia.audex.network.abs
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -101,6 +102,20 @@ interface AbsApi {
         @Query("itemsPerPage") itemsPerPage: Int = 100,
         @Query("page") page: Int = 0,
     ): AbsListeningSessionsResponse
+
+    // Bookmarks are per-user server state (verified live, ABS 2.35.1): create
+    // returns the bookmark, /api/me lists them, delete keys on the time value.
+    @POST("api/me/item/{libraryItemId}/bookmark")
+    suspend fun createBookmark(
+        @Path("libraryItemId") libraryItemId: String,
+        @Body body: AbsBookmarkRequest,
+    ): AbsBookmark
+
+    @DELETE("api/me/item/{libraryItemId}/bookmark/{time}")
+    suspend fun deleteBookmark(
+        @Path("libraryItemId") libraryItemId: String,
+        @Path("time") time: Long,
+    ): Response<Unit>
 
     @PATCH("api/me/progress/{libraryItemId}")
     suspend fun patchEbookProgress(

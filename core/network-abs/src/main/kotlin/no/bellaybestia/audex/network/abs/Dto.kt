@@ -139,7 +139,20 @@ data class AbsUser(
     val id: String,
     val username: String = "",
     val mediaProgress: List<AbsMediaProgress> = emptyList(),
+    val bookmarks: List<AbsBookmark> = emptyList(),
 )
+
+@Serializable
+data class AbsBookmark(
+    val libraryItemId: String = "",
+    /** Position in seconds. Also the bookmark's identity for DELETE. */
+    val time: Long = 0,
+    val title: String = "",
+    val createdAt: Long = 0,
+)
+
+@Serializable
+data class AbsBookmarkRequest(val time: Long, val title: String)
 
 @Serializable
 data class AbsMediaProgress(

@@ -176,6 +176,84 @@ fun PlayerScreen(
         if (state.chapters.isNotEmpty()) {
             ChapterSection(state = state, onJump = viewModel::seekToChapter)
         }
+
+        BookmarksSection(viewModel = viewModel)
+    }
+}
+
+/**
+ * Manual bookmarks (server-side, syncs across ABS clients): "Add bookmark"
+ * captures the current position with an optional note; rows seek on tap and
+ * remove via the flat two-tap confirm.
+ */
+@Composable
+private fun BookmarksSection(viewModel: PlayerViewModel) {
+    val bookmarks by viewModel.bookmarks.collectAsState()
+    var adding by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(
+            text = "Add bookmark",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clickable { note = ""; adding = true }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
+        bookmarks.forEach { bookmark ->
+            var armed by remember(bookmark.timeS) { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.seekTo(bookmark.timeS * 1000) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(text = bookmark.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    Text(
+                        text = formatTime(bookmark.timeS * 1000),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = if (armed) "Remove?" else "Remove",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (armed) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable { if (armed) viewModel.removeBookmark(bookmark) else armed = true }
+                        .padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                )
+            }
+        }
+    }
+
+    if (adding) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { adding = false },
+            title = { Text("Bookmark this moment") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    placeholder = { Text("Note (optional)") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { viewModel.addBookmark(note); adding = false },
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { adding = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

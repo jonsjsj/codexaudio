@@ -19,8 +19,8 @@ android {
         // per release, roll into the third for feature batches. versionCode
         // strictly +1 every build (the OTA check compares it). History: vc2=0.1,
         // vc3=0.1.1 (shipped as "1.0.0"/"1.1.0", renumbered), …, vc12=0.2.0.
-        versionCode = 16
-        versionName = "0.2.2.0"
+        versionCode = 17
+        versionName = "0.2.3.0"
 
         // Default OTA endpoint (the public audex-align host). It serves
         // /audex-latest.json (the version manifest) and /audex.apk. Overridable

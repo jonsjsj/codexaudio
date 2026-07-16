@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import androidx.fragment.app.commitNow
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.reader.ReaderPrefs
 import no.bellaybestia.audex.domain.reader.ReaderTheme
 import no.bellaybestia.audex.domain.reader.SyncMap
@@ -58,6 +60,37 @@ import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
 
 private const val READER_FRAGMENT_TAG = "audex_epub_reader"
+private const val MENU_LOOK_UP = 0x1E5D // arbitrary, unique within the selection menu
+
+/** Hand a selected word to a dictionary/translate app, else a web define search. */
+private fun lookUp(context: android.content.Context, word: String) {
+    val encoded = android.net.Uri.encode(word)
+    // Try the system text-processing chooser first (Google, dictionaries,
+    // Translate); fall back to a "define" web search if nothing handles it.
+    val process = android.content.Intent(android.content.Intent.ACTION_PROCESS_TEXT).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_PROCESS_TEXT, word)
+        putExtra(android.content.Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+    }
+    val fired = runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(process, "Look up").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+        )
+        true
+    }.getOrDefault(false)
+    if (!fired) {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://www.google.com/search?q=define+$encoded"),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+}
 
 /**
  * Ebook reader: renders the downloaded EPUB with Readium's
@@ -93,6 +126,38 @@ private fun EpubReader(
 ) {
     val activity = LocalContext.current.findFragmentActivity() ?: return
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+
+    // "Look up" on the text-selection toolbar: reads the current selection and
+    // hands the word to the system (a dictionary/translate app, else a web
+    // "define" search). Purely additive — native Copy/Share stay put. Reads
+    // the fragment by tag so it never captures a stale navigator reference.
+    val scope = rememberCoroutineScope()
+    val lookUpCallback = remember(activity) {
+        object : android.view.ActionMode.Callback {
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                menu.add(android.view.Menu.NONE, MENU_LOOK_UP, 0, "Look up")
+                return true
+            }
+
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                if (item.itemId != MENU_LOOK_UP) return false
+                scope.launch {
+                    val nav = activity.supportFragmentManager
+                        .findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                    val word = runCatching { nav?.currentSelection()?.locator?.text?.highlight }
+                        .getOrNull()?.trim()
+                    nav?.clearSelection()
+                    if (!word.isNullOrBlank()) lookUp(activity, word)
+                }
+                mode.finish()
+                return true
+            }
+
+            override fun onDestroyActionMode(mode: android.view.ActionMode) = Unit
+        }
+    }
 
     val companion by viewModel.audioCompanion.collectAsState()
     val followAudio by viewModel.followAudio.collectAsState()
@@ -229,6 +294,9 @@ private fun EpubReader(
                         )
                         fm.fragmentFactory = ready.navigatorFactory.createFragmentFactory(
                             initialLocator = ready.initialLocator,
+                            configuration = EpubNavigatorFragment.Configuration(
+                                selectionActionModeCallback = lookUpCallback,
+                            ),
                         )
                         runCatching {
                             fm.commitNow {

@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.3.0
+
+- Look up words while reading: select any word in an ebook and tap "Look up"
+  to open it in your dictionary or translate app (falls back to a web search).
+
 ## 0.2.2.0
 
 - Table of contents in the reader: tap "Contents" in the top bar to see the

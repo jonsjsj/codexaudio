@@ -30,6 +30,7 @@ import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.repository.CatalogRepository
+import no.bellaybestia.audex.network.abs.AbsClientFactory
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,7 +44,8 @@ class CatalogRepositoryImpl @Inject constructor(
     private val catalogDao: CatalogDao,
     private val remoteItemDao: RemoteItemDao,
     private val overrideDao: OverrideDao,
-    serverDao: ServerDao,
+    private val serverDao: ServerDao,
+    private val clientFactory: AbsClientFactory,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
 
@@ -63,6 +65,33 @@ class CatalogRepositoryImpl @Inject constructor(
 
     override fun works(): Flow<List<Work>> =
         combine(catalogDao.observeWorks(), baseUrls) { rows, urls -> rows.map { it.toDomain(urls) } }
+
+    override fun work(workId: String): Flow<Work?> =
+        works().map { list -> list.firstOrNull { it.id == workId } }
+
+    override suspend fun description(serverId: String, libraryItemId: String): String? =
+        withContext(dispatcher) {
+            val server = serverDao.enabled().firstOrNull { it.serverId == serverId }
+                ?: return@withContext null
+            runCatching {
+                clientFactory.api(serverId, server.baseUrl)
+                    .item(libraryItemId).media.metadata.description
+            }.getOrNull()?.let(::cleanHtml)?.takeIf { it.isNotBlank() }
+        }
+
+    /** ABS descriptions are HTML-ish; strip tags, decode common entities (Codex rule). */
+    private fun cleanHtml(raw: String): String = raw
+        .replace(Regex("<br ?/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n\n")
+        .replace(Regex("<[^>]+>"), "")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
 
     override fun worksForAuthor(authorId: String): Flow<List<Work>> =
         combine(catalogDao.observeWorksForAuthor(authorId), baseUrls) { rows, urls ->

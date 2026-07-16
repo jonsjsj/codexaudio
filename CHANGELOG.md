@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.6
+
+- Work detail got a proper hero: larger cover, series and position, year and
+  duration, and the full book description (tap More/Less) pulled live from
+  your server with HTML cleaned away. The page scrolls now.
+
 ## 0.1.5
 
 - Chapters where none exist: audiobooks without chapter markers now get them

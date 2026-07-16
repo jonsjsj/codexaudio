@@ -18,6 +18,16 @@ interface CatalogRepository {
     /** The work an item's edition belongs to — bridges audio↔ebook editions of one work. */
     suspend fun workIdForItem(serverId: String, libraryItemId: String): String?
 
+    /** One work by id, observable (title/author/series/year/progress). */
+    fun work(workId: String): Flow<Work?>
+
+    /**
+     * The work's description, fetched live from the server (ABS only returns it
+     * on the expanded item endpoint, so it isn't in the synced graph). Null
+     * offline or when the book has none. HTML is stripped to plain text.
+     */
+    suspend fun description(serverId: String, libraryItemId: String): String?
+
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()
 }

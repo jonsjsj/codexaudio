@@ -100,6 +100,8 @@ data class AbsMetadata(
     val publishedYear: String? = null,
     val explicit: Boolean = false,
     val abridged: Boolean = false,
+    // Expanded item detail only (never in the minified list projection).
+    val description: String? = null,
 )
 
 @Serializable

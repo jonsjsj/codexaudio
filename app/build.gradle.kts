@@ -18,8 +18,8 @@ android {
         // versionCode strictly +1 every build (the OTA check compares it).
         // Earlier builds shipped as "1.0.0"/"1.1.0" — renumbered: vc2=0.1,
         // vc3=0.1.1. versionName is free-form so this is safe.
-        versionCode = 7
-        versionName = "0.1.5"
+        versionCode = 8
+        versionName = "0.1.6"
 
         // Default OTA endpoint (the public audex-align host). It serves
         // /audex-latest.json (the version manifest) and /audex.apk. Overridable

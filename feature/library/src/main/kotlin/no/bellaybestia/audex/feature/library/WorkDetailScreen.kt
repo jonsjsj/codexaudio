@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,8 +56,15 @@ fun WorkDetailScreen(
     val playback by viewModel.playback.collectAsState()
     val downloadStates by viewModel.downloadStates.collectAsState()
     val wordSync by viewModel.wordSync.collectAsState()
+    val work by viewModel.work.collectAsState()
+    val description by viewModel.description.collectAsState()
 
-    Column(modifier.fillMaxSize()) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // Hero: large cover + title/author/series/meta (Codex detail style).
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -60,27 +72,53 @@ fun WorkDetailScreen(
             CoverImage(
                 url = editions.firstNotNullOfOrNull { it.coverUrl },
                 contentDescription = viewModel.title,
-                modifier = Modifier.size(width = 88.dp, height = 132.dp),
+                modifier = Modifier.size(width = 118.dp, height = 177.dp),
             )
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     text = viewModel.title,
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 2.dp),
                 )
                 viewModel.author?.let { author ->
                     Text(
                         text = author,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                work?.seriesName?.let { series ->
+                    val position = work?.seriesPosition?.let { pos ->
+                        if (pos % 1.0 == 0.0) " #${pos.toInt()}" else " #$pos"
+                    }.orEmpty()
+                    Text(
+                        text = series + position,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                val meta = buildList {
+                    work?.year?.let { add(it.toString()) }
+                    editions.firstOrNull { it.format == Format.AUDIO }?.durationS?.let { s ->
+                        add("${s / 3600}h ${(s % 3600) / 60}m")
+                    }
+                }.joinToString(" · ")
+                if (meta.isNotBlank()) {
+                    Text(
+                        text = meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
+
+        description?.let { DescriptionBlock(it) }
 
         Text(
             text = "EDITIONS",
@@ -126,6 +164,34 @@ fun WorkDetailScreen(
             HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             WordSyncRow(status = wordSync, onPrepare = viewModel::requestWordSync)
         }
+    }
+}
+
+/**
+ * Full description with a flat expand/collapse — collapsed to a few lines so
+ * the editions card stays above the fold (Codex rule: full description, HTML
+ * already stripped by the repository).
+ */
+@Composable
+private fun DescriptionBlock(text: String) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (expanded) Int.MAX_VALUE else 4,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Text(
+            text = if (expanded) "Less" else "More",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(vertical = 6.dp),
+        )
     }
 }
 

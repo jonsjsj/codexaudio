@@ -15,6 +15,7 @@ import no.bellaybestia.audex.domain.download.DownloadInfo
 import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
@@ -24,7 +25,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class WorkDetailViewModel @Inject constructor(
-    catalogRepository: CatalogRepository,
+    private val catalogRepository: CatalogRepository,
     private val playbackController: PlaybackController,
     private val downloads: Downloads,
     private val alignmentRepository: AlignmentRepository,
@@ -39,6 +40,14 @@ class WorkDetailViewModel @Inject constructor(
 
     val editions: StateFlow<List<Edition>> = catalogRepository.editionsForWork(workId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The canonical work row — series/position/year for the hero header. */
+    val work: StateFlow<Work?> = catalogRepository.work(workId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Full description, fetched live once an edition is known (null offline). */
+    private val _description = MutableStateFlow<String?>(null)
+    val description: StateFlow<String?> = _description.asStateFlow()
 
     val playback: StateFlow<PlaybackState> = playbackController.state
 
@@ -58,6 +67,15 @@ class WorkDetailViewModel @Inject constructor(
                     WordSyncStatus.UNAVAILABLE
                 } else {
                     alignmentRepository.status(audio.serverId, audio.libraryItemId)
+                }
+                // One live fetch is enough; ebook items usually carry the
+                // richer metadata, so prefer that edition.
+                if (_description.value == null) {
+                    val source = ebook ?: audio ?: eds.firstOrNull()
+                    if (source != null) {
+                        _description.value =
+                            catalogRepository.description(source.serverId, source.libraryItemId)
+                    }
                 }
             }
         }

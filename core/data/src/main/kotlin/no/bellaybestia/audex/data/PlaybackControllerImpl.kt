@@ -79,6 +79,12 @@ class PlaybackControllerImpl @Inject constructor(
     private var tickJob: Job? = null
     private var sleepJob: Job? = null
 
+    // Smart-rewind bookkeeping: when playback last paused (any source).
+    private var pausedAtMs: Long = 0
+
+    // End-of-chapter sleep: the chapter index that was playing when armed.
+    private var sleepChapterIndex: Int = -1
+
     override suspend fun play(serverId: String, libraryItemId: String, title: String, author: String?) {
         _state.update {
             it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, title = title, author = author)
@@ -220,8 +226,32 @@ class PlaybackControllerImpl @Inject constructor(
     override fun togglePlayPause() {
         scope.launch(main) {
             val c = controller ?: return@launch
-            if (c.isPlaying) c.pause() else c.play()
+            if (c.isPlaying) {
+                c.pause()
+            } else {
+                applySmartRewind(c)
+                c.play()
+            }
         }
+    }
+
+    /**
+     * Smart rewind (the Audible/Smart-AudioBook-Player pattern): resuming after
+     * a pause backs up a little so the listener catches the thread again —
+     * scaled by how long they were away. Pause time is recorded in the player
+     * listener so pauses from the notification/headset count too.
+     */
+    private fun applySmartRewind(c: MediaController) {
+        val pausedAt = pausedAtMs.takeIf { it > 0 } ?: return
+        pausedAtMs = 0
+        val awayS = (System.currentTimeMillis() - pausedAt) / 1000
+        val backMs = when {
+            awayS < 10 -> return          // blink-length pause: stay put
+            awayS < 60 -> 5_000L
+            awayS < 600 -> 15_000L
+            else -> 30_000L
+        }
+        c.seekTo((c.currentPosition - backMs).coerceAtLeast(0))
     }
 
     override fun seekTo(positionMs: Long) {
@@ -249,12 +279,23 @@ class PlaybackControllerImpl @Inject constructor(
         }
     }
 
+    override fun setSleepAtChapterEnd(enabled: Boolean) {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepChapterIndex = if (enabled) _state.value.currentChapterIndex else -1
+        _state.update {
+            it.copy(sleepAtChapterEnd = enabled, sleepTimerRemainingMs = null)
+        }
+    }
+
     override fun setSleepTimer(minutes: Int) {
         sleepJob?.cancel()
+        sleepChapterIndex = -1
         if (minutes <= 0) {
-            _state.update { it.copy(sleepTimerRemainingMs = null) }
+            _state.update { it.copy(sleepTimerRemainingMs = null, sleepAtChapterEnd = false) }
             return
         }
+        _state.update { it.copy(sleepAtChapterEnd = false) }
         val endAt = System.currentTimeMillis() + minutes * 60_000L
         sleepJob = scope.launch {
             while (true) {
@@ -305,6 +346,7 @@ class PlaybackControllerImpl @Inject constructor(
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) pausedAtMs = System.currentTimeMillis()
             _state.update { it.copy(isPlaying = isPlaying) }
         }
     }
@@ -324,6 +366,12 @@ class PlaybackControllerImpl @Inject constructor(
                     (overallPositionS() * 1000).toLong() to (controller?.isPlaying == true)
                 }
                 val chapterIdx = activeChapters.indexOfLast { it.startMs <= posMs }
+                // End-of-chapter sleep: the armed chapter finished → pause.
+                if (sleepChapterIndex >= 0 && playing && chapterIdx != sleepChapterIndex) {
+                    sleepChapterIndex = -1
+                    withContext(main) { controller?.pause() }
+                    _state.update { it.copy(sleepAtChapterEnd = false) }
+                }
                 _state.update {
                     it.copy(
                         positionMs = posMs,

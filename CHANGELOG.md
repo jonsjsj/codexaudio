@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.0
+
+- Smart rewind: resuming after a pause backs up a little (5–30s, scaled by how
+  long you were away) so you catch the thread again — works for pauses from
+  the notification and headset buttons too.
+- Sleep timer gained "end of chapter": tap the sleep control to cycle
+  off → chapter end → 15 → 30 → 45 → 60 minutes.
+
 ## 0.1.9
 
 - Library filters: show All, Audio only, Ebooks only, or In progress in the

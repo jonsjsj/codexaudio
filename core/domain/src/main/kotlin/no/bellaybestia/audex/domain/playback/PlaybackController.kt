@@ -18,6 +18,8 @@ data class PlaybackState(
     val durationMs: Long = 0,
     val speed: Float = 1f,
     val sleepTimerRemainingMs: Long? = null,
+    /** True while the "pause at the end of this chapter" sleep mode is armed. */
+    val sleepAtChapterEnd: Boolean = false,
     val chapters: List<Chapter> = emptyList(),
     val currentChapterIndex: Int = -1,
     val error: String? = null,
@@ -55,6 +57,9 @@ interface PlaybackController {
 
     /** Pause after [minutes] (0 cancels the timer). */
     fun setSleepTimer(minutes: Int)
+
+    /** Arm/disarm "pause when the current chapter ends" (replaces any minute timer). */
+    fun setSleepAtChapterEnd(enabled: Boolean)
 
     /** Jump to the start of chapter [index]. */
     fun seekToChapter(index: Int)

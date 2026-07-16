@@ -129,6 +129,7 @@ fun PlayerScreen(
             }
         }
 
+        // Sleep cycle: off → end of chapter → 15 → 30 → 45 → 60 → off …
         var sleepIdx by remember { mutableStateOf(0) }
         Row(
             modifier = Modifier.padding(top = 12.dp),
@@ -144,14 +145,29 @@ fun PlayerScreen(
             )
             val remaining = state.sleepTimerRemainingMs
             Text(
-                text = if (remaining != null) "Sleep ${formatTime(remaining)}" else "Sleep off",
+                text = when {
+                    state.sleepAtChapterEnd -> "Sleep: chapter end"
+                    remaining != null -> "Sleep ${formatTime(remaining)}"
+                    else -> "Sleep off"
+                },
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (remaining != null) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (remaining != null || state.sleepAtChapterEnd) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 modifier = Modifier
                     .clickable {
-                        sleepIdx = (sleepIdx + 1) % SLEEP_MINUTES.size
-                        viewModel.setSleepTimer(SLEEP_MINUTES[sleepIdx])
+                        sleepIdx = (sleepIdx + 1) % (SLEEP_MINUTES.size + 1)
+                        if (sleepIdx == 1 && state.chapters.isNotEmpty()) {
+                            viewModel.setSleepAtChapterEnd(true)
+                        } else {
+                            // Index 0 = off; 2.. map onto the minute presets.
+                            if (sleepIdx == 1) sleepIdx = 2 // no chapters: skip EOC
+                            viewModel.setSleepTimer(
+                                SLEEP_MINUTES.getOrElse(sleepIdx - 1) { 0 },
+                            )
+                        }
                     }
                     .padding(8.dp),
             )

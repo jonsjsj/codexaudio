@@ -50,7 +50,9 @@ interface ChapterDao {
 data class WorkRow(
     val workId: String,
     val title: String,
+    val authorId: String?,
     val authorName: String?,
+    val seriesId: String?,
     val seriesName: String?,
     val seriesPosition: Double?,
     val subSeriesName: String?,
@@ -66,7 +68,8 @@ data class WorkRow(
 )
 
 private const val WORK_ROW_SELECT = """
-    SELECT w.workId, w.title, a.displayName AS authorName, s.displayName AS seriesName,
+    SELECT w.workId, w.title, w.authorId, a.displayName AS authorName,
+           w.seriesId, s.displayName AS seriesName,
            w.seriesPosition, w.subSeriesName, w.year,
            MAX(CASE WHEN e.format = 'AUDIO' THEN COALESCE(p.pct, 0) END) AS listenPct,
            MAX(CASE WHEN e.format = 'EBOOK' THEN COALESCE(p.pct, 0) END) AS readPct,

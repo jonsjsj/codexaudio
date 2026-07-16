@@ -198,6 +198,12 @@ fun AppNav() {
                     onOpenReader = { serverId, itemId, title ->
                         navController.navigate(Routes.reader(serverId, itemId, title))
                     },
+                    onAuthorClick = { id, name ->
+                        navController.navigate(Routes.author(id, name))
+                    },
+                    onSeriesClick = { id, name ->
+                        navController.navigate(Routes.series(id, name))
+                    },
                 )
             }
             composable(

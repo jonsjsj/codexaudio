@@ -157,7 +157,9 @@ class CatalogRepositoryImpl @Inject constructor(
 private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
     id = workId,
     title = title,
+    authorId = authorId,
     authorName = authorName,
+    seriesId = seriesId,
     seriesName = seriesName,
     seriesPosition = seriesPosition,
     subSeriesName = subSeriesName,

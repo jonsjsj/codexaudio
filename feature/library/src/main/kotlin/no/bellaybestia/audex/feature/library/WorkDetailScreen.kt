@@ -49,6 +49,8 @@ import no.bellaybestia.audex.domain.reader.WordSyncStatus
 @Composable
 fun WorkDetailScreen(
     onOpenReader: (serverId: String, libraryItemId: String, title: String) -> Unit = { _, _, _ -> },
+    onAuthorClick: (id: String, name: String) -> Unit = { _, _ -> },
+    onSeriesClick: (id: String, name: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: WorkDetailViewModel = hiltViewModel(),
 ) {
@@ -82,24 +84,38 @@ fun WorkDetailScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 viewModel.author?.let { author ->
+                    // Clickable everywhere (Codex nav rule) — opens the author page.
+                    val authorId = work?.authorId
                     Text(
                         text = author,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (authorId != null) {
+                            Modifier.clickable { onAuthorClick(authorId, author) }
+                        } else {
+                            Modifier
+                        },
                     )
                 }
                 work?.seriesName?.let { series ->
                     val position = work?.seriesPosition?.let { pos ->
                         if (pos % 1.0 == 0.0) " #${pos.toInt()}" else " #$pos"
                     }.orEmpty()
+                    val seriesId = work?.seriesId
                     Text(
                         text = series + position,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (seriesId != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (seriesId != null) {
+                            Modifier.clickable { onSeriesClick(seriesId, series) }
+                        } else {
+                            Modifier
+                        },
                     )
                 }
                 val meta = buildList {

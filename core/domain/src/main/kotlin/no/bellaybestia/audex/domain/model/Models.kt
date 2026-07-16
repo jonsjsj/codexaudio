@@ -21,7 +21,9 @@ data class Series(
 data class Work(
     val id: String,
     val title: String,
+    val authorId: String? = null,
     val authorName: String? = null,
+    val seriesId: String? = null,
     val seriesName: String? = null,
     val seriesPosition: Double? = null,
     val subSeriesName: String? = null,

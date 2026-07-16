@@ -57,9 +57,16 @@ class SettingsViewModel @Inject constructor(
     private val _alignServiceUrl = MutableStateFlow("")
     val alignServiceUrl: StateFlow<String> = _alignServiceUrl.asStateFlow()
 
+    private val _codexUrl = MutableStateFlow("")
+    val codexUrl: StateFlow<String> = _codexUrl.asStateFlow()
+
+    private val _codexFetch = MutableStateFlow<CodexFetch>(CodexFetch.Idle)
+    val codexFetch: StateFlow<CodexFetch> = _codexFetch.asStateFlow()
+
     init {
         viewModelScope.launch {
             _alignServiceUrl.value = alignmentRepository.serviceUrl().orEmpty()
+            _codexUrl.value = alignmentRepository.codexUrl().orEmpty()
         }
     }
 
@@ -68,4 +75,35 @@ class SettingsViewModel @Inject constructor(
         _alignServiceUrl.value = url
         viewModelScope.launch { alignmentRepository.setServiceUrl(url) }
     }
+
+    fun setCodexUrl(url: String) {
+        _codexUrl.value = url
+        if (_codexFetch.value != CodexFetch.Idle) _codexFetch.value = CodexFetch.Idle
+    }
+
+    /** Ask Codex for its word-sync server and, if it has one, fill it in above. */
+    fun fetchWordSyncFromCodex() {
+        _codexFetch.value = CodexFetch.Loading
+        viewModelScope.launch {
+            alignmentRepository.fetchServiceUrlFromCodex(_codexUrl.value).fold(
+                onSuccess = { url ->
+                    if (url.isNullOrBlank()) {
+                        _codexFetch.value = CodexFetch.Error("Codex has no word-sync server set up.")
+                    } else {
+                        setAlignServiceUrl(url)
+                        _codexFetch.value = CodexFetch.Success(url)
+                    }
+                },
+                onFailure = { _codexFetch.value = CodexFetch.Error(it.message ?: "Couldn't reach Codex.") },
+            )
+        }
+    }
+}
+
+/** Result of a "get word-sync URL from Codex" attempt, for the settings UI. */
+sealed interface CodexFetch {
+    data object Idle : CodexFetch
+    data object Loading : CodexFetch
+    data class Success(val url: String) : CodexFetch
+    data class Error(val message: String) : CodexFetch
 }

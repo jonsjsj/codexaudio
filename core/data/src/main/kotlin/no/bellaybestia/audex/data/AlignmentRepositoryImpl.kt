@@ -12,6 +12,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import no.bellaybestia.audex.auth.ServerTokenStore
@@ -27,6 +28,14 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 private val KEY_ALIGN_URL = stringPreferencesKey("align_service_url")
+private val KEY_CODEX_URL = stringPreferencesKey("codex_url")
+
+/** Shape of Codex's GET /audex/config discovery response. */
+@Serializable
+private data class WireAudexConfig(
+    @SerialName("word_sync_url") val wordSyncUrl: String = "",
+    @SerialName("word_sync_enabled") val wordSyncEnabled: Boolean = false,
+)
 
 @Serializable
 private data class WireAnchor(
@@ -86,6 +95,34 @@ class AlignmentRepositoryImpl @Inject constructor(
             if (trimmed.isNullOrBlank()) prefs.remove(KEY_ALIGN_URL) else prefs[KEY_ALIGN_URL] = trimmed
         }
     }
+
+    override suspend fun codexUrl(): String? =
+        context.appSettingsDataStore.data.first()[KEY_CODEX_URL]?.takeIf { it.isNotBlank() }
+
+    override suspend fun setCodexUrl(url: String?) {
+        context.appSettingsDataStore.edit { prefs ->
+            val trimmed = url?.trim()?.trimEnd('/')
+            if (trimmed.isNullOrBlank()) prefs.remove(KEY_CODEX_URL) else prefs[KEY_CODEX_URL] = trimmed
+        }
+    }
+
+    override suspend fun fetchServiceUrlFromCodex(codexUrl: String): Result<String?> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                var base = codexUrl.trim().trimEnd('/')
+                require(base.isNotBlank()) { "Enter your Codex URL first" }
+                if (!base.startsWith("http://") && !base.startsWith("https://")) base = "https://$base"
+                setCodexUrl(base)
+                val request = Request.Builder().url("$base/audex/config").get().build()
+                http.newCall(request).execute().use { response ->
+                    check(response.isSuccessful) { "Codex returned HTTP ${response.code}" }
+                    val cfg = json.decodeFromString(
+                        WireAudexConfig.serializer(), response.body?.string().orEmpty(),
+                    )
+                    cfg.wordSyncUrl.trim().trimEnd('/').takeIf { cfg.wordSyncEnabled && it.isNotBlank() }
+                }
+            }
+        }
 
     override suspend fun requestAlignment(
         serverId: String,

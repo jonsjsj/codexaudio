@@ -54,6 +54,8 @@ fun SettingsScreen(
 ) {
     val servers by viewModel.servers.collectAsState()
     val alignUrl by viewModel.alignServiceUrl.collectAsState()
+    val codexUrl by viewModel.codexUrl.collectAsState()
+    val codexFetch by viewModel.codexFetch.collectAsState()
     val themePrefs by viewModel.themePrefs.collectAsState()
     val updateChannel by viewModel.updateChannel.collectAsState()
     val listState = rememberLazyListState()
@@ -171,6 +173,68 @@ fun SettingsScreen(
                             }
                             .padding(vertical = 8.dp),
                     )
+                }
+            }
+        }
+        item(key = "wordsync-codex") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = "Get it from Codex",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "If you run Codex, enter its address and Audex reads the word-sync " +
+                        "server from it — no need to type the URL above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                )
+                Box(Modifier.fillMaxWidth()) {
+                    if (codexUrl.isEmpty()) {
+                        Text(
+                            text = "https://codex.example.com",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    BasicTextField(
+                        value = codexUrl,
+                        onValueChange = viewModel::setCodexUrl,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                val loading = codexFetch is CodexFetch.Loading
+                Text(
+                    text = if (loading) "Fetching…" else "Fetch word-sync server",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (codexUrl.isBlank() || loading) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    modifier = Modifier
+                        .clickable(enabled = codexUrl.isNotBlank() && !loading) {
+                            viewModel.fetchWordSyncFromCodex()
+                        }
+                        .padding(vertical = 8.dp),
+                )
+                when (val s = codexFetch) {
+                    is CodexFetch.Success -> Text(
+                        text = "Set word-sync to ${s.url}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    is CodexFetch.Error -> Text(
+                        text = s.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    else -> {}
                 }
             }
         }

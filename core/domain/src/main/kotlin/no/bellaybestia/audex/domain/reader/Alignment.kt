@@ -132,6 +132,19 @@ interface AlignmentRepository {
     suspend fun serviceUrl(): String?
     suspend fun setServiceUrl(url: String?)
 
+    /** Remembered Codex base URL used for word-sync discovery (blank/unset = none). */
+    suspend fun codexUrl(): String?
+    suspend fun setCodexUrl(url: String?)
+
+    /**
+     * Ask a Codex instance at [codexUrl] which word-sync (forced-alignment) server it
+     * advertises, via its GET /audex/config discovery endpoint. Returns the URL when the
+     * add-on is enabled there, or null when Codex has none configured. A network/parse
+     * failure is a [Result] error. Lets the user point Audex at Codex once instead of
+     * copying the alignment server URL by hand.
+     */
+    suspend fun fetchServiceUrlFromCodex(codexUrl: String): Result<String?>
+
     /**
      * Queue alignment for a work: audio from [audioItemId]; the EPUB from
      * [ebookItemId] when the ebook is a separate ABS item on the same server.

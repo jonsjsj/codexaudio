@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.2.0.2
+
+- Your reports: the report page now lists everything you've filed from this
+  device with live status — Open, Resolved, or "Fixed in <version>" — and taps
+  through to the tracker entry. Same closed loop as Codex.
+
 ## 0.2.0.1
 
 - New-version notification: the app now checks in the background and posts a

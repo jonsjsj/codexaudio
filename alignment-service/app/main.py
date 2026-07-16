@@ -203,6 +203,40 @@ def create_report(req: ReportRequest):
     return {"number": issue["number"], "url": issue["html_url"]}
 
 
+@app.get("/reports/{number}")
+def report_status(number: int):
+    """Status of a filed report (Codex's 'Your reports' pattern): GitHub issue
+    state, plus 'fixed in <version>' parsed from the closing comments when the
+    issue is closed — so the app can show the closed loop."""
+    import re
+
+    cfg_path = DATA_DIR / "report.json"
+    if not cfg_path.exists():
+        raise HTTPException(503, "report service not configured")
+    cfg = json.loads(cfg_path.read_text())
+    repo, token = cfg.get("repo"), cfg.get("token")
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    r = httpx.get(f"https://api.github.com/repos/{repo}/issues/{number}", headers=headers, timeout=20)
+    if r.status_code != 200:
+        raise HTTPException(404, "no such report")
+    issue = r.json()
+    fixed_in = None
+    if issue.get("state") == "closed":
+        c = httpx.get(issue["comments_url"], headers=headers, timeout=20)
+        if c.status_code == 200:
+            for comment in reversed(c.json()):
+                m = re.search(r"\b\d+\.\d+(?:\.\d+){0,2}\b", comment.get("body", ""))
+                if m:
+                    fixed_in = m.group(0)
+                    break
+    return {
+        "number": number,
+        "state": issue.get("state", "open"),
+        "fixedIn": fixed_in,
+        "url": issue.get("html_url", ""),
+    }
+
+
 @app.on_event("startup")
 def _resume_batch_on_startup():
     # Resume any registered batch after a restart (CPU→GPU flip, reboot).

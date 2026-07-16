@@ -95,12 +95,66 @@ fun ReportScreen(
         }
 
         Text(
-            text = "Sent with app version $appVersion. Fixed reports show up on the " +
-                "update page under the release that fixed them.",
+            text = "Sent with app version $appVersion. Fixed reports show up below " +
+                "with the release that fixed them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
         )
+
+        // "Your reports" — the closed loop (Codex pattern): each filed report's
+        // live status, tappable to the tracker entry.
+        val myReports by viewModel.myReports.collectAsState()
+        if (myReports.isNotEmpty()) {
+            FieldLabel("Your reports")
+            val context = androidx.compose.ui.platform.LocalContext.current
+            myReports.forEach { report ->
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(report.url),
+                                    ),
+                                )
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = report.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = "#${report.number} · " +
+                                report.kind.name.lowercase().replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = when {
+                            report.fixedIn != null -> "Fixed in ${report.fixedIn} ✓"
+                            report.state == "closed" -> "Resolved ✓"
+                            else -> "Open"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (report.state == "closed") MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 

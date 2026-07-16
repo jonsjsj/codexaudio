@@ -5,9 +5,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import no.bellaybestia.audex.domain.settings.MyReport
 import no.bellaybestia.audex.domain.settings.ReportKind
 import no.bellaybestia.audex.domain.settings.ReportsRepository
 
@@ -27,6 +30,14 @@ class ReportViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ReportUiState())
     val state: StateFlow<ReportUiState> = _state.asStateFlow()
+
+    /** This device's filed reports with tracked status (refreshed on open). */
+    val myReports: StateFlow<List<MyReport>> = reports.myReports
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    init {
+        viewModelScope.launch { runCatching { reports.refreshMyReports() } }
+    }
 
     fun setKind(kind: ReportKind) = _state.update { it.copy(kind = kind) }
     fun setTitle(title: String) = _state.update { it.copy(title = title, result = null) }

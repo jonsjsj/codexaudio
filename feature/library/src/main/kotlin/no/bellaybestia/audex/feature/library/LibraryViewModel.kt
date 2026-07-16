@@ -17,6 +17,9 @@ import no.bellaybestia.audex.domain.repository.CatalogRepository
 /** Sort orders for the All tab. Author = the canonical shelf order from the DAO. */
 enum class WorkSort { AUTHOR, TITLE, RECENT }
 
+/** Quick filters for the All tab (Codex's browse filters, Audex flavors). */
+enum class WorkFilter { ALL, AUDIO, EBOOK, IN_PROGRESS }
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     catalogRepository: CatalogRepository,
@@ -44,6 +47,13 @@ class LibraryViewModel @Inject constructor(
         savedStateHandle[KEY_SORT] = value.ordinal
     }
 
+    /** All-tab quick filter, process-death safe (stored as ordinal). */
+    val filter: StateFlow<Int> = savedStateHandle.getStateFlow(KEY_FILTER, WorkFilter.ALL.ordinal)
+
+    fun setFilter(value: WorkFilter) {
+        savedStateHandle[KEY_FILTER] = value.ordinal
+    }
+
     val authors: StateFlow<List<Author>> =
         combine(catalogRepository.authors(), query) { authors, q ->
             if (q.isBlank()) authors else authors.filter { it.name.contains(q, ignoreCase = true) }
@@ -55,11 +65,20 @@ class LibraryViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val works: StateFlow<List<Work>> =
-        combine(catalogRepository.works(), query, sort) { works, q, sortOrdinal ->
-            val filtered = if (q.isBlank()) works else works.filter { work ->
+        combine(catalogRepository.works(), query, sort, filter) { works, q, sortOrdinal, filterOrdinal ->
+            val searched = if (q.isBlank()) works else works.filter { work ->
                 work.title.contains(q, ignoreCase = true) ||
                     work.authorName?.contains(q, ignoreCase = true) == true ||
                     work.seriesName?.contains(q, ignoreCase = true) == true
+            }
+            val filtered = when (WorkFilter.entries.getOrElse(filterOrdinal) { WorkFilter.ALL }) {
+                WorkFilter.ALL -> searched
+                WorkFilter.AUDIO -> searched.filter { it.hasAudio }
+                WorkFilter.EBOOK -> searched.filter { it.hasEbook }
+                WorkFilter.IN_PROGRESS -> searched.filter {
+                    (it.listenFraction > 0.0 && it.listenFraction < 0.99) ||
+                        (it.readFraction > 0.0 && it.readFraction < 0.99)
+                }
             }
             when (WorkSort.entries.getOrElse(sortOrdinal) { WorkSort.AUTHOR }) {
                 // AUTHOR keeps the DAO's canonical shelf order (author → series → position).
@@ -73,5 +92,6 @@ class LibraryViewModel @Inject constructor(
         const val KEY_SELECTED_TAB = "library_selected_tab"
         const val KEY_QUERY = "library_query"
         const val KEY_SORT = "library_sort"
+        const val KEY_FILTER = "library_filter"
     }
 }

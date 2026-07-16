@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.1.9
+
+- Library filters: show All, Audio only, Ebooks only, or In progress in the
+  All tab — alongside the existing sort options.
+- The All tab groups books under author headers when sorted by author, like
+  Codex's browse pages.
+
 ## 0.1.8
 
 - Word sync is discoverable now: the row appears on every book that has both

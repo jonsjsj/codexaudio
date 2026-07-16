@@ -65,6 +65,7 @@ fun LibraryScreen(
     val selectedTab by viewModel.selectedTab.collectAsState()
     val query by viewModel.query.collectAsState()
     val sort by viewModel.sort.collectAsState()
+    val filter by viewModel.filter.collectAsState()
     val authors by viewModel.authors.collectAsState()
     val series by viewModel.series.collectAsState()
     val works by viewModel.works.collectAsState()
@@ -88,10 +89,54 @@ fun LibraryScreen(
             1 -> SeriesList(series, seriesListState, onSeriesClick)
             else -> Column {
                 SortRow(selected = sort, onSelect = viewModel::setSort)
-                WorksList(works, worksListState, onWorkClick)
+                FilterRow(selected = filter, onSelect = viewModel::setFilter)
+                WorksList(
+                    works = works,
+                    listState = worksListState,
+                    onWorkClick = onWorkClick,
+                    // Author shelf order reads best with section headers per author
+                    // (Codex's grouped browse); explicit sorts stay a flat list.
+                    groupByAuthor = sort == WorkSort.AUTHOR.ordinal,
+                )
             }
         }
     }
+}
+
+/** Flat quick-filter selector, same language as SortRow. */
+@Composable
+private fun FilterRow(selected: Int, onSelect: (WorkFilter) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Show",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(12.dp))
+        listOf(
+            WorkFilter.ALL to "All",
+            WorkFilter.AUDIO to "Audio",
+            WorkFilter.EBOOK to "Ebooks",
+            WorkFilter.IN_PROGRESS to "In progress",
+        ).forEach { (option, label) ->
+            val active = selected == option.ordinal
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable { onSelect(option) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+    FlatDivider()
 }
 
 /** Flat sort selector for the All tab: plain labels, the active one in accent. */
@@ -235,9 +280,26 @@ fun WorksList(
     listState: LazyListState,
     onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
+    groupByAuthor: Boolean = false,
 ) {
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         itemsIndexed(works, key = { _, work -> work.id }) { index, work ->
+            if (groupByAuthor) {
+                val previous = works.getOrNull(index - 1)
+                val author = work.authorName ?: "Unknown author"
+                if (previous == null || (previous.authorName ?: "Unknown author") != author) {
+                    Text(
+                        text = author.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
+                    )
+                }
+            }
             WorkRowItem(work = work, onClick = { onWorkClick(work) })
             if (index < works.lastIndex) FlatDivider()
         }

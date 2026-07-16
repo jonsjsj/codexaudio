@@ -18,6 +18,7 @@ import no.bellaybestia.audex.data.ReportsRepositoryImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
 import no.bellaybestia.audex.data.StreamTokenResolverImpl
 import no.bellaybestia.audex.data.ThemeSettingsImpl
+import no.bellaybestia.audex.data.UpdateSettingsImpl
 import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
@@ -28,6 +29,7 @@ import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.ReportsRepository
 import no.bellaybestia.audex.domain.settings.ThemeSettings
+import no.bellaybestia.audex.domain.settings.UpdateSettings
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import no.bellaybestia.audex.player.StreamTokenResolver
 import javax.inject.Singleton
@@ -65,6 +67,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun themeSettings(impl: ThemeSettingsImpl): ThemeSettings
+
+    @Binds
+    abstract fun updateSettings(impl: UpdateSettingsImpl): UpdateSettings
 
     @Binds
     abstract fun reportsRepository(impl: ReportsRepositoryImpl): ReportsRepository

@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.domain.model.ServerAccount
 import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.ThemeMode
+import no.bellaybestia.audex.domain.settings.UpdateChannel
 
 /**
  * Settings: flat SERVERS list (small-caps section headers, hairline dividers,
@@ -54,6 +55,7 @@ fun SettingsScreen(
     val servers by viewModel.servers.collectAsState()
     val alignUrl by viewModel.alignServiceUrl.collectAsState()
     val themePrefs by viewModel.themePrefs.collectAsState()
+    val updateChannel by viewModel.updateChannel.collectAsState()
     val listState = rememberLazyListState()
 
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
@@ -157,6 +159,23 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+        item(key = "updates-header") { SectionHeader("Updates") }
+        item(key = "updates-channel") {
+            Column {
+                ChoiceRow(
+                    label = "Channel",
+                    options = listOf("Stable", "Beta"),
+                    selectedIndex = updateChannel.ordinal,
+                    onSelect = { viewModel.setUpdateChannel(UpdateChannel.entries[it]) },
+                )
+                Text(
+                    text = "Beta gets fixes for in-app reports before they reach a release.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
         }

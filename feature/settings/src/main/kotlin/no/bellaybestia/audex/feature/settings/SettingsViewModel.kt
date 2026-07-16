@@ -17,16 +17,26 @@ import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.ThemeMode
 import no.bellaybestia.audex.domain.settings.ThemePrefs
 import no.bellaybestia.audex.domain.settings.ThemeSettings
+import no.bellaybestia.audex.domain.settings.UpdateChannel
+import no.bellaybestia.audex.domain.settings.UpdateSettings
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val serverRepository: ServerRepository,
     private val alignmentRepository: AlignmentRepository,
     private val themeSettings: ThemeSettings,
+    private val updateSettings: UpdateSettings,
 ) : ViewModel() {
 
     val themePrefs: StateFlow<ThemePrefs> = themeSettings.prefs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemePrefs())
+
+    val updateChannel: StateFlow<UpdateChannel> = updateSettings.channel
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UpdateChannel.STABLE)
+
+    fun setUpdateChannel(channel: UpdateChannel) {
+        viewModelScope.launch { updateSettings.setChannel(channel) }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { themeSettings.set(themePrefs.value.copy(mode = mode)) }

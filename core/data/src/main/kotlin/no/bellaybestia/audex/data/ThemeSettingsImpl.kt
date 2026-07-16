@@ -12,9 +12,12 @@ import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.ThemeMode
 import no.bellaybestia.audex.domain.settings.ThemePrefs
 import no.bellaybestia.audex.domain.settings.ThemeSettings
+import no.bellaybestia.audex.domain.settings.UpdateChannel
+import no.bellaybestia.audex.domain.settings.UpdateSettings
 
 private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
 private val KEY_THEME_ACCENT = stringPreferencesKey("theme_accent")
+private val KEY_UPDATE_CHANNEL = stringPreferencesKey("update_channel")
 
 @Singleton
 class ThemeSettingsImpl @Inject constructor(
@@ -35,5 +38,20 @@ class ThemeSettingsImpl @Inject constructor(
             p[KEY_THEME_MODE] = prefs.mode.name
             p[KEY_THEME_ACCENT] = prefs.accent.name
         }
+    }
+}
+
+@Singleton
+class UpdateSettingsImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : UpdateSettings {
+
+    override val channel: Flow<UpdateChannel> = context.appSettingsDataStore.data.map { p ->
+        p[KEY_UPDATE_CHANNEL]?.let { runCatching { UpdateChannel.valueOf(it) }.getOrNull() }
+            ?: UpdateChannel.STABLE
+    }
+
+    override suspend fun setChannel(channel: UpdateChannel) {
+        context.appSettingsDataStore.edit { p -> p[KEY_UPDATE_CHANNEL] = channel.name }
     }
 }

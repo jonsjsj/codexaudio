@@ -8,9 +8,12 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import no.bellaybestia.audex.BuildConfig
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.settings.UpdateChannel
+import no.bellaybestia.audex.domain.settings.UpdateSettings
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -26,6 +29,7 @@ import org.json.JSONObject
 class UpdateManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val alignment: AlignmentRepository,
+    private val updateSettings: UpdateSettings,
 ) {
     private val http = OkHttpClient()
 
@@ -42,8 +46,13 @@ class UpdateManager @Inject constructor(
     /** Returns update info only when the server advertises a newer build. */
     suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
         val root = base()
+        // STABLE follows main's releases; BETA follows the report-autofix channel.
+        val manifest = when (updateSettings.channel.first()) {
+            UpdateChannel.STABLE -> "audex-latest.json"
+            UpdateChannel.BETA -> "audex-beta-latest.json"
+        }
         runCatching {
-            val req = Request.Builder().url("$root/audex-latest.json").get().build()
+            val req = Request.Builder().url("$root/$manifest").get().build()
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@use null
                 val o = JSONObject(resp.body?.string().orEmpty())

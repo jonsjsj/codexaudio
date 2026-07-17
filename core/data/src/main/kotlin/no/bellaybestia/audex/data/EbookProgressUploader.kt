@@ -30,7 +30,9 @@ class EbookProgressUploader @Inject constructor(
                 val response = runCatching {
                     api.patchEbookProgress(
                         row.libraryItemId,
-                        AbsEbookProgressBody(ebookLocation = row.ebookLocation, ebookProgress = row.ebookProgress),
+                        // Blank location → omit it (explicitNulls=false) so ABS keeps its
+                        // existing page pointer; only the % is written.
+                        AbsEbookProgressBody(ebookLocation = row.ebookLocation.ifBlank { null }, ebookProgress = row.ebookProgress),
                     )
                 }.getOrNull()
                 when {

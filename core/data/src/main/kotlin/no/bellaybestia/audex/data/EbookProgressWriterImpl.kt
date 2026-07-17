@@ -30,9 +30,11 @@ class EbookProgressWriterImpl @Inject constructor(
         // two stores — so ABS + the official app work normally while our reader stays exact.
         queueDao.upsert(
             PendingEbookProgressEntity(
+                // Blank when we couldn't build a CFI — the uploader turns that into a %-only
+                // PATCH (no ebookLocation), which leaves ABS's existing page pointer intact.
                 serverId = serverId,
                 libraryItemId = libraryItemId,
-                ebookLocation = absLocation,
+                ebookLocation = absLocation.orEmpty(),
                 ebookProgress = progress,
                 updatedAt = now,
             )

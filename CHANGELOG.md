@@ -3,6 +3,35 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.3.7.0
+
+- Reading in Audex no longer resets a book to the title page in the official
+  Audiobookshelf app: Audex now saves an ABS-compatible position to the server
+  (while keeping your exact spot locally), so your percent and page stay right
+  across apps. A position you set in the ABS app now also resumes roughly in
+  place here.
+
+## 0.3.6.0
+
+- New "Go to…" jump: in the audiobook player and the ebook reader, jump straight
+  to a spot in the book. Settings → Playback → "Go to uses" chooses whether it
+  takes a percentage or the exact unit — an audiobook timestamp or an ebook page
+  number.
+
+## 0.3.5.0
+
+- Book covers now show a small badge in the corner telling you at a glance
+  whether a title has an audiobook, an ebook, or both.
+- Settings is split into tabs — Servers, Appearance, Playback, About — so each
+  screen stays short (Codex sync lives under Servers, word sync under Playback).
+
+## 0.3.4.0
+
+- The book page is calmer and denser: the title, author and length sit on the
+  cover, the audiobook and ebook show as two compact progress rows with small
+  buttons instead of tall cards, and "continue in the other format", "next in
+  series" and "furthest listened" are tidy single lines.
+
 ## 0.3.3.0
 
 - Progress you're making now shows up now: as you listen, the audiobook's own

@@ -10,10 +10,19 @@ package no.bellaybestia.audex.domain.reader
 data class SavedEbookPosition(val location: String?, val progress: Double?)
 
 interface EbookProgressWriter {
+    /**
+     * @param location the reader's exact position as a Readium locator JSON — kept in
+     *   the local mirror so OUR reader restores precisely (and word-sync stays exact).
+     * @param absLocation an Audiobookshelf-compatible `epubcfi(...)` string for the same
+     *   spot — this is what gets uploaded to ABS. The official ABS app stores epubcfi
+     *   strings, so a Readium JSON there makes it reset to the title page. Null = upload
+     *   the % only (safe; leaves ABS's existing page pointer intact).
+     */
     suspend fun record(
         serverId: String,
         libraryItemId: String,
         location: String,
+        absLocation: String?,
         progress: Double,
         isFinished: Boolean = false,
     )

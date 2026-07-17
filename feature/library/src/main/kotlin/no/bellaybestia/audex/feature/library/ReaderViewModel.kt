@@ -161,6 +161,7 @@ class ReaderViewModel @Inject constructor(
                     serverId = serverId,
                     libraryItemId = libraryItemId,
                     location = locator.toJSON().toString(),
+                    absLocation = absCfiFor(locator),
                     progress = progress,
                 )
             }
@@ -230,9 +231,45 @@ class ReaderViewModel @Inject constructor(
      * beginning (docs/09 — position handoff between renderers is Tier 1 work).
      */
     private suspend fun restoreLocator(): Locator? {
-        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId) ?: return null
-        val json = saved.location?.takeIf { it.startsWith("{") } ?: return null
-        return runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull()
+        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)?.location ?: return null
+        // Our own reader writes Readium locator JSON — exact restore.
+        if (saved.startsWith("{")) {
+            return runCatching { Locator.fromJSON(JSONObject(saved)) }.getOrNull()
+        }
+        // An ABS epubcfi (you read this book in the Audiobookshelf app, synced back to us):
+        // resolve the /6/{2K} spine step to that chapter so we resume roughly there instead
+        // of the beginning. Coarse (chapter start) — the exact CFI mapping is ABS's format,
+        // not Readium's.
+        if (saved.startsWith("epubcfi(")) return locatorFromAbsCfi(saved)
+        return null
+    }
+
+    /** Chapter-level Locator for an ABS-style epubcfi `epubcfi(/6/{2K}...)` → readingOrder[K-1]. */
+    private fun locatorFromAbsCfi(cfi: String): Locator? {
+        val pub = publication ?: return null
+        val step = Regex("""/6/(\d+)""").find(cfi)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: return null
+        val link = pub.readingOrder.getOrNull(step / 2 - 1) ?: return null
+        return pub.locatorFromLink(link)
+    }
+
+    /**
+     * An Audiobookshelf/epub.js-compatible `epubcfi` for the CURRENT chapter, so the position
+     * we upload to ABS can be read by the official ABS app (it stores epubcfi strings; a
+     * Readium locator JSON there makes it reset to the title page). Coarse (chapter start) —
+     * ABS's epub.js and Readium generate CFIs differently, so we anchor at the spine item and
+     * let the % carry the fine position. Null when the href isn't in the reading order (rare)
+     * → the upload becomes %-only, which leaves ABS's existing page pointer untouched.
+     */
+    private fun absCfiFor(locator: Locator): String? {
+        val order = publication?.readingOrder ?: return null
+        val target = locator.href.toString().substringBefore('#').substringAfterLast('/')
+        val idx = order.indexOfFirst {
+            it.href.toString().substringBefore('#').substringAfterLast('/') == target
+        }
+        if (idx < 0) return null
+        // Include the filename as the CFI assertion, matching what the ABS app itself writes
+        // (e.g. epubcfi(/6/66[c2VV.xhtml]!/4/1:0)); the /4/1:0 tail lands at the chapter start.
+        return "epubcfi(/6/${2 * (idx + 1)}[$target]!/4/1:0)"
     }
 
     /** Called by the screen on every navigator locator change. */

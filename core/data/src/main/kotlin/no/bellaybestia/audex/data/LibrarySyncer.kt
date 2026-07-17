@@ -63,7 +63,7 @@ class LibrarySyncer @Inject constructor(
         // Bulk progress reconcile — resume pointers only; listening time is
         // additive and only ever flows out through the sessions API.
         val me = api.me()
-        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
         serverDao.upsert(
             serverDao.enabled().first { it.serverId == serverId }
                 .copy(absUserId = me.id, lastFullSyncAt = System.currentTimeMillis())
@@ -78,7 +78,22 @@ class LibrarySyncer @Inject constructor(
         val server = serverDao.enabled().firstOrNull { it.serverId == serverId } ?: return
         val api = clientFactory.api(serverId, server.baseUrl)
         val me = runCatching { api.me() }.getOrNull() ?: return
-        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
+    }
+
+    /**
+     * Upsert server progress, but DON'T clobber a fresher LOCAL_READER position: that row
+     * holds our reader's EXACT Readium locator, whereas the server carries only the coarse
+     * epubcfi we (or the ABS app) uploaded. Keeping the local row preserves exact restore;
+     * for every other item the server row wins as before. Audio rows (LOCAL_PLAYBACK/SERVER)
+     * are unaffected.
+     */
+    private suspend fun upsertProgressKeepingLocalReader(serverId: String, incoming: List<ProgressEntity>) {
+        val merged = incoming.map { srv ->
+            val local = progressDao.get(serverId, srv.libraryItemId)
+            if (local != null && local.source == "LOCAL_READER" && local.lastUpdate >= srv.lastUpdate) local else srv
+        }
+        progressDao.upsertAll(merged)
     }
 }
 

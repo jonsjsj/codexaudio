@@ -7,18 +7,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import no.bellaybestia.audex.domain.playback.Bookmark
 import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
+import no.bellaybestia.audex.domain.settings.ProgressUnit
+import no.bellaybestia.audex.domain.settings.ThemeSettings
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val bookmarksRepository: BookmarksRepository,
+    themeSettings: ThemeSettings,
 ) : ViewModel() {
 
     val state = playbackController.state
+
+    /** Which unit the "Go to…" jump uses (Settings → Playback). */
+    val progressUnit: StateFlow<ProgressUnit> = themeSettings.prefs
+        .map { it.progressUnit }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressUnit.PERCENT)
+
+    /** Jump to a fraction (0..1) of the audiobook. */
+    fun seekToFraction(fraction: Double) {
+        val dur = state.value.durationMs
+        if (dur > 0) seekTo((fraction.coerceIn(0.0, 1.0) * dur).toLong())
+    }
 
     /** Manual bookmarks for the loaded item (server state — syncs everywhere). */
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())

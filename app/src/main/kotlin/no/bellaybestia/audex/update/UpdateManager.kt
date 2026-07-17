@@ -40,34 +40,81 @@ class UpdateManager @Inject constructor(
         val notes: String,
     )
 
-    private suspend fun base(): String =
-        (alignment.serviceUrl()?.takeIf { it.isNotBlank() } ?: BuildConfig.UPDATE_URL).trimEnd('/')
+    /**
+     * Outcome of a manifest check. [Unreachable] is distinct from [UpToDate] so
+     * the UI can say "couldn't reach the update server" (common off-LAN while the
+     * public ingress flaps) instead of falsely claiming the app is current.
+     */
+    sealed interface CheckResult {
+        data class Available(val info: UpdateInfo) : CheckResult
+        data object UpToDate : CheckResult
+        data object Unreachable : CheckResult
+    }
 
-    /** Returns update info only when the server advertises a newer build. */
-    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
-        val root = base()
+    /**
+     * Hosts to check, in order — every one that might answer, because they fail
+     * independently:
+     *  - the public align host (works off-LAN)
+     *  - the public Codex host, which mirrors the same manifest + APK. Not
+     *    redundancy for its own sake: audex.* has spent long stretches serving
+     *    the NPMplus "Default Page" (HTTP 200 + HTML) while codex.* was fine,
+     *    and a 200-with-HTML silently killed the check.
+     *  - the word-sync box when configured (the origin; fastest on LAN)
+     *
+     * [checkDetailed] only counts a host as reachable once its JSON parses, so a
+     * proxy serving a 200 HTML error page is correctly treated as unreachable
+     * rather than as "no update".
+     */
+    private suspend fun bases(): List<String> = buildList {
+        add(BuildConfig.UPDATE_URL.trimEnd('/'))
+        add(BuildConfig.UPDATE_URL_ALT.trimEnd('/'))
+        alignment.serviceUrl()?.takeIf { it.isNotBlank() }?.let { add(it.trimEnd('/')) }
+    }.filter { it.isNotBlank() }.distinct()
+
+    /** Returns update info only when a reachable host advertises a newer build. */
+    suspend fun check(): UpdateInfo? = (checkDetailed() as? CheckResult.Available)?.info
+
+    /**
+     * Full check result across every host. Tries each base in turn; if any host
+     * returns a manifest we know the server is reachable (so we can tell
+     * up-to-date apart from an unreachable host). Picks the highest advertised
+     * newer build across all hosts.
+     */
+    suspend fun checkDetailed(): CheckResult = withContext(Dispatchers.IO) {
         // STABLE follows main's releases; BETA follows the report-autofix channel.
         val manifest = when (updateSettings.channel.first()) {
             UpdateChannel.STABLE -> "audex-latest.json"
             UpdateChannel.BETA -> "audex-beta-latest.json"
         }
-        runCatching {
-            val req = Request.Builder().url("$root/$manifest").get().build()
-            http.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@use null
-                val o = JSONObject(resp.body?.string().orEmpty())
-                val versionCode = o.getInt("versionCode")
-                if (versionCode <= BuildConfig.VERSION_CODE) return@use null
-                val rawUrl = o.optString("url").ifBlank { "$root/audex.apk" }
-                val url = if (rawUrl.startsWith("http")) rawUrl else "$root$rawUrl"
-                UpdateInfo(
-                    versionCode = versionCode,
-                    versionName = o.optString("versionName", "?"),
-                    url = url,
-                    notes = o.optString("notes", ""),
-                )
+        var reachable = false
+        var best: UpdateInfo? = null
+        for (root in bases()) {
+            runCatching {
+                val req = Request.Builder().url("$root/$manifest").get().build()
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use
+                    val o = JSONObject(resp.body?.string().orEmpty())
+                    reachable = true
+                    val versionCode = o.getInt("versionCode")
+                    if (versionCode > BuildConfig.VERSION_CODE) {
+                        val rawUrl = o.optString("url").ifBlank { "/audex.apk" }
+                        val url = if (rawUrl.startsWith("http")) rawUrl else "$root$rawUrl"
+                        val info = UpdateInfo(
+                            versionCode = versionCode,
+                            versionName = o.optString("versionName", "?"),
+                            url = url,
+                            notes = o.optString("notes", ""),
+                        )
+                        if (best == null || info.versionCode > best!!.versionCode) best = info
+                    }
+                }
             }
-        }.getOrNull()
+        }
+        when {
+            best != null -> CheckResult.Available(best!!)
+            reachable -> CheckResult.UpToDate
+            else -> CheckResult.Unreachable
+        }
     }
 
     /**
@@ -78,7 +125,10 @@ class UpdateManager @Inject constructor(
     suspend fun downloadAndInstall(info: UpdateInfo, onProgress: (Float) -> Unit) {
         val apk = withContext(Dispatchers.IO) {
             val dir = File(context.getExternalFilesDir(null), "updates").apply { mkdirs() }
-            val target = File(dir, "audex-${info.versionCode}.apk")
+            // Name the file by the VERSION the user sees (e.g. audex-0.2.12.0.apk),
+            // not the internal versionCode, so a saved APK is self-identifying.
+            val safeVersion = info.versionName.filter { it.isDigit() || it == '.' }.ifBlank { info.versionCode.toString() }
+            val target = File(dir, "audex-$safeVersion.apk")
             val req = Request.Builder().url(info.url).get().build()
             http.newCall(req).execute().use { resp ->
                 check(resp.isSuccessful) { "download HTTP ${resp.code}" }

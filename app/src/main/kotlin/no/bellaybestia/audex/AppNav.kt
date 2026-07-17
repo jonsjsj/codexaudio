@@ -16,7 +16,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.update.AboutViewModel
 import no.bellaybestia.audex.update.UpdateViewModel
+import no.bellaybestia.audex.feature.settings.UpdateUi
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -37,6 +39,7 @@ import no.bellaybestia.audex.feature.library.WorkDetailScreen
 import no.bellaybestia.audex.feature.player.MiniPlayer
 import no.bellaybestia.audex.feature.player.PlayerScreen
 import no.bellaybestia.audex.feature.settings.AboutScreen
+import no.bellaybestia.audex.feature.settings.StatsScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
 import no.bellaybestia.audex.feature.settings.ReportScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
@@ -49,6 +52,7 @@ private object Routes {
     const val ADD_SERVER = "add_server"
     const val ABOUT = "about"
     const val REPORT = "report"
+    const val STATS = "stats"
     const val PLAYER = "player"
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
@@ -88,18 +92,24 @@ fun AppNav() {
 
     Scaffold(
         bottomBar = {
-            // navigationBarsPadding lifts the tab row above the Android gesture
-            // bar so its tap targets aren't stolen by the system (the inset is
-            // 0 when not edge-to-edge, so this is safe on every device).
-            Column(Modifier.navigationBarsPadding()) {
-                if (currentRoute != Routes.PLAYER) {
-                    MiniPlayer(onExpand = { navController.navigate(Routes.PLAYER) })
+            // The reader is full-screen (no app chrome) so reading is immersive —
+            // tapping the page then hides the reader's own bars for text only.
+            if (currentRoute != Routes.READER) {
+                // navigationBarsPadding lifts the tab row above the Android gesture
+                // bar so its tap targets aren't stolen by the system (the inset is
+                // 0 when not edge-to-edge, so this is safe on every device).
+                Column(Modifier.navigationBarsPadding()) {
+                    if (currentRoute != Routes.PLAYER) {
+                        MiniPlayer(onExpand = { navController.navigate(Routes.PLAYER) })
+                    }
+                    FlatTabRow(
+                        tabs = bottomTabs,
+                        selectedIndex = selectedTab,
+                        onSelect = { index ->
+                            navController.navigateToTab(bottomTabRoutes[index], currentRoute)
+                        },
+                    )
                 }
-                FlatTabRow(
-                    tabs = bottomTabs,
-                    selectedIndex = selectedTab,
-                    onSelect = { index -> navController.navigateToTab(bottomTabRoutes[index]) },
-                )
             }
         },
     ) { innerPadding ->
@@ -125,21 +135,36 @@ fun AppNav() {
                 )
             }
             composable(Routes.DOWNLOADS) {
-                DownloadsScreen()
+                DownloadsScreen(
+                    onOpenWork = { id, title, author ->
+                        navController.navigate(Routes.work(id, title, author))
+                    },
+                )
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onAddServer = { navController.navigate(Routes.ADD_SERVER) },
                     appVersion = BuildConfig.VERSION_NAME,
                     onAbout = { navController.navigate(Routes.ABOUT) },
+                    onStats = { navController.navigate(Routes.STATS) },
                     onReport = { navController.navigate(Routes.REPORT) },
                 )
             }
             composable(Routes.ADD_SERVER) {
                 AddServerScreen(onDone = { navController.popBackStack() })
             }
+            composable(Routes.STATS) {
+                StatsScreen()
+            }
             composable(Routes.ABOUT) {
-                AboutScreen(appVersion = BuildConfig.VERSION_NAME)
+                val aboutVm: AboutViewModel = hiltViewModel()
+                val updateState by aboutVm.state.collectAsState()
+                AboutScreen(
+                    appVersion = BuildConfig.VERSION_NAME,
+                    update = updateState.toUi(),
+                    onCheck = aboutVm::check,
+                    onInstall = aboutVm::install,
+                )
             }
             composable(Routes.REPORT) {
                 ReportScreen(appVersion = BuildConfig.VERSION_NAME)
@@ -204,6 +229,7 @@ fun AppNav() {
                     onSeriesClick = { id, name ->
                         navController.navigate(Routes.series(id, name))
                     },
+                    onOpenWork = { work -> navController.navigateToWork(work) },
                 )
             }
             composable(
@@ -272,10 +298,36 @@ private fun NavHostController.navigateToWork(work: Work) {
     navigate(Routes.work(work.id, work.title, work.authorName))
 }
 
-private fun NavHostController.navigateToTab(route: String) {
+/** Map the app-module update state onto the feature-local UI type. */
+private fun AboutViewModel.State.toUi(): UpdateUi = when (this) {
+    AboutViewModel.State.Checking -> UpdateUi.Checking
+    AboutViewModel.State.UpToDate -> UpdateUi.UpToDate
+    AboutViewModel.State.Unreachable -> UpdateUi.Unreachable
+    is AboutViewModel.State.Available -> UpdateUi.Available(info.versionName, info.notes)
+    is AboutViewModel.State.Downloading -> UpdateUi.Downloading(progress)
+}
+
+/** The routes that belong to each bottom tab's section (root + its sub-pages). */
+private fun sectionRoutesFor(tabRoot: String): Set<String> = when (tabRoot) {
+    Routes.LIBRARY -> setOf(Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER)
+    Routes.SETTINGS -> setOf(Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.REPORT, Routes.STATS)
+    Routes.HOME -> setOf(Routes.HOME)
+    Routes.DOWNLOADS -> setOf(Routes.DOWNLOADS)
+    else -> setOf(tabRoot)
+}
+
+/**
+ * Tab navigation. Switching to a DIFFERENT tab restores that tab's saved stack
+ * (scroll, sub-page) — the viewState rule. Re-tapping the tab you're ALREADY in
+ * RESETS it to its root instead of restoring the last sub-page: pressing
+ * Settings goes to the Settings menu (not the About page you last opened), and
+ * Home/Library go back to their front page.
+ */
+private fun NavHostController.navigateToTab(route: String, currentRoute: String?) {
+    val reselectingSameTab = currentRoute in sectionRoutesFor(route)
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
-        restoreState = true
+        restoreState = !reselectingSameTab
     }
 }

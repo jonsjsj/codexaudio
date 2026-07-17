@@ -65,6 +65,9 @@ data class WorkRow(
     val coverKey: String?,
     /** Latest remote updatedAt across the work's items — proxy for "recently added". */
     val updatedAtRemote: Long?,
+    /** Most recent progress update across the work's editions (epoch ms, from ABS
+     * mediaProgress.lastUpdate) — "last listened/read", for Continue ordering. */
+    val progressUpdatedAt: Long?,
 )
 
 private const val WORK_ROW_SELECT = """
@@ -76,7 +79,8 @@ private const val WORK_ROW_SELECT = """
            COUNT(CASE WHEN e.format = 'AUDIO' THEN 1 END) AS audioCount,
            COUNT(CASE WHEN e.format = 'EBOOK' THEN 1 END) AS ebookCount,
            MIN(e.serverId || '|' || e.libraryItemId) AS coverKey,
-           MAX(r.updatedAtRemote) AS updatedAtRemote
+           MAX(r.updatedAtRemote) AS updatedAtRemote,
+           MAX(p.lastUpdate) AS progressUpdatedAt
     FROM works w
     LEFT JOIN authors a ON a.authorId = w.authorId
     LEFT JOIN series s ON s.seriesId = w.seriesId
@@ -111,8 +115,18 @@ interface CatalogDao {
     @Query("$WORK_ROW_SELECT WHERE w.seriesId = :seriesId GROUP BY w.workId ORDER BY w.seriesPosition, w.year, w.title")
     fun observeWorksForSeries(seriesId: String): Flow<List<WorkRow>>
 
+    // Per-FORMAT fraction, not the unified pct: an ebook edition must show its
+    // own ebookProgress (where Read opens), not max(audio, ebook) — otherwise it
+    // claimed the audiobook's % and then "jumped back" to the real ebook spot.
+    // Audio = currentTime/duration; finished = 100%.
     @Query(
-        """SELECT e.*, COALESCE(p.pct, 0) AS fraction FROM editions e
+        """SELECT e.*, CASE
+               WHEN p.isFinished = 1 THEN 1.0
+               WHEN e.format = 'EBOOK' THEN COALESCE(p.ebookProgress, 0)
+               WHEN e.durationS IS NOT NULL AND e.durationS > 0
+                   THEN MIN(1.0, COALESCE(p.currentTimeS, 0) / e.durationS)
+               ELSE COALESCE(p.pct, 0)
+           END AS fraction FROM editions e
            LEFT JOIN progress p ON p.serverId = e.serverId AND p.libraryItemId = e.libraryItemId
            WHERE e.workId = :workId ORDER BY e.format, e.serverId"""
     )
@@ -270,4 +284,16 @@ interface DownloadDao {
     // on its next progress write.
     @Query("UPDATE downloads SET state = 'FAILED' WHERE state IN ('QUEUED', 'RUNNING')")
     suspend fun adoptOrphanedActive()
+}
+
+@Dao
+interface HighlightDao {
+    @Query("SELECT * FROM highlights WHERE serverId = :serverId AND libraryItemId = :itemId ORDER BY createdAt DESC")
+    fun observe(serverId: String, itemId: String): Flow<List<HighlightEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(highlight: HighlightEntity)
+
+    @Query("DELETE FROM highlights WHERE id = :id")
+    suspend fun delete(id: String)
 }

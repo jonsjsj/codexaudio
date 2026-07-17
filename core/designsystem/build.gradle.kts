@@ -29,4 +29,7 @@ dependencies {
     api(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material.icons)
     implementation(libs.coil.compose)
+    // Cover-art hue extraction drives the whole palette (AudexPalette).
+    implementation(libs.androidx.palette)
+    implementation(libs.androidx.core.ktx)
 }

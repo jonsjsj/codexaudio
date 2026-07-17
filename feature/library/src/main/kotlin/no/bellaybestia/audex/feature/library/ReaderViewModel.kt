@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.Downloads
@@ -23,6 +24,8 @@ import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.Highlight
+import no.bellaybestia.audex.domain.reader.HighlightsRepository
 import no.bellaybestia.audex.domain.reader.ReaderPrefs
 import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
 import no.bellaybestia.audex.domain.reader.ReaderTheme
@@ -84,9 +87,21 @@ class ReaderViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val alignmentRepository: AlignmentRepository,
     private val readerSettings: ReaderSettingsStore,
+    private val highlightsRepository: HighlightsRepository,
+    themeSettings: no.bellaybestia.audex.domain.settings.ThemeSettings,
     playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /** Which unit the reader's "Go to…" jump uses (Settings → Playback). */
+    val progressUnit: StateFlow<no.bellaybestia.audex.domain.settings.ProgressUnit> =
+        themeSettings.prefs
+            .map { it.progressUnit }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT,
+            )
 
     private val serverId: String = checkNotNull(savedStateHandle["serverId"])
     private val libraryItemId: String = checkNotNull(savedStateHandle["itemId"])
@@ -105,8 +120,13 @@ class ReaderViewModel @Inject constructor(
     /** Audio↔ebook bridging: itemIds of this work's AUDIO editions (any server). */
     private val audioItemKeys = MutableStateFlow<Set<String>>(emptySet())
 
-    /** Follow-audio toggle (off by default; the reader is manual until asked). */
-    private val _followAudio = MutableStateFlow(false)
+    /**
+     * Follow-audio toggle, ON by default: opening the ebook of a book you're
+     * listening to should land you where the narration is, without hunting for
+     * a "Follow audio" button first (it's a no-op when no audio companion is
+     * loaded). Turn it off to read ahead independently.
+     */
+    private val _followAudio = MutableStateFlow(true)
     val followAudio: StateFlow<Boolean> = _followAudio.asStateFlow()
 
     fun setFollowAudio(enabled: Boolean) {
@@ -130,6 +150,20 @@ class ReaderViewModel @Inject constructor(
     /** Word-sync map for this work's audio (docs/10); null → proportional follow. */
     private val _syncMap = MutableStateFlow<SyncMap?>(null)
     val syncMap: StateFlow<SyncMap?> = _syncMap.asStateFlow()
+
+    /** This book's saved highlights (newest first) — painted as decorations. */
+    val highlights: StateFlow<List<Highlight>> =
+        highlightsRepository.forItem(serverId, libraryItemId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Save the current text selection (its serialized locator + the passage). */
+    fun addHighlight(locatorJson: String, text: String) {
+        viewModelScope.launch { highlightsRepository.add(serverId, libraryItemId, locatorJson, text) }
+    }
+
+    fun removeHighlight(id: String) {
+        viewModelScope.launch { highlightsRepository.remove(id) }
+    }
 
     /** Persisted appearance (font %, theme); the screen submits it to Readium. */
     val readerPrefs: StateFlow<ReaderPrefs> = readerSettings.prefs
@@ -161,6 +195,7 @@ class ReaderViewModel @Inject constructor(
                     serverId = serverId,
                     libraryItemId = libraryItemId,
                     location = locator.toJSON().toString(),
+                    absLocation = absCfiFor(locator),
                     progress = progress,
                 )
             }
@@ -225,14 +260,45 @@ class ReaderViewModel @Inject constructor(
     }
 
     /**
-     * Restore the last position. Only Readium locator JSON round-trips; a CFI
-     * written by the ABS web reader doesn't parse here and falls back to the
-     * beginning (docs/09 — position handoff between renderers is Tier 1 work).
+     * Restore the last position. Our own reader writes Readium locator JSON (exact
+     * restore); an ABS `epubcfi` (read in the Audiobookshelf app, synced back) resolves
+     * to its chapter so we resume roughly there instead of at the beginning.
      */
     private suspend fun restoreLocator(): Locator? {
-        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId) ?: return null
-        val json = saved.location?.takeIf { it.startsWith("{") } ?: return null
-        return runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull()
+        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)?.location ?: return null
+        if (saved.startsWith("{")) {
+            return runCatching { Locator.fromJSON(JSONObject(saved)) }.getOrNull()
+        }
+        if (saved.startsWith("epubcfi(")) return locatorFromAbsCfi(saved)
+        return null
+    }
+
+    /** Chapter-level Locator for an ABS-style epubcfi `epubcfi(/6/{2K}...)` → readingOrder[K-1]. */
+    private fun locatorFromAbsCfi(cfi: String): Locator? {
+        val pub = publication ?: return null
+        val step = Regex("""/6/(\d+)""").find(cfi)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: return null
+        val link = pub.readingOrder.getOrNull(step / 2 - 1) ?: return null
+        return pub.locatorFromLink(link)
+    }
+
+    /**
+     * An Audiobookshelf/epub.js-compatible `epubcfi` for the CURRENT chapter, so the position
+     * we upload to ABS can be read by the official ABS app (it stores epubcfi strings; a
+     * Readium locator JSON there makes it reset to the title page). Coarse (chapter start) —
+     * ABS's epub.js and Readium generate CFIs differently, so we anchor at the spine item and
+     * let the % carry the fine position. Null when the href isn't in the reading order (rare)
+     * → the upload becomes %-only, which leaves ABS's existing page pointer untouched.
+     */
+    private fun absCfiFor(locator: Locator): String? {
+        val order = publication?.readingOrder ?: return null
+        val target = locator.href.toString().substringBefore('#').substringAfterLast('/')
+        val idx = order.indexOfFirst {
+            it.href.toString().substringBefore('#').substringAfterLast('/') == target
+        }
+        if (idx < 0) return null
+        // Include the filename as the CFI assertion, matching what the ABS app itself writes
+        // (e.g. epubcfi(/6/66[c2VV.xhtml]!/4/1:0)); the /4/1:0 tail lands at the chapter start.
+        return "epubcfi(/6/${2 * (idx + 1)}[$target]!/4/1:0)"
     }
 
     /** Called by the screen on every navigator locator change. */

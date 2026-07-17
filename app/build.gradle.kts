@@ -19,13 +19,16 @@ android {
         // per release, roll into the third for feature batches. versionCode
         // strictly +1 every build (the OTA check compares it). History: vc2=0.1,
         // vc3=0.1.1 (shipped as "1.0.0"/"1.1.0", renumbered), …, vc12=0.2.0.
-        versionCode = 17
-        versionName = "0.2.3.0"
+        versionCode = 43
+        versionName = "0.3.7.0"
 
-        // Default OTA endpoint (the public audex-align host). It serves
-        // /audex-latest.json (the version manifest) and /audex.apk. Overridable
-        // at runtime by the configured word-sync service URL, if set.
+        // OTA endpoints, tried in order (see UpdateManager.bases()). Codex
+        // MIRRORS the same manifest + APK, so it's a real second route rather
+        // than a guess — and the two hosts fail independently: audex.* has sat
+        // on the NPMplus default page (200 + HTML) for long stretches while
+        // codex.* served fine, which silently killed every update check.
         buildConfigField("String", "UPDATE_URL", "\"https://audex.bellaybestia.no\"")
+        buildConfigField("String", "UPDATE_URL_ALT", "\"https://codex.bellaybestia.no\"")
     }
 
     // Fixed debug signing (committed keystore, standard debug passwords): CI

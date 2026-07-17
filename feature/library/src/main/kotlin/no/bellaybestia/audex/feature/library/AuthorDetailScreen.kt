@@ -8,14 +8,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.designsystem.ScreenHeader
 import no.bellaybestia.audex.domain.model.Work
 
 /**
@@ -35,12 +34,11 @@ fun AuthorDetailScreen(
     val listState = rememberLazyListState()
 
     Column(modifier.fillMaxSize()) {
-        Text(
-            text = authorName ?: viewModel.authorName ?: "Author",
-            style = MaterialTheme.typography.headlineSmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        ScreenHeader(
+            title = authorName ?: viewModel.authorName ?: "Author",
+            subtitle = if (works.isEmpty()) null
+            else if (works.size == 1) "1 book" else "${works.size} books",
+            compact = true,
         )
         HorizontalDivider(
             thickness = 1.dp,

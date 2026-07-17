@@ -39,7 +39,20 @@ interface PlaybackController {
     val state: StateFlow<PlaybackState>
 
     /** Open a playback session for an audio edition and start playing. */
-    suspend fun play(serverId: String, libraryItemId: String, title: String, author: String?)
+    /**
+     * Start (or resume) playback. [resumeAtS] overrides where to resume (overall
+     * seconds) — used to resume at the furthest-listened position instead of
+     * ABS's possibly-stale saved time. Null → resume at the server/local saved
+     * position. Passing it INTO play (vs a follow-up seekTo) avoids a race where
+     * the initial resume wins over the seek.
+     */
+    suspend fun play(
+        serverId: String,
+        libraryItemId: String,
+        title: String,
+        author: String?,
+        resumeAtS: Double? = null,
+    )
 
     fun togglePlayPause()
 

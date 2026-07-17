@@ -36,6 +36,9 @@ data class Work(
     val coverUrl: String? = null,
     /** Latest remote updatedAt (epoch ms) across the work's items — "recently added" proxy. */
     val updatedAt: Long? = null,
+    /** When the work was last listened to / read (epoch ms, from the server's
+     * progress timestamp) — used to feature the most recent book on Home. */
+    val listenedAt: Long? = null,
 )
 
 /**

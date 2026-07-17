@@ -29,6 +29,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import no.bellaybestia.audex.common.DefaultDispatcher
 import no.bellaybestia.audex.database.ProgressDao
+import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.playback.Chapter
@@ -56,6 +57,7 @@ class PlaybackControllerImpl @Inject constructor(
     private val progressDao: ProgressDao,
     private val sessionRecorder: SessionRecorder,
     private val alignmentRepository: AlignmentRepository,
+    private val codexSync: no.bellaybestia.audex.domain.settings.CodexSync,
     @DefaultDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackController {
 
@@ -85,7 +87,13 @@ class PlaybackControllerImpl @Inject constructor(
     // End-of-chapter sleep: the chapter index that was playing when armed.
     private var sleepChapterIndex: Int = -1
 
-    override suspend fun play(serverId: String, libraryItemId: String, title: String, author: String?) {
+    override suspend fun play(
+        serverId: String,
+        libraryItemId: String,
+        title: String,
+        author: String?,
+        resumeAtS: Double?,
+    ) {
         _state.update {
             it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, title = title, author = author)
         }
@@ -99,9 +107,9 @@ class PlaybackControllerImpl @Inject constructor(
         // Offline-first: play downloaded files if present, otherwise stream.
         val local = downloadManager.localAudioTracks(serverId, libraryItemId)
         if (local != null) {
-            playLocal(serverId, libraryItemId, title, author, local)
+            playLocal(serverId, libraryItemId, title, author, local, resumeAtS)
         } else {
-            playStreaming(serverId, server.baseUrl, libraryItemId, title, author)
+            playStreaming(serverId, server.baseUrl, libraryItemId, title, author, resumeAtS)
         }
     }
 
@@ -111,6 +119,7 @@ class PlaybackControllerImpl @Inject constructor(
         libraryItemId: String,
         title: String,
         author: String?,
+        resumeAtS: Double?,
     ) {
         val api = clientFactory.api(serverId, baseUrl)
         val session = runCatching { api.play(libraryItemId) }.getOrElse {
@@ -126,7 +135,8 @@ class PlaybackControllerImpl @Inject constructor(
         val items = tracks.map { track ->
             mediaItem(base + track.contentUrl, serverId, libraryItemId, title, author)
         }
-        val resumeAt = session.currentTime
+        // Resume override (e.g. furthest-listened) wins over ABS's saved time.
+        val resumeAt = resumeAtS ?: session.currentTime
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }
@@ -151,11 +161,12 @@ class PlaybackControllerImpl @Inject constructor(
         title: String,
         author: String?,
         tracks: List<LocalTrack>,
+        resumeAtS: Double?,
     ) {
         val items = tracks.map { track ->
             mediaItem(Uri.fromFile(track.file).toString(), serverId, libraryItemId, title, author)
         }
-        val resumeAt = progressDao.get(serverId, libraryItemId)?.currentTimeS ?: 0.0
+        val resumeAt = resumeAtS ?: progressDao.get(serverId, libraryItemId)?.currentTimeS ?: 0.0
         // No server session while offline — the local SessionRecorder row drains
         // later via /api/session/local-all.
         activeApi = null
@@ -204,7 +215,12 @@ class PlaybackControllerImpl @Inject constructor(
         val withinMs = ((resumeAtS - (activeOffsets.getOrNull(startIndex) ?: 0.0)).coerceAtLeast(0.0) * 1000).toLong()
         // The chosen speed is a listening preference, not per-book: restore it
         // on every start so it survives sessions and process restarts.
-        val savedSpeed = context.appSettingsDataStore.data.first()[KEY_PLAYBACK_SPEED]
+        // Per-book speed: this book's own remembered speed, else your usual
+        // (last-chosen) speed, else the player default. So each book keeps its
+        // pace and a new one starts at whatever you normally listen at.
+        val prefs = context.appSettingsDataStore.data.first()
+        val itemId = _state.value.libraryItemId
+        val savedSpeed = (itemId?.let { prefs[speedKey(it)] }) ?: prefs[KEY_PLAYBACK_SPEED]
         withContext(main) {
             val c = awaitController()
             c.addListener(playerListener)
@@ -271,13 +287,17 @@ class PlaybackControllerImpl @Inject constructor(
             controller?.setPlaybackSpeed(speed)
             _state.update { it.copy(speed = speed) }
         }
-        // Persist so the chosen speed survives sessions and process restarts.
+        // Persist per-book AND as the new "usual" speed for the next book.
         scope.launch {
+            val itemId = _state.value.libraryItemId
             context.appSettingsDataStore.edit { prefs ->
                 prefs[KEY_PLAYBACK_SPEED] = speed
+                if (itemId != null) prefs[speedKey(itemId)] = speed
             }
         }
     }
+
+    private fun speedKey(libraryItemId: String) = floatPreferencesKey("speed_$libraryItemId")
 
     override fun setSleepAtChapterEnd(enabled: Boolean) {
         sleepJob?.cancel()
@@ -385,6 +405,32 @@ class PlaybackControllerImpl @Inject constructor(
         }
     }
 
+    /**
+     * Mirror the live audio position into the local progress table (the source
+     * the detail slider / Home / library read). Playback otherwise only wrote
+     * server sessions, so those surfaces stayed frozen until the next reconcile.
+     */
+    private suspend fun writeLocalProgress(itemId: String?, positionS: Double, finished: Boolean) {
+        val sid = _state.value.serverId ?: return
+        val id = itemId ?: return
+        if (totalDurationS <= 0) return
+        val pct = if (finished) 1.0 else (positionS / totalDurationS).coerceIn(0.0, 1.0)
+        runCatching {
+            val existing = progressDao.get(sid, id)
+            progressDao.upsertAll(
+                listOf(
+                    (existing ?: ProgressEntity(serverId = sid, libraryItemId = id)).copy(
+                        pct = pct,
+                        currentTimeS = positionS,
+                        isFinished = finished,
+                        lastUpdate = System.currentTimeMillis(),
+                        source = "LOCAL_PLAYBACK",
+                    ),
+                ),
+            )
+        }
+    }
+
     private fun startSyncLoop() {
         syncJob?.cancel()
         syncJob = scope.launch {
@@ -401,6 +447,17 @@ class PlaybackControllerImpl @Inject constructor(
                         sessionId,
                         AbsSessionSyncBody(position, SYNC_INTERVAL_MS / 1000.0, totalDurationS),
                     )
+                }
+                val itemId = _state.value.libraryItemId
+                val finished = totalDurationS > 0 && position >= totalDurationS - 1.0
+                // Keep the LOCAL progress row current so the detail slider, Home,
+                // and library reflect where you are AS you listen — it used to
+                // freeze at the last server reconcile (the "stuck at 90%" bug).
+                writeLocalProgress(itemId, position, finished)
+                // Optional: mirror progress to Codex immediately (best-effort; no
+                // effect unless the user configured Codex sync in Settings).
+                if (itemId != null) {
+                    runCatching { codexSync.pushAudioProgress(itemId, position, finished) }
                 }
             }
         }

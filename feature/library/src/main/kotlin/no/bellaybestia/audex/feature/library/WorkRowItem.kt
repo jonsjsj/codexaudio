@@ -56,6 +56,8 @@ fun WorkRowItem(
         CoverImage(
             url = work.coverUrl,
             contentDescription = null,
+            progress = (if (work.hasAudio) work.listenFraction else work.readFraction)
+                .toFloat().takeIf { it > 0f },
             modifier = Modifier.size(width = 52.dp, height = 78.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {

@@ -9,6 +9,7 @@ import no.bellaybestia.audex.database.RemoteItemDao
 import no.bellaybestia.audex.database.RemoteItemEntity
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.repository.CatalogRepository
+import no.bellaybestia.audex.network.abs.AbsApi
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import no.bellaybestia.audex.network.abs.AbsLibraryItem
 import no.bellaybestia.audex.network.abs.AbsMediaProgress
@@ -47,11 +48,15 @@ class LibrarySyncer @Inject constructor(
 
         val seen = mutableListOf<String>()
         for (library in api.libraries().libraries.filter { it.mediaType == "book" }) {
+            // Series that ABS knows via its /series index but didn't write back
+            // into each item's metadata (item → its series ref). Filled in below
+            // only for items whose own metadata series is empty.
+            val seriesByItem = runCatching { fetchSeriesIndex(api, library.id) }.getOrDefault(emptyMap())
             var page = 0
             while (true) {
                 val batch = api.libraryItems(library.id, limit = 100, page = page)
                 if (batch.results.isEmpty()) break
-                remoteItemDao.upsertAll(batch.results.map { it.toEntity(serverId, library.id, json) })
+                remoteItemDao.upsertAll(batch.results.map { it.toEntity(serverId, library.id, json, seriesByItem) })
                 seen += batch.results.map { it.id }
                 page++
                 if ((page * batch.limit) >= batch.total && batch.total > 0) break
@@ -63,11 +68,34 @@ class LibrarySyncer @Inject constructor(
         // Bulk progress reconcile — resume pointers only; listening time is
         // additive and only ever flows out through the sessions API.
         val me = api.me()
-        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
         serverDao.upsert(
             serverDao.enabled().first { it.serverId == serverId }
                 .copy(absUserId = me.id, lastFullSyncAt = System.currentTimeMillis())
         )
+    }
+
+    /** Walk the /series index → map each member item to its "Name #seq" ref. */
+    private suspend fun fetchSeriesIndex(
+        api: AbsApi,
+        libraryId: String,
+    ): Map<String, StoredSeriesRef> {
+        val out = mutableMapOf<String, StoredSeriesRef>()
+        var page = 0
+        while (true) {
+            val batch = api.librarySeries(libraryId, limit = 100, page = page)
+            if (batch.results.isEmpty()) break
+            for (entry in batch.results) {
+                for (book in entry.books) {
+                    val ref = parseMinifiedSeries(book.media.metadata.seriesName).firstOrNull()
+                        ?: StoredSeriesRef(entry.name, null)
+                    out.putIfAbsent(book.id, ref)
+                }
+            }
+            page++
+            if (batch.limit == 0 || (page * batch.limit) >= batch.total && batch.total > 0) break
+        }
+        return out
     }
 
     /**
@@ -78,11 +106,31 @@ class LibrarySyncer @Inject constructor(
         val server = serverDao.enabled().firstOrNull { it.serverId == serverId } ?: return
         val api = clientFactory.api(serverId, server.baseUrl)
         val me = runCatching { api.me() }.getOrNull() ?: return
-        progressDao.upsertAll(me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
+    }
+
+    /**
+     * Upsert server progress, but DON'T clobber a fresher LOCAL_READER position: that row
+     * holds our reader's EXACT Readium locator, whereas the server carries only the coarse
+     * epubcfi we (or the ABS app) uploaded. Keeping the local row preserves exact restore;
+     * for every other item the server row wins as before. Audio rows (LOCAL_PLAYBACK/SERVER)
+     * are unaffected.
+     */
+    private suspend fun upsertProgressKeepingLocalReader(serverId: String, incoming: List<ProgressEntity>) {
+        val merged = incoming.map { srv ->
+            val local = progressDao.get(serverId, srv.libraryItemId)
+            if (local != null && local.source == "LOCAL_READER" && local.lastUpdate >= srv.lastUpdate) local else srv
+        }
+        progressDao.upsertAll(merged)
     }
 }
 
-internal fun AbsLibraryItem.toEntity(serverId: String, libraryId: String, json: Json): RemoteItemEntity {
+internal fun AbsLibraryItem.toEntity(
+    serverId: String,
+    libraryId: String,
+    json: Json,
+    seriesByItem: Map<String, StoredSeriesRef> = emptyMap(),
+): RemoteItemEntity {
     val md = media.metadata
     // The library-items LIST endpoint returns MINIFIED metadata: the authors/
     // narrators/series arrays are absent, replaced by comma-joined *Name strings
@@ -91,8 +139,11 @@ internal fun AbsLibraryItem.toEntity(serverId: String, libraryId: String, json: 
     // distinct books to one work id and abort the graph rebuild).
     val authors = md.authors.map { it.name }.ifEmpty { splitJoinedNames(md.authorName) }
     val narrators = md.narrators.ifEmpty { splitJoinedNames(md.narratorName) }
+    // Series precedence: the item's own metadata, else the server-side /series
+    // index (some items are grouped in ABS but carry no series in their metadata).
     val series = md.series.map { StoredSeriesRef(it.name, it.sequence?.toDoubleOrNull()) }
         .ifEmpty { parseMinifiedSeries(md.seriesName) }
+        .ifEmpty { seriesByItem[id]?.let { listOf(it) } ?: emptyList() }
     return RemoteItemEntity(
         serverId = serverId,
         libraryItemId = id,

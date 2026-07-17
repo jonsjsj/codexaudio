@@ -173,12 +173,92 @@ fun PlayerScreen(
             )
         }
 
+        GoToSection(state = state, viewModel = viewModel)
+
         if (state.chapters.isNotEmpty()) {
             ChapterSection(state = state, onJump = viewModel::seekToChapter)
         }
 
         BookmarksSection(viewModel = viewModel)
     }
+}
+
+/**
+ * "Go to…" jump: a flat action that opens a small dialog to jump to a spot in
+ * the audiobook. The input unit follows Settings → Playback → "Go to uses":
+ * a percentage, or an exact timestamp (h:mm:ss / m:ss).
+ */
+@Composable
+private fun GoToSection(state: PlaybackState, viewModel: PlayerViewModel) {
+    val unit by viewModel.progressUnit.collectAsState()
+    val byPercent = unit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT
+    var open by remember { mutableStateOf(false) }
+    var field by remember { mutableStateOf("") }
+
+    Text(
+        text = "Go to…",
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clickable { field = ""; open = true }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
+
+    if (open) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text(if (byPercent) "Go to percent" else "Go to time") },
+            text = {
+                Column {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = field,
+                        onValueChange = { field = it },
+                        singleLine = true,
+                        placeholder = { Text(if (byPercent) "0–100" else "h:mm:ss") },
+                    )
+                    Text(
+                        text = if (byPercent) {
+                            "Jump to a percentage of the book."
+                        } else {
+                            "Total length ${formatTime(state.durationMs)}."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        if (byPercent) {
+                            field.trim().toDoubleOrNull()?.let { viewModel.seekToFraction(it / 100.0) }
+                        } else {
+                            parseTime(field)?.let { viewModel.seekTo(it) }
+                        }
+                        open = false
+                    },
+                ) { Text("Go") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { open = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/** Parse "h:mm:ss", "m:ss", or plain seconds into milliseconds. Null if unparseable. */
+private fun parseTime(raw: String): Long? {
+    val parts = raw.trim().split(":").map { it.trim() }
+    if (parts.isEmpty() || parts.any { it.isEmpty() || it.toLongOrNull() == null }) return null
+    val nums = parts.map { it.toLong() }
+    val seconds = when (nums.size) {
+        1 -> nums[0]
+        2 -> nums[0] * 60 + nums[1]
+        3 -> nums[0] * 3600 + nums[1] * 60 + nums[2]
+        else -> return null
+    }
+    return seconds * 1000
 }
 
 /**

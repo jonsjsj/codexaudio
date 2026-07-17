@@ -19,6 +19,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Audex">
 
+        <!-- Android Auto: declares Audex as a media app so the car head unit
+             surfaces the PlaybackService's browse tree (Continue / Downloads). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"

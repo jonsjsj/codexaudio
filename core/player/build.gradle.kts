@@ -23,6 +23,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:database"))
+    implementation(project(":core:domain"))
     implementation(libs.media3.exoplayer)
     // HLS: ABS streams via /hls/...m3u8 whenever it decides not to direct-play
     // (runtime-verified: missing this = ClassNotFoundException HlsMediaSource).

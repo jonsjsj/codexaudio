@@ -171,3 +171,19 @@ data class DownloadEntity(
     val bytesDone: Long = 0,
     val dirPath: String? = null,
 )
+
+/**
+ * A reader highlight: the selected text plus its Readium [Locator] serialized to
+ * JSON so it can be turned back into a Decoration and a jump target. Local-only
+ * (ABS has no highlights API); no index (the per-book table is tiny). Added in
+ * schema v2 via MIGRATION_1_2.
+ */
+@Entity(tableName = "highlights")
+data class HighlightEntity(
+    @PrimaryKey val id: String,
+    val serverId: String,
+    val libraryItemId: String,
+    val locatorJson: String,
+    val text: String,
+    val createdAt: Long,
+)

@@ -13,9 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.designsystem.ScreenHeader
 import no.bellaybestia.audex.domain.model.Work
 
 private fun Work.isFinished(): Boolean =
@@ -39,18 +39,10 @@ fun SeriesDetailScreen(
     val finishedCount = works.count { it.isFinished() }
 
     Column(modifier.fillMaxSize()) {
-        Text(
-            text = seriesName ?: viewModel.seriesName ?: "Series",
-            style = MaterialTheme.typography.headlineSmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        )
-        Text(
-            text = "$finishedCount of ${works.size} finished",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        ScreenHeader(
+            title = seriesName ?: viewModel.seriesName ?: "Series",
+            subtitle = "$finishedCount of ${works.size} finished",
+            compact = true,
         )
         HorizontalDivider(
             thickness = 1.dp,

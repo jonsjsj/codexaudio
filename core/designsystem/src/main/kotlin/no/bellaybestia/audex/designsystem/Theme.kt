@@ -2,67 +2,71 @@ package no.bellaybestia.audex.designsystem
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * The Codex look: flat, dark-first, hairline dividers, no pill/bubble shapes.
- * Base palette lifted verbatim from Codex's own CSS tokens (its `:root`):
- *   --bg #0B0B0C  --text #F2F2F3  --text-muted #9A9A9E  --text-faint #636367
- * Surfaces (#141416 card / #2A2A2C raised / #3A3A3D border) are Codex's panel
- * scale. Accents are Codex's palette THEMES (mono / blue / gold) with their
- * matching contrast colors. See docs/02-codex-learnings.md.
+ * The Audex look ("Evolved", from the redesign): a dark-first, flat, hairline
+ * design whose ENTIRE palette is derived from the current book's cover — see
+ * [AudexPalette]. Accent is no longer a fixed choice by default; it comes from
+ * what you're reading, and re-tints the whole app.
+ *
+ * The fixed accents stay as manual overrides for anyone who wants the app to
+ * hold still (Settings → Appearance → Accent).
  */
-private val Bg = Color(0xFF0B0B0C)
-private val Card = Color(0xFF141416)
-private val Raised = Color(0xFF2A2A2C)
-private val Border = Color(0xFF3A3A3D)
-private val TextPrimary = Color(0xFFF2F2F3)
-private val TextMuted = Color(0xFF9A9A9E)
-
-/** Accent themes, mirroring Codex's `--accent` palette variants. */
-enum class AudexAccent(val accent: Color, val onAccent: Color) {
-    MONO(Color(0xFFEDEDED), Color(0xFF0B0B0C)),
-    BLUE(Color(0xFF5A9FE6), Color(0xFF0B0D12)),
-    GOLD(Color(0xFFDCA85F), Color(0xFF15130F)),
+enum class AudexAccent(val hue: Float?, val accent: Color, val onAccent: Color) {
+    /** Derive everything from the cover — the default. */
+    COVER(null, Color(0xFF82AEDA), Color(0xFF0C1219)),
+    MONO(null, Color(0xFFEDEDED), Color(0xFF0B0B0C)),
+    BLUE(214f, Color(0xFF5A9FE6), Color(0xFF0B0D12)),
+    GOLD(38f, Color(0xFFDCA85F), Color(0xFF15130F)),
+    CYAN(193f, Color(0xFF4DD0FF), Color(0xFF04121A)),
 }
 
-private fun darkColors(accent: AudexAccent) = darkColorScheme(
-    primary = accent.accent,
-    onPrimary = accent.onAccent,
-    secondary = accent.accent,
-    onSecondary = accent.onAccent,
-    background = Bg,
-    onBackground = TextPrimary,
-    surface = Card,
-    onSurface = TextPrimary,
-    surfaceVariant = Raised,
-    onSurfaceVariant = TextMuted,
-    outline = Border,
-    outlineVariant = Border,
-)
-
-// Light mode keeps the same accent hues (darkened contrast handled by onPrimary)
-// against a plain paper background; Codex itself is dark-only, so this is a
-// faithful inversion rather than a separate design.
-private fun lightColors(accent: AudexAccent) = lightColorScheme(
-    primary = if (accent == AudexAccent.MONO) Color(0xFF1A1A1C) else accent.accent,
-    onPrimary = if (accent == AudexAccent.MONO) Color(0xFFF7F7F8) else accent.onAccent,
-    secondary = if (accent == AudexAccent.MONO) Color(0xFF1A1A1C) else accent.accent,
-    onSecondary = if (accent == AudexAccent.MONO) Color(0xFFF7F7F8) else accent.onAccent,
-    outlineVariant = Color(0xFFDBDBDE),
-)
-
+/**
+ * [coverUrl] drives the palette when [accent] is COVER; the fixed accents pin
+ * the hue instead (MONO stays neutral — a greyscale palette).
+ */
 @Composable
 fun AudexTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    accent: AudexAccent = AudexAccent.BLUE,
+    accent: AudexAccent = AudexAccent.COVER,
+    coverUrl: String? = null,
     content: @Composable () -> Unit,
 ) {
+    val palette = when (accent) {
+        AudexAccent.COVER -> rememberCoverPalette(coverUrl = coverUrl, dark = darkTheme)
+        AudexAccent.MONO -> monoPalette(darkTheme)
+        else -> audexPalette(accent.hue ?: STEEL_HUE, darkTheme)
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) darkColors(accent) else lightColors(accent),
+        colorScheme = palette.toColorScheme(darkTheme),
+        typography = AudexTypography,
         content = content,
+    )
+}
+
+/** Mono: the same token structure with the colour taken out. */
+private fun monoPalette(dark: Boolean): AudexPalette = if (dark) {
+    AudexPalette(
+        bg = Color(0xFF0B0B0C),
+        sf = Color(0xFF141416),
+        sf2 = Color(0xFF2A2A2C),
+        line = Color(0xFF3A3A3D),
+        acc = Color(0xFFEDEDED),
+        onAcc = Color(0xFF0B0B0C),
+        tx = Color(0xFFF2F2F3),
+        mut = Color(0xFF9A9A9E),
+    )
+} else {
+    AudexPalette(
+        bg = Color(0xFFF7F7F8),
+        sf = Color.White,
+        sf2 = Color(0xFFECECEE),
+        line = Color(0xFFDBDBDE),
+        acc = Color(0xFF1A1A1C),
+        onAcc = Color(0xFFF7F7F8),
+        tx = Color(0xFF17171A),
+        mut = Color(0xFF6D6D72),
     )
 }

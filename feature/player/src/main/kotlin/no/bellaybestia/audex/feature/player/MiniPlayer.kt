@@ -62,7 +62,10 @@ fun MiniPlayer(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                state.author?.let {
+                // Where you ARE beats who wrote it (mockup 2a shows the chapter
+                // under the title); fall back to the author when a book has no
+                // chapter markers.
+                (state.currentChapter?.title ?: state.author)?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.labelSmall,

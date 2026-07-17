@@ -35,6 +35,35 @@ data class AbsItemsPage(
     val limit: Int = 0,
 )
 
+/** GET /api/libraries/{id}/series — each entry's books carry the populated
+ * "Name #seq" seriesName even when the item's own metadata series is empty. */
+@Serializable
+data class AbsSeriesPage(
+    val results: List<AbsSeriesEntry> = emptyList(),
+    val total: Int = 0,
+    val limit: Int = 0,
+)
+
+@Serializable
+data class AbsSeriesEntry(
+    val id: String = "",
+    val name: String = "",
+    val books: List<AbsLibraryItem> = emptyList(),
+)
+
+/** GET /api/me/listening-stats: seconds all-time + today, a per-date map, and a
+ * per-item map (its keys are the item ids that have any listening). */
+@Serializable
+data class AbsListeningStats(
+    val totalTime: Double = 0.0,
+    val today: Double = 0.0,
+    val days: Map<String, Double> = emptyMap(),
+    val items: Map<String, AbsStatItem> = emptyMap(),
+)
+
+@Serializable
+data class AbsStatItem(val id: String = "", val timeListening: Double = 0.0)
+
 @Serializable
 data class AbsLibraryItem(
     val id: String,
@@ -156,6 +185,9 @@ data class AbsBookmarkRequest(val time: Long, val title: String)
 
 @Serializable
 data class AbsMediaProgress(
+    /** The media-progress RECORD id (distinct from libraryItemId) — the key the
+     * DELETE endpoint needs to discard progress. Absent in some projections. */
+    val id: String? = null,
     val libraryItemId: String,
     val progress: Double = 0.0,
     val currentTime: Double = 0.0,
@@ -281,6 +313,19 @@ data class AbsEbookProgressBody(
     val ebookLocation: String? = null,
     val ebookProgress: Double? = null,
     val isFinished: Boolean? = null,
+)
+
+/**
+ * Reset a book's media progress to the start (the "discard progress" action).
+ * All fields zeroed so both the audio (currentTime/progress) and ebook
+ * (ebookProgress) positions clear and the item is no longer marked finished.
+ */
+@Serializable
+data class AbsProgressResetBody(
+    val currentTime: Double = 0.0,
+    val progress: Double = 0.0,
+    val ebookProgress: Double = 0.0,
+    val isFinished: Boolean = false,
 )
 
 /**

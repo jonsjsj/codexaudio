@@ -45,97 +45,22 @@ class MapEntry:
     c1: int
 
 
-def _split_to_wavs(path: str, workdir, chunk_s: int = 1800):
-    """Stream-decode [path] into 16kHz mono s16 WAV chunks of [chunk_s] seconds.
-
-    faster-whisper decodes a file into one float32 array before transcribing —
-    a 12h m4b is ~3GB, which OOM-crash-looped the whole box (each attempt died,
-    the batch re-queued, forever). Chunking bounds peak memory to ~100MB per
-    chunk regardless of book length. Yields (wav_path, start_offset_seconds).
-    """
-    import av
-    import wave
-    from pathlib import Path
-
-    chunks: list[tuple[str, float]] = []
-    container = av.open(path)
-    stream = container.streams.audio[0]
-    resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
-    idx = 0
-    written = 0  # samples in the current chunk
-    total = 0    # samples overall
-    wav = None
-
-    def open_chunk():
-        nonlocal wav, idx
-        p = Path(workdir) / f"chunk_{idx:04d}.wav"
-        w = wave.open(str(p), "wb")
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(16000)
-        chunks.append((str(p), total / 16000.0))
-        idx += 1
-        wav = w
-
-    def write_frames(frames):
-        nonlocal written, total, wav
-        for rf in frames:
-            if wav is None:
-                open_chunk()
-            data = rf.to_ndarray().tobytes()
-            wav.writeframes(data)
-            written += rf.samples
-            total += rf.samples
-            if written >= chunk_s * 16000:
-                wav.close()
-                wav = None
-                written = 0
-
-    for frame in container.decode(stream):
-        write_frames(resampler.resample(frame))
-    write_frames(resampler.resample(None))  # flush the resampler
-    if wav is not None:
-        wav.close()
-    container.close()
-    return chunks
-
-
 def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str):
     """All audio files in order → one global-timeline list of AsrSegments."""
-    import os
-    import shutil
-    import tempfile
-
     from faster_whisper import WhisperModel
 
     model = WhisperModel(model_name, device=device, compute_type=compute_type)
     out: list[AsrSegment] = []
     offset = 0.0
     for path in audio_paths:
-        workdir = tempfile.mkdtemp(prefix="chunks_", dir=os.environ.get("TMPDIR"))
-        try:
-            file_end = 0.0
-            for wav_path, chunk_off in _split_to_wavs(path, workdir):
-                segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=5)
-                for seg in segments:
-                    text = seg.text.strip()
-                    if text:
-                        out.append(
-                            AsrSegment(
-                                start=offset + chunk_off + seg.start,
-                                end=offset + chunk_off + seg.end,
-                                text=text,
-                            )
-                        )
-                file_end = chunk_off + float(info.duration or 0.0)
-                # Chunks are transcribed one at a time; free each as we go so a
-                # long book never accumulates temp WAVs.
-                os.remove(wav_path)
-                log.info("chunk done at %.0fs (%d segments so far)", offset + file_end, len(out))
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
-        offset += file_end
-        log.info("transcribed %s (+%.0fs, total %.0fs, %d segments)", path, file_end, offset, len(out))
+        segments, info = model.transcribe(path, vad_filter=True, beam_size=5)
+        duration = float(info.duration or 0.0)
+        for seg in segments:
+            text = seg.text.strip()
+            if text:
+                out.append(AsrSegment(start=offset + seg.start, end=offset + seg.end, text=text))
+        offset += duration
+        log.info("transcribed %s (+%.0fs, total %.0fs, %d segments)", path, duration, offset, len(out))
     return out, offset
 
 

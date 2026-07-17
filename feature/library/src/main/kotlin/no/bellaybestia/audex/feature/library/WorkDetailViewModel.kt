@@ -4,10 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.DownloadFormat
@@ -20,8 +24,20 @@ import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
+import no.bellaybestia.audex.domain.repository.BookExtras
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import javax.inject.Inject
+
+/**
+ * The offer behind "Continue in other format": [edition] is the one to switch
+ * TO, at [fraction] (the position you're further along at). [toAudio] says which
+ * way — true means start the audiobook, false means open the reader.
+ */
+data class OtherFormat(
+    val toAudio: Boolean,
+    val fraction: Double,
+    val edition: Edition,
+)
 
 @HiltViewModel
 class WorkDetailViewModel @Inject constructor(
@@ -45,9 +61,28 @@ class WorkDetailViewModel @Inject constructor(
     val work: StateFlow<Work?> = catalogRepository.work(workId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Full description, fetched live once an edition is known (null offline). */
-    private val _description = MutableStateFlow<String?>(null)
-    val description: StateFlow<String?> = _description.asStateFlow()
+    /** The next book in this work's series (by position), for continue-series
+     * navigation. Null when the work isn't in a series or is the last book. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val nextInSeries: StateFlow<Work?> = work.flatMapLatest { w ->
+        val seriesId = w?.seriesId
+        if (seriesId == null) {
+            flowOf(null)
+        } else {
+            catalogRepository.worksForSeries(seriesId).map { siblings ->
+                val ordered = siblings.sortedBy { it.seriesPosition ?: Double.MAX_VALUE }
+                val idx = ordered.indexOfFirst { it.id == w.id }
+                ordered.getOrNull(idx + 1).takeIf { idx >= 0 }
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Description/narrator/ASIN, fetched live once an edition is known (null offline). */
+    private val _extras = MutableStateFlow<BookExtras?>(null)
+    val extras: StateFlow<BookExtras?> = _extras.asStateFlow()
+    val description: StateFlow<String?> = _extras
+        .map { it?.description }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * Furthest audio position ever reached (seconds), from ABS session history —
@@ -79,12 +114,16 @@ class WorkDetailViewModel @Inject constructor(
                     else -> alignmentRepository.status(audio.serverId, audio.libraryItemId)
                 }
                 // One live fetch is enough; ebook items usually carry the
-                // richer metadata, so prefer that edition.
-                if (_description.value == null) {
+                // richer metadata, so prefer that edition. Narrator, though, only
+                // exists on the audiobook — fall back to it when the ebook has none.
+                if (_extras.value == null) {
                     val source = ebook ?: audio ?: eds.firstOrNull()
                     if (source != null) {
-                        _description.value =
-                            catalogRepository.description(source.serverId, source.libraryItemId)
+                        val primary = catalogRepository.bookExtras(source.serverId, source.libraryItemId)
+                        val narrator = primary?.narrator
+                            ?: audio?.takeIf { it !== source }
+                                ?.let { catalogRepository.bookExtras(it.serverId, it.libraryItemId)?.narrator }
+                        _extras.value = (primary ?: BookExtras()).copy(narrator = narrator)
                     }
                 }
                 if (_furthestS.value == null && audio != null) {
@@ -95,13 +134,14 @@ class WorkDetailViewModel @Inject constructor(
         }
     }
 
-    /** Resume the audio edition at the furthest position ever reached. */
+    /** Resume the audio edition at the furthest position ever reached. Passing
+     * the target INTO play (not a follow-up seek) makes it actually stick —
+     * a seek after play raced the initial resume and reverted to the saved time. */
     fun jumpToFurthest() {
         val audio = editions.value.firstOrNull { it.format == Format.AUDIO } ?: return
         val target = _furthestS.value ?: return
         viewModelScope.launch {
-            playbackController.play(audio.serverId, audio.libraryItemId, title, author)
-            playbackController.seekTo((target * 1000).toLong())
+            playbackController.play(audio.serverId, audio.libraryItemId, title, author, resumeAtS = target)
         }
     }
 
@@ -123,6 +163,55 @@ class WorkDetailViewModel @Inject constructor(
     fun play(edition: Edition) {
         viewModelScope.launch {
             playbackController.play(edition.serverId, edition.libraryItemId, title, author)
+        }
+    }
+
+    /**
+     * "Continue in other format" (mockup 2c): the position you're furthest along
+     * in, carried across formats. Only offered on dual-format books where the two
+     * formats have actually drifted apart — otherwise it's a no-op button.
+     *
+     * Which way it goes is decided by where you're further: ahead in the audio →
+     * open the ebook there; ahead in the ebook → start the audio there.
+     */
+    val otherFormat: StateFlow<OtherFormat?> = editions
+        .map { eds ->
+            val audio = eds.firstOrNull { it.format == Format.AUDIO } ?: return@map null
+            val ebook = eds.firstOrNull { it.format == Format.EBOOK } ?: return@map null
+            val a = audio.fraction
+            val e = ebook.fraction
+            // Under a page or two apart isn't worth switching for.
+            if (kotlin.math.abs(a - e) < 0.01) return@map null
+            if (a > e) OtherFormat(toAudio = false, fraction = a, edition = ebook)
+            else OtherFormat(toAudio = true, fraction = e, edition = audio)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Start the audio edition at the ebook's position (the audio→ebook direction
+     * is handled by the screen, which opens the reader). */
+    fun continueInAudio(target: OtherFormat) {
+        val duration = target.edition.durationS ?: return
+        viewModelScope.launch {
+            playbackController.play(
+                target.edition.serverId,
+                target.edition.libraryItemId,
+                title,
+                author,
+                resumeAtS = target.fraction * duration,
+            )
+        }
+    }
+
+    /**
+     * Discard this book's progress across all its editions (audio + ebook) —
+     * resets the position on the server and locally, so the book returns to
+     * "not started". The furthest-listened bookmark (ABS session history) is
+     * unaffected, so a jump-back is still possible if it was a mistake.
+     */
+    fun discardProgress() {
+        val eds = editions.value
+        viewModelScope.launch {
+            eds.forEach { catalogRepository.discardProgress(it.serverId, it.libraryItemId) }
         }
     }
 

@@ -71,6 +71,21 @@ interface AbsApi {
         @Query("sort") sort: String = "media.metadata.title",
     ): AbsItemsPage
 
+    // Server-side series index. Some items carry an EMPTY media.metadata.series
+    // even though ABS groups them into a Series here (verified on 2.35.1: the
+    // Undying Mercenaries books). The books returned here DO carry the populated
+    // "Name #seq" seriesName, so the sync uses this to fill the gaps.
+    @GET("api/libraries/{id}/series")
+    suspend fun librarySeries(
+        @Path("id") libraryId: String,
+        @Query("limit") limit: Int = 100,
+        @Query("page") page: Int = 0,
+    ): AbsSeriesPage
+
+    // Server-side listening stats: all-time total, today, per-day map, per-item.
+    @GET("api/me/listening-stats")
+    suspend fun listeningStats(): AbsListeningStats
+
     @GET("api/items/{id}")
     suspend fun item(
         @Path("id") itemId: String,
@@ -121,5 +136,26 @@ interface AbsApi {
     suspend fun patchEbookProgress(
         @Path("libraryItemId") libraryItemId: String,
         @Body body: AbsEbookProgressBody,
+    ): Response<Unit>
+
+    /** The media-progress record for an item (carries the record `id`). */
+    @GET("api/me/progress/{libraryItemId}")
+    suspend fun getMediaProgress(
+        @Path("libraryItemId") libraryItemId: String,
+    ): AbsMediaProgress
+
+    /**
+     * Discard a book's progress: DELETE the media-progress record (verified
+     * against ABS 2.35.1). Notes on why this shape:
+     *  - the path takes the RECORD id, NOT the libraryItemId (deleting by
+     *    libraryItemId 404s) — look it up via [getMediaProgress] first;
+     *  - a PATCH to zero does NOT work: kotlinx omits default-valued fields so an
+     *    all-zero body serialises to `{}`, and even an explicit `progress:0` is
+     *    ignored by ABS, which keeps the old fraction and the item stays in
+     *    Continue. Deleting the record is the only thing that clears it.
+     */
+    @DELETE("api/me/progress/{progressId}")
+    suspend fun deleteProgress(
+        @Path("progressId") progressId: String,
     ): Response<Unit>
 }

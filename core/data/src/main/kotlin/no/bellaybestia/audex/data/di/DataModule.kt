@@ -11,10 +11,14 @@ import no.bellaybestia.audex.data.AlignmentRepositoryImpl
 import no.bellaybestia.audex.data.AuthRepositoryImpl
 import no.bellaybestia.audex.data.BookmarksRepositoryImpl
 import no.bellaybestia.audex.data.CatalogRepositoryImpl
+import no.bellaybestia.audex.data.CodexSyncImpl
 import no.bellaybestia.audex.data.DownloadsImpl
 import no.bellaybestia.audex.data.EbookProgressWriterImpl
+import no.bellaybestia.audex.data.HighlightsRepositoryImpl
 import no.bellaybestia.audex.data.ReaderSettingsStoreImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
+import no.bellaybestia.audex.data.PlaybackSettingsImpl
+import no.bellaybestia.audex.data.StatsRepositoryImpl
 import no.bellaybestia.audex.data.ReportsRepositoryImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl
 import no.bellaybestia.audex.data.StreamTokenResolverImpl
@@ -25,14 +29,20 @@ import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.EbookProgressWriter
+import no.bellaybestia.audex.domain.reader.HighlightsRepository
 import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
+import no.bellaybestia.audex.domain.settings.CodexSync
+import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import no.bellaybestia.audex.domain.settings.ReportsRepository
+import no.bellaybestia.audex.domain.settings.StatsRepository
 import no.bellaybestia.audex.domain.settings.ThemeSettings
 import no.bellaybestia.audex.domain.settings.UpdateSettings
+import no.bellaybestia.audex.data.MediaBrowseSourceImpl
 import no.bellaybestia.audex.network.abs.AbsClientFactory
+import no.bellaybestia.audex.player.MediaBrowseSource
 import no.bellaybestia.audex.player.StreamTokenResolver
 import javax.inject.Singleton
 
@@ -78,6 +88,21 @@ abstract class DataModule {
 
     @Binds
     abstract fun reportsRepository(impl: ReportsRepositoryImpl): ReportsRepository
+
+    @Binds
+    abstract fun mediaBrowseSource(impl: MediaBrowseSourceImpl): MediaBrowseSource
+
+    @Binds
+    abstract fun highlightsRepository(impl: HighlightsRepositoryImpl): HighlightsRepository
+
+    @Binds
+    abstract fun codexSync(impl: CodexSyncImpl): CodexSync
+
+    @Binds
+    abstract fun playbackSettings(impl: PlaybackSettingsImpl): PlaybackSettings
+
+    @Binds
+    abstract fun statsRepository(impl: StatsRepositoryImpl): StatsRepository
 
     companion object {
         @Provides

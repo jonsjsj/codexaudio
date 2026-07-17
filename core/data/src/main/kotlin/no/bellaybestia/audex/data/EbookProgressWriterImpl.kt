@@ -20,17 +20,21 @@ class EbookProgressWriterImpl @Inject constructor(
         serverId: String,
         libraryItemId: String,
         location: String,
+        absLocation: String?,
         progress: Double,
         isFinished: Boolean,
     ) {
         val now = System.currentTimeMillis()
-        // Queue the write for ABS, and update the local mirror immediately so the
-        // UI reflects the new position offline.
+        // The QUEUE (→ ABS) carries the ABS-compatible epubcfi (or blank = %-only, which
+        // the uploader turns into a PATCH with no ebookLocation so ABS keeps its existing
+        // page pointer). The MIRROR (→ our reader restore) keeps the exact Readium locator
+        // JSON. Two formats, two stores — ABS + the official app work normally while our
+        // reader stays exact.
         queueDao.upsert(
             PendingEbookProgressEntity(
                 serverId = serverId,
                 libraryItemId = libraryItemId,
-                ebookLocation = location,
+                ebookLocation = absLocation.orEmpty(),
                 ebookProgress = progress,
                 updatedAt = now,
             )

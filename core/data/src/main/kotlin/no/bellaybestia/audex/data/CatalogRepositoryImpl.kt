@@ -17,6 +17,7 @@ import no.bellaybestia.audex.database.AuthorEntity
 import no.bellaybestia.audex.database.CatalogDao
 import no.bellaybestia.audex.database.EditionEntity
 import no.bellaybestia.audex.database.OverrideDao
+import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.RemoteItemDao
 import no.bellaybestia.audex.database.RemoteItemEntity
 import no.bellaybestia.audex.database.SeriesEntity
@@ -29,8 +30,10 @@ import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.model.absCoverUrl
+import no.bellaybestia.audex.domain.repository.BookExtras
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.network.abs.AbsClientFactory
+import no.bellaybestia.audex.network.abs.AbsProgressResetBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,6 +48,7 @@ class CatalogRepositoryImpl @Inject constructor(
     private val remoteItemDao: RemoteItemDao,
     private val overrideDao: OverrideDao,
     private val serverDao: ServerDao,
+    private val progressDao: ProgressDao,
     private val clientFactory: AbsClientFactory,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
@@ -69,14 +73,22 @@ class CatalogRepositoryImpl @Inject constructor(
     override fun work(workId: String): Flow<Work?> =
         works().map { list -> list.firstOrNull { it.id == workId } }
 
-    override suspend fun description(serverId: String, libraryItemId: String): String? =
+    override suspend fun bookExtras(serverId: String, libraryItemId: String): BookExtras? =
         withContext(dispatcher) {
             val server = serverDao.enabled().firstOrNull { it.serverId == serverId }
                 ?: return@withContext null
             runCatching {
-                clientFactory.api(serverId, server.baseUrl)
-                    .item(libraryItemId).media.metadata.description
-            }.getOrNull()?.let(::cleanHtml)?.takeIf { it.isNotBlank() }
+                val md = clientFactory.api(serverId, server.baseUrl)
+                    .item(libraryItemId).media.metadata
+                BookExtras(
+                    description = md.description?.let(::cleanHtml)?.takeIf { it.isNotBlank() },
+                    // Expanded detail gives the array; the minified projection only
+                    // ever has the comma-joined string — take whichever is there.
+                    narrator = md.narrators.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                        ?: md.narratorName?.takeIf { it.isNotBlank() },
+                    asin = md.asin?.takeIf { it.isNotBlank() },
+                )
+            }.getOrNull()
         }
 
     override suspend fun furthestPositionS(serverId: String, libraryItemId: String): Double? =
@@ -88,6 +100,38 @@ class CatalogRepositoryImpl @Inject constructor(
                     .itemListeningSessions(libraryItemId)
                     .sessions.maxOfOrNull { it.currentTime }
             }.getOrNull()
+        }
+
+    override suspend fun discardProgress(serverId: String, libraryItemId: String) =
+        withContext(dispatcher) {
+            // Delete the progress record on the server (best-effort — offline
+            // still clears locally). Must look up the record id first: DELETE is
+            // keyed on the media-progress record id, not the libraryItemId
+            // (deleting by libraryItemId 404s), and PATCH-to-zero is ignored.
+            serverDao.enabled().firstOrNull { it.serverId == serverId }?.let { server ->
+                runCatching {
+                    val api = clientFactory.api(serverId, server.baseUrl)
+                    val recordId = api.getMediaProgress(libraryItemId).id
+                    if (recordId != null) api.deleteProgress(recordId)
+                }
+            }
+            // Zero the local row so the detail page, Home, and library all reflect
+            // the reset immediately (editions read their fraction from this row).
+            progressDao.get(serverId, libraryItemId)?.let { row ->
+                progressDao.upsertAll(
+                    listOf(
+                        row.copy(
+                            pct = 0.0,
+                            currentTimeS = 0.0,
+                            ebookLocation = null,
+                            ebookProgress = 0.0,
+                            isFinished = false,
+                            lastUpdate = System.currentTimeMillis(),
+                        ),
+                    ),
+                )
+            }
+            Unit
         }
 
     /** ABS descriptions are HTML-ish; strip tags, decode common entities (Codex rule). */
@@ -183,6 +227,7 @@ private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
         ?.takeIf { it.size == 2 }
         ?.let { (serverId, itemId) -> baseUrls[serverId]?.let { absCoverUrl(it, itemId) } },
     updatedAt = updatedAtRemote,
+    listenedAt = progressUpdatedAt,
 )
 
 internal fun RemoteItemEntity.toRemoteBook(json: Json): RemoteBook {

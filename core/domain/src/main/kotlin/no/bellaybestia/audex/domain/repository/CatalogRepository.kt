@@ -6,6 +6,16 @@ import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 
+/**
+ * The bits of a book that only exist on ABS's expanded item endpoint — shown on
+ * the detail page (narrator and ASIN come straight from the mockup's spec).
+ */
+data class BookExtras(
+    val description: String? = null,
+    val narrator: String? = null,
+    val asin: String? = null,
+)
+
 /** Read side of the canonical graph — everything observable and offline-capable. */
 interface CatalogRepository {
     fun authors(): Flow<List<Author>>
@@ -22,11 +32,11 @@ interface CatalogRepository {
     fun work(workId: String): Flow<Work?>
 
     /**
-     * The work's description, fetched live from the server (ABS only returns it
-     * on the expanded item endpoint, so it isn't in the synced graph). Null
-     * offline or when the book has none. HTML is stripped to plain text.
+     * Detail-only metadata, fetched live from the server in ONE call — ABS
+     * returns these solely on the expanded item endpoint, so they aren't in the
+     * synced graph. Null offline. Description has its HTML stripped to plain text.
      */
-    suspend fun description(serverId: String, libraryItemId: String): String?
+    suspend fun bookExtras(serverId: String, libraryItemId: String): BookExtras?
 
     /**
      * The furthest position (seconds) ever reached in this audio item, from ABS
@@ -34,6 +44,14 @@ interface CatalogRepository {
      * offline or with no sessions.
      */
     suspend fun furthestPositionS(serverId: String, libraryItemId: String): Double?
+
+    /**
+     * Discard this item's progress: reset it to the start on the server
+     * (PATCH /api/me/progress) and clear the local position so every surface
+     * reflects it immediately. Best-effort against the server — the local reset
+     * still applies offline (and re-syncs when the server is reachable).
+     */
+    suspend fun discardProgress(serverId: String, libraryItemId: String)
 
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()

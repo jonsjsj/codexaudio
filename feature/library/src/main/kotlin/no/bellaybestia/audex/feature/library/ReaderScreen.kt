@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.reader.ReaderPrefs
 import no.bellaybestia.audex.domain.reader.ReaderTheme
 import no.bellaybestia.audex.domain.reader.SyncMap
+import org.json.JSONObject
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -60,7 +62,10 @@ import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
 
 private const val READER_FRAGMENT_TAG = "audex_epub_reader"
+/** Min horizontal travel (px) to count as a page-turn swipe, not a tap wobble. */
+private const val SWIPE_THRESHOLD = 60f
 private const val MENU_LOOK_UP = 0x1E5D // arbitrary, unique within the selection menu
+private const val MENU_HIGHLIGHT = 0x1E5E
 
 /** Hand a selected word to a dictionary/translate app, else a web define search. */
 private fun lookUp(context: android.content.Context, word: String) {
@@ -132,24 +137,39 @@ private fun EpubReader(
     // "define" search). Purely additive — native Copy/Share stay put. Reads
     // the fragment by tag so it never captures a stale navigator reference.
     val scope = rememberCoroutineScope()
-    val lookUpCallback = remember(activity) {
+    val lookUpCallback = remember(activity, viewModel) {
         object : android.view.ActionMode.Callback {
             override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
-                menu.add(android.view.Menu.NONE, MENU_LOOK_UP, 0, "Look up")
+                menu.add(android.view.Menu.NONE, MENU_HIGHLIGHT, 0, "Highlight")
+                menu.add(android.view.Menu.NONE, MENU_LOOK_UP, 1, "Look up")
                 return true
             }
 
             override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
 
             override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
-                if (item.itemId != MENU_LOOK_UP) return false
-                scope.launch {
-                    val nav = activity.supportFragmentManager
-                        .findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
-                    val word = runCatching { nav?.currentSelection()?.locator?.text?.highlight }
-                        .getOrNull()?.trim()
-                    nav?.clearSelection()
-                    if (!word.isNullOrBlank()) lookUp(activity, word)
+                when (item.itemId) {
+                    MENU_LOOK_UP -> scope.launch {
+                        val nav = activity.supportFragmentManager
+                            .findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                        val word = runCatching { nav?.currentSelection()?.locator?.text?.highlight }
+                            .getOrNull()?.trim()
+                        nav?.clearSelection()
+                        if (!word.isNullOrBlank()) lookUp(activity, word)
+                    }
+                    MENU_HIGHLIGHT -> scope.launch {
+                        val nav = activity.supportFragmentManager
+                            .findFragmentByTag(READER_FRAGMENT_TAG) as? EpubNavigatorFragment
+                        val locator = runCatching { nav?.currentSelection()?.locator }.getOrNull()
+                        nav?.clearSelection()
+                        if (locator != null) {
+                            viewModel.addHighlight(
+                                locatorJson = locator.toJSON().toString(),
+                                text = locator.text.highlight?.trim().orEmpty(),
+                            )
+                        }
+                    }
+                    else -> return false
                 }
                 mode.finish()
                 return true
@@ -164,22 +184,35 @@ private fun EpubReader(
     val currentProgression by viewModel.currentProgression.collectAsState()
     val syncMap by viewModel.syncMap.collectAsState()
     val prefs by viewModel.readerPrefs.collectAsState()
+    val highlights by viewModel.highlights.collectAsState()
+    val progressUnit by viewModel.progressUnit.collectAsState()
     var showAppearance by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var showHighlights by remember { mutableStateOf(false) }
+    var showGoTo by remember { mutableStateOf(false) }
+    // Immersive mode: tapping the page hides all chrome for text-only reading.
+    var immersive by remember { mutableStateOf(false) }
+    // Current page (1-based) / total, for the indicator when chrome is showing.
+    var pageInfo by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     Column(modifier.fillMaxSize()) {
-        AppearanceBar(
-            prefs = prefs,
-            expanded = showAppearance,
-            onToggle = { showAppearance = !showAppearance },
-            onFontDelta = viewModel::adjustFontSize,
-            onCycleTheme = viewModel::cycleTheme,
-            onToc = { showToc = !showToc },
-            tocOpen = showToc,
-        )
+        if (!immersive) {
+            AppearanceBar(
+                prefs = prefs,
+                expanded = showAppearance,
+                onToggle = { showAppearance = !showAppearance },
+                onFontDelta = viewModel::adjustFontSize,
+                onCycleTheme = viewModel::cycleTheme,
+                onToc = { showToc = !showToc; if (showToc) showHighlights = false },
+                tocOpen = showToc,
+                onHighlights = { showHighlights = !showHighlights; if (showHighlights) showToc = false },
+                highlightsOpen = showHighlights,
+                onGoTo = { showGoTo = true },
+            )
+        }
         // In-reader table of contents (flat list, tap to jump) — the Kindle
         // affordance the reader was missing.
-        if (showToc) {
+        if (showToc && !immersive) {
             val toc = remember(ready.publication) {
                 flattenToc(ready.publication.tableOfContents)
             }
@@ -224,10 +257,57 @@ private fun EpubReader(
                 )
             }
         }
+        // Highlights panel: saved passages, newest first — tap to jump, or delete.
+        if (showHighlights && !immersive) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                if (highlights.isEmpty()) {
+                    Text(
+                        text = "No highlights yet — select text in the book and tap Highlight.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+                highlights.forEach { mark ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = mark.text.ifBlank { "(highlight)" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    runCatching { Locator.fromJSON(JSONObject(mark.locatorJson)) }
+                                        .getOrNull()?.let { navigator?.go(it) }
+                                    showHighlights = false
+                                },
+                        )
+                        Text(
+                            text = "Delete",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { viewModel.removeHighlight(mark.id) },
+                        )
+                    }
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
         // Read-along bar (docs/09): only when this work's audio edition is loaded.
         // With a word-sync map (docs/10) the audio position maps through real
         // alignment anchors; otherwise it falls back to the proportional guess.
-        companion?.let { audio ->
+        if (!immersive) companion?.let { audio ->
             val audioProgression = syncMap?.progressionAt(audio.positionS) ?: audio.fraction
             ReadAlongBar(
                 audio = audio,
@@ -244,7 +324,7 @@ private fun EpubReader(
         }
         // Discoverability: a sync map exists but the audiobook isn't loaded —
         // tell the reader how to activate read-along instead of hiding it.
-        if (companion == null && syncMap != null) {
+        if (!immersive && companion == null && syncMap != null) {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
                 Text(
                     text = "Word sync ready — start the audiobook (Play on the book page) " +
@@ -257,19 +337,24 @@ private fun EpubReader(
             }
         }
 
-        Box(Modifier.fillMaxSize()) {
-            // Turn one page-position forward/back via navigator.go(locator).
-            // The WebView's own swipe paging is unreliable: readium-css can
-            // leave a few px of sub-page overflow in a resource, and its JS
-            // then "handles" every swipe without moving OR handing over to the
-            // pager (runtime-verified: scrollRight()==true forever at 364px
-            // scrollWidth on a 360px viewport). Position locators cross
-            // resource boundaries through scrollToLocator instead.
+        // weight(1f), NOT fillMaxSize: a fillMaxSize reader is measured first and
+        // eats all remaining height, starving the weight(1f, fill=false) Contents
+        // and Highlights panels above it to zero height (they toggled but never
+        // showed). As the flexible child it yields the panel its share instead.
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            // Turn exactly one RENDERED page via Readium's own paginator
+            // (goForward/goBackward). These reflow to the current font size and
+            // screen, advance one visible column, and cross chapter boundaries.
+            //
+            // The previous approach jumped between Readium "positions"
+            // (ready.positions) — but for a reflowable EPUB a position is ~1 KB
+            // of the source text, NOT a screen. Landing on the next position's
+            // start skipped whatever of the current chunk hadn't been shown yet,
+            // so every tap dropped a chunk of text ("missing information when
+            // going next page"). goForward has no such gap: it steps one page.
             fun turnPage(delta: Int) {
-                val current = navigator?.currentLocator?.value ?: return
-                val position = current.locations.position ?: return // 1-based
-                val target = ready.positions.getOrNull(position - 1 + delta) ?: return
-                navigator?.go(target)
+                val nav = navigator ?: return
+                if (delta > 0) nav.goForward(false) else nav.goBackward(false)
             }
 
             AndroidView(
@@ -365,16 +450,35 @@ private fun EpubReader(
                 },
             )
 
-            // Edge tap zones (left = back, right = forward), the reliable page
-            // turn. Center stays untouched for the WebView (links, selection).
-            Row(Modifier.fillMaxSize()) {
+            // Swipe left/right anywhere to turn pages (Kindle-style), on top of
+            // the edge-tap zones. Horizontal-drag is a separate pointerInput so
+            // it coexists with the taps: a tap fires on release-without-movement,
+            // a swipe fires on drag-end past the threshold.
+            val swipe = Modifier.pointerInput(Unit) {
+                var dx = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dx = 0f },
+                    onDragEnd = {
+                        if (dx <= -SWIPE_THRESHOLD) turnPage(1) // swipe left → next
+                        else if (dx >= SWIPE_THRESHOLD) turnPage(-1) // swipe right → back
+                    },
+                ) { change, amount -> dx += amount; change.consume() }
+            }
+            // Edge tap zones (left = back, right = forward); center tap toggles
+            // immersive mode (hide/show chrome) — the Kindle affordance.
+            Row(Modifier.fillMaxSize().then(swipe)) {
                 Box(
                     Modifier
                         .weight(0.22f)
                         .fillMaxHeight()
                         .pointerInput(Unit) { detectTapGestures { turnPage(-1) } },
                 )
-                Spacer(Modifier.weight(0.56f))
+                Box(
+                    Modifier
+                        .weight(0.56f)
+                        .fillMaxHeight()
+                        .pointerInput(Unit) { detectTapGestures { immersive = !immersive } },
+                )
                 Box(
                     Modifier
                         .weight(0.22f)
@@ -382,12 +486,49 @@ private fun EpubReader(
                         .pointerInput(Unit) { detectTapGestures { turnPage(1) } },
                 )
             }
+
+            // Page indicator (bottom-center) while chrome is showing.
+            if (!immersive) {
+                pageInfo?.let { (page, total) ->
+                    Text(
+                        text = "Page $page of $total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 6.dp),
+                    )
+                }
+            }
         }
     }
 
-    // Stream locator changes (page turns, chapter jumps) into the debounced sync.
+    // "Go to…" jump (item 7): percent, or an exact page number, per the
+    // Settings → Playback unit. Percent maps through the positions list; page is
+    // a direct 1-based index into it.
+    if (showGoTo) {
+        ReaderGoToDialog(
+            byPercent = progressUnit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT,
+            totalPages = ready.positions.size,
+            onDismiss = { showGoTo = false },
+            onGoPercent = { pct ->
+                locatorForFraction(ready.positions, pct)?.let { navigator?.go(it) }
+                showGoTo = false
+            },
+            onGoPage = { pageIndex ->
+                ready.positions.getOrNull(pageIndex)?.let { navigator?.go(it) }
+                showGoTo = false
+            },
+        )
+    }
+
+    // Stream locator changes (page turns, chapter jumps) into the debounced sync,
+    // and keep the page indicator (1-based position / total) current.
     LaunchedEffect(navigator) {
-        navigator?.currentLocator?.collect { viewModel.onLocatorChanged(it) }
+        navigator?.currentLocator?.collect {
+            viewModel.onLocatorChanged(it)
+            it.locations.position?.let { pos -> pageInfo = pos to ready.positions.size }
+        }
     }
 
     // Apply persisted appearance whenever it (or the navigator) changes.
@@ -432,6 +573,22 @@ private fun EpubReader(
         }
     }
 
+    // Jump to the narration the MOMENT Follow is switched on — even while the
+    // audio is paused. The tracker above only moves on playback ticks, so
+    // enabling Follow while not actively playing did nothing at all ("I press
+    // follow but it stays on the same page"). This one-shot takes you to where
+    // the audio is right now; the tracker then keeps you there once it plays.
+    LaunchedEffect(followAudio, navigator, syncMap != null) {
+        if (!followAudio) return@LaunchedEffect
+        val audio = companion ?: return@LaunchedEffect
+        val map = syncMap
+        val locator = map?.takeIf { it.chapters.isNotEmpty() }
+            ?.anchorAt(audio.positionS)
+            ?.let { narrationLocator(ready.publication, map, it) }
+            ?: locatorForFraction(ready.positions, map?.progressionAt(audio.positionS) ?: audio.fraction)
+        locator?.let { navigator?.go(it) }
+    }
+
     // Sentence highlighting (map v1.1): tint the anchor currently being
     // narrated. Keyed on the anchor's char offset so a highlight is applied
     // once per sentence, not per playback tick.
@@ -457,6 +614,22 @@ private fun EpubReader(
             emptyList()
         }
         decorable.applyDecorations(decorations, group = "readalong")
+    }
+
+    // Paint saved highlights (a separate decoration group from read-along, so
+    // the two never clobber each other). Re-applied whenever the set changes.
+    LaunchedEffect(highlights, navigator) {
+        val decorable = navigator as? DecorableNavigator ?: return@LaunchedEffect
+        val decorations = highlights.mapNotNull { mark ->
+            runCatching { Locator.fromJSON(JSONObject(mark.locatorJson)) }.getOrNull()?.let { loc ->
+                Decoration(
+                    id = mark.id,
+                    locator = loc,
+                    style = Decoration.Style.Highlight(tint = 0x59FFEB3B.toInt()),
+                )
+            }
+        }
+        decorable.applyDecorations(decorations, group = "highlights")
     }
 
     // Leaving the screen tears the fragment down; the VM keeps the publication.
@@ -486,6 +659,9 @@ private fun AppearanceBar(
     onCycleTheme: () -> Unit,
     onToc: () -> Unit = {},
     tocOpen: Boolean = false,
+    onHighlights: () -> Unit = {},
+    highlightsOpen: Boolean = false,
+    onGoTo: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
         Row(
@@ -502,6 +678,23 @@ private fun AppearanceBar(
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .clickable(onClick = onToc)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            Text(
+                text = "Go to",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onGoTo)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            Text(
+                text = "Highlights",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (highlightsOpen) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onHighlights)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
             Spacer(Modifier.weight(1f))
@@ -644,6 +837,62 @@ private fun flattenToc(links: List<Link>): List<Pair<Link, Int>> = buildList {
         add(link to 0)
         for (child in link.children) add(child to 1)
     }
+}
+
+/**
+ * "Go to…" dialog for the reader: a percentage (0–100) or a page number
+ * (1–[totalPages]), depending on the Settings unit. Reports the parsed target
+ * to [onGoPercent] (fraction 0..1) or [onGoPage] (0-based index).
+ */
+@Composable
+private fun ReaderGoToDialog(
+    byPercent: Boolean,
+    totalPages: Int,
+    onDismiss: () -> Unit,
+    onGoPercent: (Double) -> Unit,
+    onGoPage: (Int) -> Unit,
+) {
+    var field by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (byPercent) "Go to percent" else "Go to page") },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = field,
+                    onValueChange = { field = it },
+                    singleLine = true,
+                    placeholder = { Text(if (byPercent) "0–100" else "1–$totalPages") },
+                )
+                Text(
+                    text = if (byPercent) {
+                        "Jump to a percentage of the book."
+                    } else {
+                        "This book has $totalPages pages."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    if (byPercent) {
+                        field.trim().toDoubleOrNull()
+                            ?.let { onGoPercent((it / 100.0).coerceIn(0.0, 1.0)) }
+                    } else {
+                        field.trim().toIntOrNull()
+                            ?.let { onGoPage((it - 1).coerceIn(0, (totalPages - 1).coerceAtLeast(0))) }
+                    }
+                },
+            ) { Text("Go") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

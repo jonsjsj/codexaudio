@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares Audex as an Android Auto media app. The PlaybackService is a
+     MediaLibraryService (exposing MediaBrowserService), so Auto can browse the
+     library and play. Phone-projected Auto only; no Automotive OS build yet. -->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

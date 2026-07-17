@@ -1,6 +1,8 @@
 package no.bellaybestia.audex.feature.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,8 +36,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.designsystem.FlatTabRow
+import no.bellaybestia.audex.designsystem.ScreenHeader
 import no.bellaybestia.audex.domain.model.ServerAccount
 import no.bellaybestia.audex.domain.settings.AccentChoice
+import no.bellaybestia.audex.domain.settings.HomeLook
+import no.bellaybestia.audex.domain.settings.ProgressUnit
 import no.bellaybestia.audex.domain.settings.ThemeMode
 import no.bellaybestia.audex.domain.settings.UpdateChannel
 
@@ -50,16 +57,34 @@ fun SettingsScreen(
     appVersion: String = "",
     onAbout: () -> Unit = {},
     onReport: () -> Unit = {},
+    onStats: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val servers by viewModel.servers.collectAsState()
     val alignUrl by viewModel.alignServiceUrl.collectAsState()
+    val codexUrl by viewModel.codexUrl.collectAsState()
+    val codexToken by viewModel.codexToken.collectAsState()
+    val codexEnabled by viewModel.codexEnabled.collectAsState()
+    val skipSilence by viewModel.skipSilence.collectAsState()
     val themePrefs by viewModel.themePrefs.collectAsState()
     val updateChannel by viewModel.updateChannel.collectAsState()
     val listState = rememberLazyListState()
 
+    // Tabs (item 8): the long settings list split into sections so each screen
+    // stays short. Servers folds in Codex sync (both are connections); Playback
+    // folds in Word sync (it's read-along playback); About gathers stats,
+    // updates, version + report.
+    val tabs = listOf("Servers", "Appearance", "Playback", "About")
+    var tab by rememberSaveable { mutableStateOf(0) }
+
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
-        item(key = "servers-header") { SectionHeader("Servers") }
+        item(key = "screen-title") { ScreenHeader(title = "Settings") }
+        item(key = "settings-tabs") {
+            FlatTabRow(tabs = tabs, selectedIndex = tab, onSelect = { tab = it })
+        }
+
+        // ---- SERVERS ----
+        if (tab == 0) {
         itemsIndexed(servers, key = { _, server -> server.serverId }) { index, server ->
             ServerRow(server, onRemove = { viewModel.removeServer(server.serverId) })
             if (index < servers.lastIndex) FlatDivider()
@@ -76,7 +101,51 @@ fun SettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             )
         }
-        item(key = "appearance-header") { SectionHeader("Appearance") }
+        item(key = "codex-header") { SectionHeader("Codex sync") }
+        item(key = "codex-fields") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Push progress to Codex",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (codexEnabled) "On" else "Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (codexEnabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { viewModel.setCodexEnabled(!codexEnabled) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+                CodexField(
+                    label = "Codex URL",
+                    placeholder = "https://codex.bellaybestia.no",
+                    value = codexUrl,
+                    onChange = viewModel::setCodexUrl,
+                )
+                CodexField(
+                    label = "API token",
+                    placeholder = "Codex → Settings → generate an API token",
+                    value = codexToken,
+                    onChange = viewModel::setCodexToken,
+                )
+                Text(
+                    text = "When you listen, Audex sends your position to Codex right away " +
+                        "(via its Audiobookshelf webhook) so it doesn't wait for Codex's " +
+                        "periodic sync. Create the token in Codex; blank or Off disables it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+        }
+
+        // ---- APPEARANCE ----
+        if (tab == 1) {
         item(key = "appearance-theme") {
             ChoiceRow(
                 label = "Theme",
@@ -85,46 +154,107 @@ fun SettingsScreen(
                 onSelect = { viewModel.setThemeMode(ThemeMode.entries[it]) },
             )
         }
+        item(key = "appearance-look") {
+            ChoiceRow(
+                label = "Look",
+                options = listOf("Nightfall", "Stacks"),
+                selectedIndex = themePrefs.look.ordinal,
+                onSelect = { viewModel.setLook(HomeLook.entries[it]) },
+            )
+        }
         item(key = "appearance-accent") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(text = "Accent", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = "Accent",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
+                    text = if (themePrefs.accent == AccentChoice.COVER) {
+                        "Colours follow the cover of the book you're on."
+                    } else {
+                        "Pick Cover to let each book colour the app."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
-                AccentChoice.entries.forEach { choice ->
-                    val selected = themePrefs.accent == choice
-                    val dot = when (choice) {
-                        AccentChoice.MONO -> Color(0xFFEDEDED)
-                        AccentChoice.BLUE -> Color(0xFF5A9FE6)
-                        AccentChoice.GOLD -> Color(0xFFDCA85F)
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable { viewModel.setAccent(choice) }
-                            .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(dot),
-                        )
-                        Text(
-                            text = choice.name.lowercase().replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 5.dp),
-                        )
+                Row(
+                    modifier = Modifier
+                        .padding(top = 10.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    AccentChoice.entries.forEach { choice ->
+                        val selected = themePrefs.accent == choice
+                        val dot = when (choice) {
+                            // The live derived accent — the swatch literally shows
+                            // the colour the current cover is tinting the app with.
+                            AccentChoice.COVER -> MaterialTheme.colorScheme.primary
+                            AccentChoice.MONO -> Color(0xFFEDEDED)
+                            AccentChoice.BLUE -> Color(0xFF5A9FE6)
+                            AccentChoice.GOLD -> Color(0xFFDCA85F)
+                            AccentChoice.CYAN -> Color(0xFF4DD0FF)
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { viewModel.setAccent(choice) }
+                                .padding(vertical = 4.dp),
+                        ) {
+                            Box(Modifier.size(14.dp).clip(CircleShape).background(dot))
+                            Text(
+                                text = choice.name.lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 5.dp),
+                            )
+                        }
                     }
                 }
+            }
+        }
+        }
+
+        // ---- PLAYBACK ----
+        if (tab == 2) {
+        item(key = "playback-skipsilence") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Skip silence",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (skipSilence) "On" else "Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (skipSilence) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { viewModel.setSkipSilence(!skipSilence) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+                Text(
+                    text = "Shortens long pauses in the narration so audiobooks play a little faster.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        item(key = "playback-gotounit") {
+            Column {
+                ChoiceRow(
+                    label = "Go to uses",
+                    options = listOf("Percent", "Time & pages"),
+                    selectedIndex = themePrefs.progressUnit.ordinal,
+                    onSelect = { viewModel.setProgressUnit(ProgressUnit.entries[it]) },
+                )
+                Text(
+                    text = "How the \"Go to…\" jump takes a target: a percentage, or the " +
+                        "audiobook's timestamp and the ebook's page number.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
         }
         item(key = "wordsync-header") { SectionHeader("Word sync") }
@@ -173,6 +303,28 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+        }
+
+        // ---- ABOUT ----
+        if (tab == 3) {
+        item(key = "stats-row") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onStats)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = "Your listening", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = "View",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            FlatDivider()
         }
         item(key = "updates-header") { SectionHeader("Updates") }
         item(key = "updates-channel") {
@@ -247,6 +399,41 @@ fun SettingsScreen(
                 )
             }
         }
+        }
+    }
+}
+
+/** Flat labelled text field (borderless, placeholder when empty) — Codex sync. */
+@Composable
+private fun CodexField(
+    label: String,
+    placeholder: String,
+    value: String,
+    onChange: (String) -> Unit,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 10.dp),
+    )
+    Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        if (value.isEmpty()) {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -327,14 +514,15 @@ private fun ServerRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (server.needsLogin) {
-            Text(
-                text = "needs login",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(start = 12.dp),
-            )
-        }
+        // Both states are named (mockup 2e), but only the actionable one is loud:
+        // "Connected" sits back in the muted tone, "Needs login" shouts in error.
+        Text(
+            text = if (server.needsLogin) "Needs login" else "Connected",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (server.needsLogin) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp),
+        )
         Text(
             text = if (armed) "Remove?" else "Remove",
             style = MaterialTheme.typography.labelLarge,

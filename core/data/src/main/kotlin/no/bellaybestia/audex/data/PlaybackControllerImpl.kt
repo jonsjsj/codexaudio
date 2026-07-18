@@ -10,6 +10,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -275,12 +276,22 @@ class PlaybackControllerImpl @Inject constructor(
     }
 
     override fun skipBackward() {
-        scope.launch(main) { seekOverall((overallPositionS() - 10).coerceAtLeast(0.0)) }
+        scope.launch(main) {
+            val s = currentSkipSeconds()
+            seekOverall((overallPositionS() - s).coerceAtLeast(0.0))
+        }
     }
 
     override fun skipForward() {
-        scope.launch(main) { seekOverall((overallPositionS() + 30).coerceAtMost(totalDurationS)) }
+        scope.launch(main) {
+            val s = currentSkipSeconds()
+            seekOverall((overallPositionS() + s).coerceAtMost(totalDurationS))
+        }
     }
+
+    /** The user's chosen skip amount (10 or 30 s), same for back and forward. */
+    private suspend fun currentSkipSeconds(): Int =
+        context.appSettingsDataStore.data.first()[intPreferencesKey("playback_skip_seconds")] ?: 30
 
     override fun setSpeed(speed: Float) {
         scope.launch(main) {

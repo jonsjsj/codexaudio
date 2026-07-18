@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,12 +80,12 @@ fun MiniPlayer(
                 }
             }
             // Skip controls right on the mini bar — so you can nudge back/forward
-            // without opening the full player. clickable(onClick) on the icons
-            // themselves keeps taps off the row's expand handler.
+            // without opening the full player. The icon reflects the chosen interval.
+            val skip by viewModel.skipSeconds.collectAsState()
             IconButton(onClick = viewModel::skipBackward) {
                 Icon(
-                    imageVector = Icons.Filled.Replay10,
-                    contentDescription = "Back 10 seconds",
+                    imageVector = if (skip == 10) Icons.Filled.Replay10 else Icons.Filled.Replay30,
+                    contentDescription = "Back $skip seconds",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -96,8 +98,8 @@ fun MiniPlayer(
             }
             IconButton(onClick = viewModel::skipForward) {
                 Icon(
-                    imageVector = Icons.Filled.Forward30,
-                    contentDescription = "Forward 30 seconds",
+                    imageVector = if (skip == 10) Icons.Filled.Forward10 else Icons.Filled.Forward30,
+                    contentDescription = "Forward $skip seconds",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -113,8 +115,13 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val skip by viewModel.skipSeconds.collectAsState()
             IconButton(onClick = viewModel::skipBackward) {
-                Icon(Icons.Filled.Replay10, contentDescription = "Back 10 seconds", modifier = Modifier.size(36.dp))
+                Icon(
+                    imageVector = if (skip == 10) Icons.Filled.Replay10 else Icons.Filled.Replay30,
+                    contentDescription = "Back $skip seconds",
+                    modifier = Modifier.size(36.dp),
+                )
             }
             IconButton(onClick = viewModel::togglePlayPause) {
                 Icon(
@@ -125,7 +132,11 @@ fun PlayerScreen(
                 )
             }
             IconButton(onClick = viewModel::skipForward) {
-                Icon(Icons.Filled.Forward30, contentDescription = "Forward 30 seconds", modifier = Modifier.size(36.dp))
+                Icon(
+                    imageVector = if (skip == 10) Icons.Filled.Forward10 else Icons.Filled.Forward30,
+                    contentDescription = "Forward $skip seconds",
+                    modifier = Modifier.size(36.dp),
+                )
             }
         }
 

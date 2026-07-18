@@ -240,6 +240,24 @@ fun SettingsScreen(
                 )
             }
         }
+        item(key = "playback-skipseconds") {
+            val skip by viewModel.skipSeconds.collectAsState()
+            Column {
+                ChoiceRow(
+                    label = "Skip",
+                    options = listOf("10s", "30s"),
+                    selectedIndex = if (skip == 10) 0 else 1,
+                    onSelect = { viewModel.setSkipSeconds(if (it == 0) 10 else 30) },
+                )
+                Text(
+                    text = "How far the skip-back and skip-forward buttons jump — the same both " +
+                        "ways, on the player, the mini bar and the lock screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
         item(key = "playback-gotounit") {
             Column {
                 ChoiceRow(

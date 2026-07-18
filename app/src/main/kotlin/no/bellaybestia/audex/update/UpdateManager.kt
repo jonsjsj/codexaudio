@@ -129,28 +129,53 @@ class UpdateManager @Inject constructor(
             // not the internal versionCode, so a saved APK is self-identifying.
             val safeVersion = info.versionName.filter { it.isDigit() || it == '.' }.ifBlank { info.versionCode.toString() }
             val target = File(dir, "audex-$safeVersion.apk")
-            val req = Request.Builder().url(info.url).get().build()
-            http.newCall(req).execute().use { resp ->
-                check(resp.isSuccessful) { "download HTTP ${resp.code}" }
-                val body = resp.body ?: error("empty download body")
-                val total = body.contentLength()
-                target.outputStream().use { out ->
-                    body.byteStream().use { input ->
-                        val buf = ByteArray(1 shl 16)
-                        var read = 0L
-                        var n = input.read(buf)
-                        while (n >= 0) {
-                            out.write(buf, 0, n)
-                            read += n
-                            if (total > 0) onProgress((read.toFloat() / total).coerceIn(0f, 1f))
-                            n = input.read(buf)
-                        }
-                    }
-                }
+            // Try the advertised (version-stamped) URL first; if that 404s or errors
+            // — e.g. a versioned route hiccup on the server — fall back to the SAME
+            // host's canonical /audex.apk, which always exists. Without this a broken
+            // versioned URL made "Update now" silently do nothing.
+            val urls = buildList {
+                add(info.url)
+                canonicalFallback(info.url)?.let { if (it != info.url) add(it) }
             }
+            var lastError: Throwable? = null
+            for (url in urls) {
+                val ok = runCatching { streamTo(url, target, onProgress) }
+                if (ok.isSuccess) { lastError = null; break }
+                lastError = ok.exceptionOrNull()
+            }
+            lastError?.let { throw it }
             target
         }
         withContext(Dispatchers.Main) { launchInstall(apk) }
+    }
+
+    /** The canonical `/audex.apk` (or `/audex-beta.apk`) on the same host as [url]. */
+    private fun canonicalFallback(url: String): String? {
+        val base = url.substringBeforeLast('/', "").ifBlank { return null }
+        return if (url.contains("audex-beta")) "$base/audex-beta.apk" else "$base/audex.apk"
+    }
+
+    /** Stream one URL to [target], reporting 0..1 progress. Throws on non-2xx. */
+    private fun streamTo(url: String, target: File, onProgress: (Float) -> Unit) {
+        val req = Request.Builder().url(url).get().build()
+        http.newCall(req).execute().use { resp ->
+            check(resp.isSuccessful) { "download HTTP ${resp.code}" }
+            val body = resp.body ?: error("empty download body")
+            val total = body.contentLength()
+            target.outputStream().use { out ->
+                body.byteStream().use { input ->
+                    val buf = ByteArray(1 shl 16)
+                    var read = 0L
+                    var n = input.read(buf)
+                    while (n >= 0) {
+                        out.write(buf, 0, n)
+                        read += n
+                        if (total > 0) onProgress((read.toFloat() / total).coerceIn(0f, 1f))
+                        n = input.read(buf)
+                    }
+                }
+            }
+        }
     }
 
     private fun launchInstall(apk: File) {

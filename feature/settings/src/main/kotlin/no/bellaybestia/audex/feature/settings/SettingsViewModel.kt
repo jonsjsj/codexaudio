@@ -42,6 +42,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSkipSilence(enabled) }
     }
 
+    val skipSeconds: StateFlow<Int> = playbackSettings.skipSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
+
+    fun setSkipSeconds(seconds: Int) {
+        viewModelScope.launch { playbackSettings.setSkipSeconds(seconds) }
+    }
+
     // Local mirrors for smooth editing; persisted on every change.
     private val _codexUrl = MutableStateFlow("")
     val codexUrl: StateFlow<String> = _codexUrl.asStateFlow()

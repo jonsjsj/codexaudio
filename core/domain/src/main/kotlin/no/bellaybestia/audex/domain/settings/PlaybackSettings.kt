@@ -10,4 +10,13 @@ import kotlinx.coroutines.flow.Flow
 interface PlaybackSettings {
     val skipSilence: Flow<Boolean>
     suspend fun setSkipSilence(enabled: Boolean)
+
+    /**
+     * How many seconds the skip-back / skip-forward controls jump — the SAME
+     * amount both directions, switchable (10 or 30) in Settings. Drives the
+     * in-app player, the mini player, and the lock-screen / notification /
+     * Android Auto buttons.
+     */
+    val skipSeconds: Flow<Int>
+    suspend fun setSkipSeconds(seconds: Int)
 }

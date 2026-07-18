@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.stateIn
 import no.bellaybestia.audex.domain.playback.Bookmark
 import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
+import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import no.bellaybestia.audex.domain.settings.ProgressUnit
 import no.bellaybestia.audex.domain.settings.ThemeSettings
 import javax.inject.Inject
@@ -22,6 +23,7 @@ class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val bookmarksRepository: BookmarksRepository,
     themeSettings: ThemeSettings,
+    playbackSettings: PlaybackSettings,
 ) : ViewModel() {
 
     val state = playbackController.state
@@ -30,6 +32,10 @@ class PlayerViewModel @Inject constructor(
     val progressUnit: StateFlow<ProgressUnit> = themeSettings.prefs
         .map { it.progressUnit }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressUnit.PERCENT)
+
+    /** Skip amount (10 or 30 s) for the player controls' labels/icons. */
+    val skipSeconds: StateFlow<Int> = playbackSettings.skipSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
 
     /** Jump to a fraction (0..1) of the audiobook. */
     fun seekToFraction(fraction: Double) {

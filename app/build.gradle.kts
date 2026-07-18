@@ -19,8 +19,8 @@ android {
         // per release, roll into the third for feature batches. versionCode
         // strictly +1 every build (the OTA check compares it). History: vc2=0.1,
         // vc3=0.1.1 (shipped as "1.0.0"/"1.1.0", renumbered), …, vc12=0.2.0.
-        versionCode = 44
-        versionName = "0.3.8.0"
+        versionCode = 45
+        versionName = "0.3.9.0"
 
         // OTA endpoints, tried in order (see UpdateManager.bases()). Codex
         // MIRRORS the same manifest + APK, so it's a real second route rather

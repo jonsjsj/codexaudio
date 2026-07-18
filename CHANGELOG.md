@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.3.9.0
+
+- Skip is now one amount you switch between 10 and 30 seconds in Settings →
+  Playback → Skip, used the same for skip-back and skip-forward — on the player,
+  the mini bar and the lock screen.
+- Fixed the in-app update button doing nothing: if the version-stamped download
+  address hiccuped it now falls back to the plain download, so "Update now"
+  always works.
+
 ## 0.3.8.0
 
 - Skip buttons are back everywhere: 10 seconds back and 30 seconds forward now

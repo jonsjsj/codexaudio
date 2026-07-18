@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.3.8.0
+
+- Skip buttons are back everywhere: 10 seconds back and 30 seconds forward now
+  show on the lock screen, the notification and Android Auto, and on the mini
+  player — not just the full player. The back skip is 10 seconds now, and it's
+  the same on every screen.
+
 ## 0.3.7.0
 
 - Reading in Audex no longer resets a book to the title page in the official

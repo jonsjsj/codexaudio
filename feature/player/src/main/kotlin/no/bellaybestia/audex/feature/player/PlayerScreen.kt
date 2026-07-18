@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -114,7 +114,7 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = viewModel::skipBackward) {
-                Icon(Icons.Filled.FastRewind, contentDescription = "Back 15 seconds", modifier = Modifier.size(36.dp))
+                Icon(Icons.Filled.Replay10, contentDescription = "Back 10 seconds", modifier = Modifier.size(36.dp))
             }
             IconButton(onClick = viewModel::togglePlayPause) {
                 Icon(
@@ -125,7 +125,7 @@ fun PlayerScreen(
                 )
             }
             IconButton(onClick = viewModel::skipForward) {
-                Icon(Icons.Filled.FastForward, contentDescription = "Forward 30 seconds", modifier = Modifier.size(36.dp))
+                Icon(Icons.Filled.Forward30, contentDescription = "Forward 30 seconds", modifier = Modifier.size(36.dp))
             }
         }
 

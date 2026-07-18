@@ -275,7 +275,7 @@ class PlaybackControllerImpl @Inject constructor(
     }
 
     override fun skipBackward() {
-        scope.launch(main) { seekOverall((overallPositionS() - 15).coerceAtLeast(0.0)) }
+        scope.launch(main) { seekOverall((overallPositionS() - 10).coerceAtLeast(0.0)) }
     }
 
     override fun skipForward() {

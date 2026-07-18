@@ -8,8 +8,10 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
@@ -81,11 +83,29 @@ class PlaybackService : MediaLibraryService() {
                 /* handleAudioFocus = */ true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // Audiobook skip: back 10s / forward 30s. These drive seekBack()/
+            // seekForward() everywhere — the lock screen, the notification, Android
+            // Auto and headset controls — so "skip" means the same on every surface.
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(30_000)
             .build()
             .also { player = it }
 
         exo.addListener(sessionRecorder.playerListener(exo))
-        session = MediaLibrarySession.Builder(this, exo, LibraryCallback()).build()
+        // Put the 10s-back / 30s-forward skip buttons on the media notification and
+        // lock screen. Media3's default layout shows prev/next (meaningless for a
+        // single-track audiobook), so we pin explicit seek-back/seek-forward buttons.
+        val rewind = CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+            .setDisplayName("Back 10 seconds")
+            .setPlayerCommand(Player.COMMAND_SEEK_BACK)
+            .build()
+        val forward = CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_30)
+            .setDisplayName("Forward 30 seconds")
+            .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
+            .build()
+        session = MediaLibrarySession.Builder(this, exo, LibraryCallback())
+            .setMediaButtonPreferences(ImmutableList.of(rewind, forward))
+            .build()
 
         // Apply "skip silence" live whenever the preference changes.
         serviceScope.launch {

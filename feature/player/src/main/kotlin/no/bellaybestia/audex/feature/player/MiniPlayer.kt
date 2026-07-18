@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,11 +77,28 @@ fun MiniPlayer(
                     )
                 }
             }
+            // Skip controls right on the mini bar — so you can nudge back/forward
+            // without opening the full player. clickable(onClick) on the icons
+            // themselves keeps taps off the row's expand handler.
+            IconButton(onClick = viewModel::skipBackward) {
+                Icon(
+                    imageVector = Icons.Filled.Replay10,
+                    contentDescription = "Back 10 seconds",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(onClick = viewModel::togglePlayPause) {
                 Icon(
                     imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (state.isPlaying) "Pause" else "Play",
                     tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            IconButton(onClick = viewModel::skipForward) {
+                Icon(
+                    imageVector = Icons.Filled.Forward30,
+                    contentDescription = "Forward 30 seconds",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

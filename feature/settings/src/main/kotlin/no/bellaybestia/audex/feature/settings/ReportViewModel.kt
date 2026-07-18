@@ -43,13 +43,13 @@ class ReportViewModel @Inject constructor(
     fun setTitle(title: String) = _state.update { it.copy(title = title, result = null) }
     fun setBody(body: String) = _state.update { it.copy(body = body, result = null) }
 
-    fun send(appVersion: String) {
+    fun send(appVersion: String, screen: String? = null) {
         val current = _state.value
         if (current.title.isBlank() || current.sending) return
         _state.update { it.copy(sending = true, result = null) }
         viewModelScope.launch {
             runCatching {
-                reports.submit(current.kind, current.title.trim(), current.body.trim(), appVersion)
+                reports.submit(current.kind, current.title.trim(), current.body.trim(), appVersion, screen)
             }.onSuccess { filed ->
                 _state.update {
                     it.copy(

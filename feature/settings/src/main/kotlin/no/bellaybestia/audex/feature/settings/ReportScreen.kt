@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,8 @@ fun ReportScreen(
     viewModel: ReportViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    // The screen you came from (recorded by AppNav) — attached so triage knows the window.
+    val screen = remember { CurrentScreen.get() }
 
     Column(
         modifier = modifier
@@ -49,6 +52,15 @@ fun ReportScreen(
             selectedIndex = state.kind.ordinal,
             onSelect = { viewModel.setKind(ReportKind.entries[it]) },
         )
+
+        if (screen.isNotBlank()) {
+            Text(
+                text = "About: $screen",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            )
+        }
 
         FieldLabel("Title")
         FlatField(
@@ -80,7 +92,7 @@ fun ReportScreen(
             else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = sendable) { viewModel.send(appVersion) }
+                .clickable(enabled = sendable) { viewModel.send(appVersion, screen.ifBlank { null }) }
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         )
 
@@ -95,8 +107,8 @@ fun ReportScreen(
         }
 
         Text(
-            text = "Sent with app version $appVersion. Fixed reports show up below " +
-                "with the release that fixed them.",
+            text = "Your app version ($appVersion), device, and the screen you came from are " +
+                "attached automatically. Fixed reports show up below with the release that fixed them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),

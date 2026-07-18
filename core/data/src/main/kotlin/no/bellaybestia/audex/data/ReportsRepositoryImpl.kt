@@ -85,7 +85,16 @@ class ReportsRepositoryImpl @Inject constructor(
     ): FiledReport = withContext(Dispatchers.IO) {
         val service = alignment.serviceUrl()
             ?: error("No service configured — set the alignment service URL in Settings first.")
-        val fullBody = if (screen != null) "$body\n\nScreen: $screen" else body
+        // Auto-attach the build, device, and the screen the user came from — so triage has
+        // context without the reporter having to type it (parity with Codex's reporter).
+        val meta = buildString {
+            append("\n\n— Audex ").append(appVersion)
+            append(" · ").append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL)
+            append(" · Android ").append(android.os.Build.VERSION.RELEASE)
+            append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(')')
+            if (!screen.isNullOrBlank()) append("\nScreen: ").append(screen)
+        }
+        val fullBody = body + meta
         val payload = json.encodeToString(
             WireReport.serializer(),
             WireReport(kind.name.lowercase(), title, fullBody, appVersion),

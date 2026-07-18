@@ -12,6 +12,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -41,6 +42,8 @@ import no.bellaybestia.audex.feature.player.PlayerScreen
 import no.bellaybestia.audex.feature.settings.AboutScreen
 import no.bellaybestia.audex.feature.settings.StatsScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
+import no.bellaybestia.audex.feature.settings.CurrentScreen
+import no.bellaybestia.audex.feature.settings.ReportFab
 import no.bellaybestia.audex.feature.settings.ReportScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
 
@@ -90,7 +93,17 @@ fun AppNav() {
         else -> 0
     }
 
+    // Record the content screen you're on so a report filed from the reporter can name the
+    // window it's about (skips the report screen itself → it points at where you came from).
+    LaunchedEffect(currentRoute) { labelForRoute(currentRoute)?.let { CurrentScreen.record(it) } }
+
     Scaffold(
+        // "Report this screen" on detail pages, where Settings → Report is several taps away.
+        floatingActionButton = {
+            if (currentRoute in reportFabRoutes) {
+                ReportFab(onClick = { navController.navigate(Routes.REPORT) })
+            }
+        },
         bottomBar = {
             // The reader is full-screen (no app chrome) so reading is immersive —
             // tapping the page then hides the reader's own bars for text only.
@@ -305,6 +318,31 @@ private fun AboutViewModel.State.toUi(): UpdateUi = when (this) {
     AboutViewModel.State.Unreachable -> UpdateUi.Unreachable
     is AboutViewModel.State.Available -> UpdateUi.Available(info.versionName, info.notes)
     is AboutViewModel.State.Downloading -> UpdateUi.Downloading(progress)
+}
+
+/** Detail/pushed pages that show the floating "report this screen" button. */
+private val reportFabRoutes =
+    setOf(Routes.WORK, Routes.AUTHOR, Routes.SERIES, Routes.STATS, Routes.ABOUT)
+
+/**
+ * Human label for the current route, attached to a report as "About: <screen>". Null means
+ * don't record (the report screen itself + unknowns) so the context stays the screen the
+ * user came from.
+ */
+private fun labelForRoute(route: String?): String? = when (route) {
+    Routes.HOME -> "Home"
+    Routes.LIBRARY -> "Library"
+    Routes.DOWNLOADS -> "Downloads"
+    Routes.SETTINGS -> "Settings"
+    Routes.STATS -> "Listening stats"
+    Routes.ABOUT -> "About"
+    Routes.PLAYER -> "Player"
+    Routes.WORK -> "Book detail"
+    Routes.AUTHOR -> "Author"
+    Routes.SERIES -> "Series"
+    Routes.READER -> "Reader"
+    Routes.ADD_SERVER -> "Add server"
+    else -> null
 }
 
 /** The routes that belong to each bottom tab's section (root + its sub-pages). */

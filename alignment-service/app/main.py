@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -149,11 +150,10 @@ class ReportRequest(BaseModel):
     appVersion: str = ""
 
 
-@app.post("/reports")
-def create_report(req: ReportRequest):
-    """File a user report as a GitHub issue (Codex's reporter pattern). The
-    token lives in DATA_DIR/report.json ({"repo": "owner/name", "token": "…"})
-    so the app never embeds credentials; 503 until that file exists."""
+def _report_cfg() -> tuple[str, str]:
+    """(repo, token) for the reporter, from DATA_DIR/report.json
+    ({"repo": "owner/name", "token": "…"}). 503 until that file exists so the
+    app never embeds credentials."""
     cfg_path = DATA_DIR / "report.json"
     if not cfg_path.exists():
         raise HTTPException(503, "report service not configured")
@@ -161,6 +161,37 @@ def create_report(req: ReportRequest):
     repo, token = cfg.get("repo"), cfg.get("token")
     if not repo or not token:
         raise HTTPException(503, "report service not configured")
+    return repo, token
+
+
+def _gh_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+
+
+# A label like `fixed:0.1.6` / `fixed-in:v0.1.6` records the release that fixed
+# an issue — this is the maintainer (or codex-autofix) hook the status loop reads.
+_FIXED_LABEL = re.compile(r"^fixed(?:-in)?[:\s]\s*v?(.+)$", re.IGNORECASE)
+
+
+def _fixed_in(issue: dict) -> str | None:
+    """Which release fixed this issue, if it's recorded. Priority: a
+    `fixed:<ver>` label, else the milestone title (for a closed issue). None
+    means closed-but-no-version (shown as just "Resolved") or still open."""
+    for label in issue.get("labels", []):
+        name = label.get("name", "") if isinstance(label, dict) else str(label)
+        m = _FIXED_LABEL.match(name.strip())
+        if m:
+            return m.group(1).strip()
+    milestone = issue.get("milestone")
+    if issue.get("state") == "closed" and milestone and milestone.get("title"):
+        return milestone["title"].lstrip("vV ").strip() or None
+    return None
+
+
+@app.post("/reports")
+def create_report(req: ReportRequest):
+    """File a user report as a GitHub issue (Codex's reporter pattern)."""
+    repo, token = _report_cfg()
     kind = req.kind if req.kind in ("bug", "idea", "feedback") else "feedback"
     title = req.title.strip()[:200]
     if not title:
@@ -169,10 +200,7 @@ def create_report(req: ReportRequest):
     footer = f"\n\n---\nAudex {req.appVersion or '?'} · filed from the in-app reporter"
     r = httpx.post(
         f"https://api.github.com/repos/{repo}/issues",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-        },
+        headers=_gh_headers(token),
         json={"title": f"[{kind}] {title}", "body": body + footer,
               "labels": [f"audex-{kind}"]},
         timeout=30,
@@ -182,6 +210,37 @@ def create_report(req: ReportRequest):
         raise HTTPException(502, "couldn't file the report")
     issue = r.json()
     return {"number": issue["number"], "url": issue["html_url"]}
+
+
+@app.get("/reports/{number}")
+def report_status(number: int):
+    """Close the loop the app polls: report an issue's live state back to the
+    device that filed it — open vs closed, and (when recorded) the release that
+    fixed it. This is the Audex-side analogue of Codex's status-check routine,
+    served live from GitHub on each poll rather than via a cron.
+
+    Returns `{number, state, fixedIn, url}`:
+      - `state`   — "open" or "closed" (GitHub issue state)
+      - `fixedIn` — release version from a `fixed:<ver>` label / milestone, else null
+    """
+    repo, token = _report_cfg()
+    r = httpx.get(
+        f"https://api.github.com/repos/{repo}/issues/{number}",
+        headers=_gh_headers(token),
+        timeout=30,
+    )
+    if r.status_code == 404:
+        raise HTTPException(404, "no such report")
+    if r.status_code != 200:
+        log.error("report status failed: %s %s", r.status_code, r.text[:300])
+        raise HTTPException(502, "couldn't read the report status")
+    issue = r.json()
+    return {
+        "number": issue.get("number", number),
+        "state": issue.get("state", "open"),
+        "fixedIn": _fixed_in(issue),
+        "url": issue.get("html_url", ""),
+    }
 
 
 @app.on_event("startup")

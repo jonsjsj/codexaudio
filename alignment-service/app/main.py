@@ -132,6 +132,25 @@ def audex_beta_apk():
     )
 
 
+@app.api_route("/audex-{version}.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def audex_versioned_apk(version: str):
+    """Serve the canonical build under any version-stamped name
+    (audex-0.3.8.0.apk -> audex.apk; audex-beta-<v>.apk -> audex-beta.apk) so the
+    OTA manifest + web links can use a cache-bustable, version-named URL while
+    there is one real file. Folds the previously-ephemeral versioned route into
+    git so an align redeploy no longer drops it."""
+    from fastapi.responses import FileResponse
+
+    beta = version.startswith("beta-") or version == "beta"
+    apk = DATA_DIR / ("audex-beta.apk" if beta else "audex.apk")
+    if not apk.exists():
+        raise HTTPException(404, "no APK published yet")
+    return FileResponse(
+        apk,
+        media_type="application/vnd.android.package-archive",
+        filename=f"audex-{version}.apk",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 @app.api_route("/audex-beta-latest.json", methods=["GET", "HEAD"], include_in_schema=False)
 def audex_beta_latest():
     manifest = DATA_DIR / "audex-beta-latest.json"

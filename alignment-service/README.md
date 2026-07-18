@@ -15,9 +15,35 @@ eventually word/sentence-level) audio-follow.
 | `POST /jobs/upload` (multipart `epub`, `audio[]`) | align uploaded files |
 | `GET /jobs/{id}` | job progress (`queued/downloading/extracting/transcribing/aligning/done/error`) |
 | `GET /maps/{bookKey}` | the finished sync map |
+| `POST /reports` `{kind, title, body, appVersion}` | file an in-app report as a GitHub issue |
+| `GET /reports/{number}` | that report's live status `{number, state, fixedIn, url}` |
 
 Map format v1: `{version, durationS, totalChars, entries:[{t0,t1,c0,c1,p,href}]}` —
 binary-search `t` → entry → `p` (progression 0..1) / `href` for the reader jump.
+
+## In-app reporting (the closed loop)
+
+Same pattern as Codex's reporter — the app never embeds a GitHub token; this box
+holds it and does the talking:
+
+1. **File.** The user submits a bug/idea/feedback in-app → `POST /reports`. This
+   box opens a GitHub issue on the Audex repo (labelled `audex-bug|idea|feedback`)
+   and returns `{number, url}`. The build + device + screen the user came from are
+   already folded into the body by the app. The app remembers the issue number
+   locally under "Your reports".
+2. **Triage / fix.** A maintainer (or the codex-autofix routine) works the issue.
+   When the fix ships, they **close the issue** and record the release either with
+   a **`fixed:<version>`** label (e.g. `fixed:0.1.6`, `fixed-in:v0.1.6`) or by
+   setting the issue's **milestone** to the version.
+3. **Report back.** The app polls `GET /reports/{number}` (on opening the reporter)
+   and shows each report's live state: **Open → Fixed in 0.1.6 ✓** (label/milestone
+   present) or **Resolved ✓** (closed with no version recorded). Served live from
+   GitHub on each poll — no cron, always current.
+
+**Config (one-time, on the box's data volume):** `DATA_DIR/report.json` —
+`{"repo": "jonsjsj/codexaudio", "token": "<github PAT with `repo` issues scope>"}`.
+Until that file exists, `/reports` returns 503 and the app shows
+"Report service isn't set up on the server yet."
 
 ## Deploy (ventans, Docker API :2375)
 

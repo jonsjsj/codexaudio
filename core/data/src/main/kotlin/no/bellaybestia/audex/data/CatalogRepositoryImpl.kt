@@ -18,6 +18,7 @@ import no.bellaybestia.audex.database.CatalogDao
 import no.bellaybestia.audex.database.EditionEntity
 import no.bellaybestia.audex.database.OverrideDao
 import no.bellaybestia.audex.database.ProgressDao
+import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.RemoteItemDao
 import no.bellaybestia.audex.database.RemoteItemEntity
 import no.bellaybestia.audex.database.SeriesEntity
@@ -133,6 +134,25 @@ class CatalogRepositoryImpl @Inject constructor(
             }
             Unit
         }
+
+    override suspend fun mirrorAudioProgress(
+        serverId: String,
+        libraryItemId: String,
+        fraction: Double,
+        durationS: Long?,
+    ) = withContext(dispatcher) {
+        val f = fraction.coerceIn(0.0, 1.0)
+        val existing = progressDao.get(serverId, libraryItemId)
+        val row = (existing ?: ProgressEntity(serverId = serverId, libraryItemId = libraryItemId)).copy(
+            pct = f,
+            currentTimeS = durationS?.let { f * it } ?: existing?.currentTimeS ?: 0.0,
+            isFinished = f >= 0.999,
+            lastUpdate = System.currentTimeMillis(),
+            source = "LOCAL_XFORMAT",
+        )
+        progressDao.upsertAll(listOf(row))
+        Unit
+    }
 
     /** ABS descriptions are HTML-ish; strip tags, decode common entities (Codex rule). */
     private fun cleanHtml(raw: String): String = raw

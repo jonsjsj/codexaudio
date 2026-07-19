@@ -53,6 +53,21 @@ interface CatalogRepository {
      */
     suspend fun discardProgress(serverId: String, libraryItemId: String)
 
+    /**
+     * Cross-format sync: set the AUDIO edition's saved position to [fraction]
+     * (0..1) of its runtime, so that after reading the ebook, switching to the
+     * audiobook resumes where you read. Proportional — good enough without a
+     * word-sync map. Writes the local mirror (the detail slider + Resume + the
+     * player's start position all read it); a real audio session on next play
+     * carries it to the server.
+     */
+    suspend fun mirrorAudioProgress(
+        serverId: String,
+        libraryItemId: String,
+        fraction: Double,
+        durationS: Long?,
+    )
+
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()
 }

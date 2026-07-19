@@ -3,6 +3,16 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.3.11.0
+
+- The audiobook and ebook now follow each other. "Follow audio" jumps the ebook
+  to the audiobook's spot even when the audio isn't playing (before it did
+  nothing and left you where you were), and the read-along bar now appears
+  whenever a book has an audiobook — not only while it's playing.
+- Reading the ebook now moves the audiobook's saved position to match, so
+  switching to listening picks up where you read — no manual jump. (Proportional
+  for books without a word-sync map.)
+
 ## 0.3.10.0
 
 - Fixed "Send report" failing with an error: reporting no longer requires the

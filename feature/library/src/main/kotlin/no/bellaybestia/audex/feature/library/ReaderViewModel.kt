@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.Downloads
+import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
@@ -120,6 +121,19 @@ class ReaderViewModel @Inject constructor(
     /** Audio↔ebook bridging: itemIds of this work's AUDIO editions (any server). */
     private val audioItemKeys = MutableStateFlow<Set<String>>(emptySet())
 
+    /** The work's primary AUDIO edition — for offline follow + cross-format sync. */
+    private val _audioEdition = MutableStateFlow<Edition?>(null)
+
+    /**
+     * The audiobook's SAVED progress fraction. This is the follow target when the
+     * audio isn't loaded in the player (companion == null): pressing "Follow
+     * audio" then still jumps the reader to where the audiobook is, instead of
+     * doing nothing.
+     */
+    val savedAudioFraction: StateFlow<Double?> = _audioEdition
+        .map { it?.fraction }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /**
      * Follow-audio toggle, ON by default: opening the ebook of a book you're
      * listening to should land you where the narration is, without hunting for
@@ -198,6 +212,19 @@ class ReaderViewModel @Inject constructor(
                     absLocation = absCfiFor(locator),
                     progress = progress,
                 )
+                // Cross-format: when reading independently (NOT following the audio),
+                // nudge the audiobook's saved position to match — proportionally — so
+                // switching to listening resumes where you read, no manual jump.
+                // Skipped in follow mode, where the audio is the master (avoids a loop).
+                if (!_followAudio.value) {
+                    _audioEdition.value?.let { audio ->
+                        runCatching {
+                            catalogRepository.mirrorAudioProgress(
+                                audio.serverId, audio.libraryItemId, progress, audio.durationS,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -207,6 +234,8 @@ class ReaderViewModel @Inject constructor(
         catalogRepository.editionsForWork(workId).collect { editions ->
             val audio = editions.filter { it.format == Format.AUDIO }
             audioItemKeys.value = audio.map { "${it.serverId}|${it.libraryItemId}" }.toSet()
+            // Prefer an audio edition that has a duration + some saved progress.
+            _audioEdition.value = audio.maxByOrNull { it.fraction } ?: audio.firstOrNull()
             // Load the word-sync map once (first audio sibling that has one).
             if (_syncMap.value == null) {
                 for (edition in audio) {

@@ -183,6 +183,7 @@ private fun EpubReader(
     val followAudio by viewModel.followAudio.collectAsState()
     val currentProgression by viewModel.currentProgression.collectAsState()
     val syncMap by viewModel.syncMap.collectAsState()
+    val savedAudioFraction by viewModel.savedAudioFraction.collectAsState()
     val prefs by viewModel.readerPrefs.collectAsState()
     val highlights by viewModel.highlights.collectAsState()
     val progressUnit by viewModel.progressUnit.collectAsState()
@@ -304,14 +305,21 @@ private fun EpubReader(
                 }
             }
         }
-        // Read-along bar (docs/09): only when this work's audio edition is loaded.
-        // With a word-sync map (docs/10) the audio position maps through real
-        // alignment anchors; otherwise it falls back to the proportional guess.
-        if (!immersive) companion?.let { audio ->
-            val audioProgression = syncMap?.progressionAt(audio.positionS) ?: audio.fraction
+        // Read-along bar (docs/09). Shows whenever the work HAS an audiobook — live
+        // when it's playing (word-sync anchors, or proportional), else from the
+        // audiobook's SAVED position, so you can still toggle Follow / jump to it
+        // when the audio isn't loaded. A live map maps through real anchors.
+        val effectiveAudio = companion
+            ?: savedAudioFraction?.let { AudioCompanion(isPlaying = false, fraction = it, positionS = 0.0) }
+        if (!immersive) effectiveAudio?.let { audio ->
+            val audioProgression = if (companion != null) {
+                syncMap?.progressionAt(audio.positionS) ?: audio.fraction
+            } else {
+                audio.fraction
+            }
             ReadAlongBar(
                 audio = audio,
-                precise = syncMap != null,
+                precise = syncMap != null && companion != null,
                 following = followAudio,
                 showJump = !followAudio &&
                     abs((currentProgression ?: 0.0) - audioProgression) > 0.02,
@@ -322,9 +330,9 @@ private fun EpubReader(
                 },
             )
         }
-        // Discoverability: a sync map exists but the audiobook isn't loaded —
+        // Discoverability: a sync map exists but there's no audio info at all —
         // tell the reader how to activate read-along instead of hiding it.
-        if (!immersive && companion == null && syncMap != null) {
+        if (!immersive && effectiveAudio == null && syncMap != null) {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
                 Text(
                     text = "Word sync ready — start the audiobook (Play on the book page) " +
@@ -573,19 +581,25 @@ private fun EpubReader(
         }
     }
 
-    // Jump to the narration the MOMENT Follow is switched on — even while the
-    // audio is paused. The tracker above only moves on playback ticks, so
-    // enabling Follow while not actively playing did nothing at all ("I press
-    // follow but it stays on the same page"). This one-shot takes you to where
-    // the audio is right now; the tracker then keeps you there once it plays.
-    LaunchedEffect(followAudio, navigator, syncMap != null) {
+    // Jump to the audiobook's spot the MOMENT Follow is switched on — even when
+    // the audio isn't loaded/playing. Before, this bailed when `companion` was
+    // null (audio not in the player), so pressing Follow "did nothing / stayed at
+    // 36%". Now it falls back to the audiobook's SAVED position (savedAudioFraction),
+    // jumping proportionally. When the audio IS live + word-synced, it uses the
+    // exact narration anchor.
+    LaunchedEffect(followAudio, navigator, syncMap != null, savedAudioFraction) {
         if (!followAudio) return@LaunchedEffect
-        val audio = companion ?: return@LaunchedEffect
+        val audio = companion
         val map = syncMap
-        val locator = map?.takeIf { it.chapters.isNotEmpty() }
-            ?.anchorAt(audio.positionS)
-            ?.let { narrationLocator(ready.publication, map, it) }
-            ?: locatorForFraction(ready.positions, map?.progressionAt(audio.positionS) ?: audio.fraction)
+        val savedFrac = savedAudioFraction
+        val locator = when {
+            audio != null && map != null && map.chapters.isNotEmpty() ->
+                map.anchorAt(audio.positionS)?.let { narrationLocator(ready.publication, map, it) }
+                    ?: locatorForFraction(ready.positions, map.progressionAt(audio.positionS) ?: audio.fraction)
+            audio != null -> locatorForFraction(ready.positions, audio.fraction)
+            savedFrac != null -> locatorForFraction(ready.positions, savedFrac)
+            else -> null
+        }
         locator?.let { navigator?.go(it) }
     }
 

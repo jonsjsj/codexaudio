@@ -258,6 +258,33 @@ fun SettingsScreen(
                 )
             }
         }
+        item(key = "playback-merge") {
+            val merged by viewModel.mergeProgress.collectAsState()
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Merge progress",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (merged) "On" else "Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (merged) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { viewModel.setMergeProgress(!merged) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+                Text(
+                    text = "Show a book's audiobook and ebook as one progress instead of a " +
+                        "separate percent each — they follow each other, so one bar is enough.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         item(key = "playback-gotounit") {
             Column {
                 ChoiceRow(

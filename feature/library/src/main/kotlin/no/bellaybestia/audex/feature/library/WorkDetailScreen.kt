@@ -13,14 +13,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +48,7 @@ import no.bellaybestia.audex.designsystem.TintFromCover
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Work
+import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 
 /**
@@ -68,6 +75,9 @@ fun WorkDetailScreen(
     val description by viewModel.description.collectAsState()
     val extras by viewModel.extras.collectAsState()
     val otherFormat by viewModel.otherFormat.collectAsState()
+    val skipSeconds by viewModel.skipSeconds.collectAsState()
+    val mergeProgress by viewModel.mergeProgress.collectAsState()
+    val furthest by viewModel.furthestS.collectAsState()
 
     val cover = editions.firstNotNullOfOrNull { it.coverUrl }
     // Browsing a book re-tints the whole app around it (mockup 2c).
@@ -175,30 +185,57 @@ fun WorkDetailScreen(
                     )
                 }
             }
+            // Overflow: the "such things" go here (top-right, where they belong)
+            // instead of a prominent Discard row — playback settings + discard.
+            DetailOverflowMenu(
+                skipSeconds = skipSeconds,
+                onSkip = viewModel::setSkipSeconds,
+                merged = mergeProgress,
+                onMerge = viewModel::setMergeProgress,
+                canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
+                onDiscard = viewModel::discardProgress,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp),
+            )
         }
 
-        // COMPACT editions block — the two syncs (listen + read), one tight row
-        // each: format · thin progress bar · % · a couple of small buttons.
+        // Editions block. Normally one compact "sync" row per format; but when
+        // "Merge progress" is on (Settings/overflow), a book's audio+ebook share
+        // ONE progress bar with both Listen + Read — they follow each other, so a
+        // single % is enough.
         val audioEdition = editions.firstOrNull { it.format == Format.AUDIO }
-        val furthest by viewModel.furthestS.collectAsState()
-        editions.forEach { edition ->
-            val isThis = playback.libraryItemId == edition.libraryItemId
-            val download = downloadStates.firstOrNull {
-                it.serverId == edition.serverId &&
-                    it.libraryItemId == edition.libraryItemId &&
-                    it.format.name == edition.format.name
-            }
-            CompactEditionRow(
-                edition = edition,
-                isPlayingThis = isThis && playback.isPlaying,
-                isLoadingThis = isThis && playback.isLoading,
-                download = download,
-                onPlay = { viewModel.play(edition) },
+        val ebookEdition = editions.firstOrNull { it.format == Format.EBOOK }
+        fun downloadOf(edition: Edition) = downloadStates.firstOrNull {
+            it.serverId == edition.serverId &&
+                it.libraryItemId == edition.libraryItemId &&
+                it.format.name == edition.format.name
+        }
+        if (mergeProgress && audioEdition != null && ebookEdition != null) {
+            MergedEditionRow(
+                audio = audioEdition,
+                ebook = ebookEdition,
+                playback = playback,
+                audioDownload = downloadOf(audioEdition),
+                ebookDownload = downloadOf(ebookEdition),
+                onListen = { viewModel.play(audioEdition) },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
-                onDownload = { viewModel.download(edition) },
-                onRemoveDownload = { viewModel.removeDownload(edition) },
-                onRead = { onOpenReader(edition.serverId, edition.libraryItemId, viewModel.title) },
+                onRead = { onOpenReader(ebookEdition.serverId, ebookEdition.libraryItemId, viewModel.title) },
+                onGetEbook = { viewModel.download(ebookEdition) },
             )
+        } else {
+            editions.forEach { edition ->
+                val isThis = playback.libraryItemId == edition.libraryItemId
+                CompactEditionRow(
+                    edition = edition,
+                    isPlayingThis = isThis && playback.isPlaying,
+                    isLoadingThis = isThis && playback.isLoading,
+                    download = downloadOf(edition),
+                    onPlay = { viewModel.play(edition) },
+                    onTogglePlayPause = { viewModel.togglePlayPause() },
+                    onDownload = { viewModel.download(edition) },
+                    onRemoveDownload = { viewModel.removeDownload(edition) },
+                    onRead = { onOpenReader(edition.serverId, edition.libraryItemId, viewModel.title) },
+                )
+            }
         }
 
         // Compact one-liners for the extras (small text, no big rows).
@@ -249,11 +286,6 @@ fun WorkDetailScreen(
         }
 
         description?.let { DescriptionBlock(it) }
-
-        val hasProgress = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0
-        if (hasProgress) {
-            DiscardProgressRow(onDiscard = viewModel::discardProgress)
-        }
 
         androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
     }
@@ -377,32 +409,143 @@ private fun CompactActionLine(text: String, action: String, onClick: () -> Unit)
     }
 }
 
-/** Flat "discard progress" row with a two-tap confirm, in the error tint. */
+/**
+ * Top-right 3-dot menu on the detail hero — the home for "such things": the
+ * playback skip amount, the merge-progress toggle, and Discard progress (moved
+ * out of a prominent inline row into a confirm-gated menu item).
+ */
 @Composable
-private fun DiscardProgressRow(onDiscard: () -> Unit) {
-    var armed by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = "Discard progress", style = MaterialTheme.typography.bodyLarge)
+private fun DetailOverflowMenu(
+    skipSeconds: Int,
+    onSkip: (Int) -> Unit,
+    merged: Boolean,
+    onMerge: (Boolean) -> Unit,
+    canDiscard: Boolean,
+    onDiscard: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val check: @Composable (Boolean) -> Unit = { on ->
+        if (on) Text("✓", color = MaterialTheme.colorScheme.primary)
+    }
+    Box(modifier) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color(0xFFF4F6FA))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Text(
-                text = "Reset this book to the start on all your devices.",
-                style = MaterialTheme.typography.bodySmall,
+                text = "SKIP",
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
+            )
+            DropdownMenuItem(
+                text = { Text("Skip 10 seconds") },
+                onClick = { onSkip(10) },
+                trailingIcon = { check(skipSeconds == 10) },
+            )
+            DropdownMenuItem(
+                text = { Text("Skip 30 seconds") },
+                onClick = { onSkip(30) },
+                trailingIcon = { check(skipSeconds == 30) },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Merge audio + ebook progress") },
+                onClick = { onMerge(!merged) },
+                trailingIcon = { check(merged) },
+            )
+            if (canDiscard) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Discard progress", color = MaterialTheme.colorScheme.error) },
+                    onClick = { expanded = false; confirmDiscard = true },
+                )
+            }
+        }
+    }
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard progress?") },
+            text = {
+                Text(
+                    "Reset this book to the start on all your devices. Your " +
+                        "furthest-listened bookmark is kept, so you can jump back.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onDiscard(); confirmDiscard = false }) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/**
+ * Merged progress row (Merge progress on): the work's audio + ebook as ONE
+ * progress bar (the further of the two) with both Listen and Read actions —
+ * since the formats follow each other, a single % is enough.
+ */
+@Composable
+private fun MergedEditionRow(
+    audio: Edition,
+    ebook: Edition,
+    playback: PlaybackState,
+    audioDownload: no.bellaybestia.audex.domain.download.DownloadInfo?,
+    ebookDownload: no.bellaybestia.audex.domain.download.DownloadInfo?,
+    onListen: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onRead: () -> Unit,
+    onGetEbook: () -> Unit,
+) {
+    val merged = maxOf(audio.fraction, ebook.fraction).coerceIn(0.0, 1.0)
+    val percent = (merged * 100).roundToInt()
+    val isPlayingAudio = playback.libraryItemId == audio.libraryItemId && playback.isPlaying
+    val ebookReady = ebookDownload?.isComplete == true
+    val ebookFetching = ebookDownload?.isActive == true
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Outlined.Headphones, "Audiobook", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Outlined.MenuBook, "Ebook", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = "Audiobook + ebook", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(text = "$percent%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box(
+            Modifier.fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Box(
+                Modifier.fillMaxHeight().fillMaxWidth(merged.toFloat()).background(MaterialTheme.colorScheme.primary),
             )
         }
-        Text(
-            text = if (armed) "Discard?" else "Discard",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier
-                .clickable { if (armed) onDiscard() else armed = true }
-                .padding(vertical = 4.dp, horizontal = 4.dp),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Text(
+                text = if (isPlayingAudio) "Pause" else "Listen",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { if (isPlayingAudio) onTogglePlayPause() else onListen() },
+            )
+            Text(
+                text = when {
+                    ebookReady -> "Read"
+                    ebookFetching -> "Fetching…"
+                    else -> "Get + read"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = if (ebookFetching) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable(enabled = !ebookFetching) { if (ebookReady) onRead() else onGetEbook() },
+            )
+        }
     }
 }
 

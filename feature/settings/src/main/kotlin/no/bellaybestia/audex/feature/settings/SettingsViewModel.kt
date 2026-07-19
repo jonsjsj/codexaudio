@@ -49,6 +49,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { playbackSettings.setSkipSeconds(seconds) }
     }
 
+    val mergeProgress: StateFlow<Boolean> = playbackSettings.mergeProgress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setMergeProgress(merged: Boolean) {
+        viewModelScope.launch { playbackSettings.setMergeProgress(merged) }
+    }
+
     // Local mirrors for smooth editing; persisted on every change.
     private val _codexUrl = MutableStateFlow("")
     val codexUrl: StateFlow<String> = _codexUrl.asStateFlow()

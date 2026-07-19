@@ -13,6 +13,7 @@ import javax.inject.Singleton
 
 private val KEY_SKIP_SILENCE = booleanPreferencesKey("playback_skip_silence")
 private val KEY_SKIP_SECONDS = intPreferencesKey("playback_skip_seconds")
+private val KEY_MERGE_PROGRESS = booleanPreferencesKey("playback_merge_progress")
 
 /** Default skip amount, and the values the Settings toggle offers. */
 const val DEFAULT_SKIP_SECONDS = 30
@@ -35,5 +36,12 @@ class PlaybackSettingsImpl @Inject constructor(
 
     override suspend fun setSkipSeconds(seconds: Int) {
         context.appSettingsDataStore.edit { it[KEY_SKIP_SECONDS] = seconds }
+    }
+
+    override val mergeProgress: Flow<Boolean> =
+        context.appSettingsDataStore.data.map { it[KEY_MERGE_PROGRESS] ?: false }
+
+    override suspend fun setMergeProgress(merged: Boolean) {
+        context.appSettingsDataStore.edit { it[KEY_MERGE_PROGRESS] = merged }
     }
 }

@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.3.12.0
+
+- A book's page has a 3-dot menu (top right) for its playback settings — the
+  skip amount and Discard progress now live there, instead of Discard sitting in
+  a big prominent row.
+- New "Merge progress" toggle (in that menu, and in Settings → Playback): show a
+  book's audiobook and ebook as one combined progress with both Listen and Read,
+  since the two formats now follow each other — one percent is enough.
+
 ## 0.3.11.0
 
 - The audiobook and ebook now follow each other. "Follow audio" jumps the ebook

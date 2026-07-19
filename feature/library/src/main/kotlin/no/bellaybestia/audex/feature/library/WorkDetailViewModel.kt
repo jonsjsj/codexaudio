@@ -26,6 +26,7 @@ import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 import no.bellaybestia.audex.domain.repository.BookExtras
 import no.bellaybestia.audex.domain.repository.CatalogRepository
+import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import javax.inject.Inject
 
 /**
@@ -45,8 +46,23 @@ class WorkDetailViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val downloads: Downloads,
     private val alignmentRepository: AlignmentRepository,
+    private val playbackSettings: PlaybackSettings,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /** Playback settings surfaced in the detail overflow menu. */
+    val skipSeconds: StateFlow<Int> = playbackSettings.skipSeconds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
+    val mergeProgress: StateFlow<Boolean> = playbackSettings.mergeProgress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setSkipSeconds(seconds: Int) {
+        viewModelScope.launch { playbackSettings.setSkipSeconds(seconds) }
+    }
+
+    fun setMergeProgress(merged: Boolean) {
+        viewModelScope.launch { playbackSettings.setMergeProgress(merged) }
+    }
 
     private val workId: String = checkNotNull(savedStateHandle["id"]) {
         "WorkDetailViewModel requires an \"id\" nav argument"

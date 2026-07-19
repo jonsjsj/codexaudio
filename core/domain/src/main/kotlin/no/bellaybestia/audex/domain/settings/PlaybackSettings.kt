@@ -19,4 +19,12 @@ interface PlaybackSettings {
      */
     val skipSeconds: Flow<Int>
     suspend fun setSkipSeconds(seconds: Int)
+
+    /**
+     * When on, a book's audiobook + ebook are shown as ONE progress instead of a
+     * separate % each. Since the two formats now follow each other, one combined
+     * bar is enough — the higher of the two positions. Off keeps them separate.
+     */
+    val mergeProgress: Flow<Boolean>
+    suspend fun setMergeProgress(merged: Boolean)
 }

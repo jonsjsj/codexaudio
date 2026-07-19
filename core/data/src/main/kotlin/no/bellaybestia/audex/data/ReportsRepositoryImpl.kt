@@ -26,6 +26,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 private val KEY_MY_REPORTS = stringPreferencesKey("my_reports")
 
+/** Default reports host — the self-hosted audex-align box (also serves word sync). */
+private const val DEFAULT_REPORT_HOST = "http://192.168.68.212:8590"
+
 @Serializable
 private data class WireReport(
     val kind: String,
@@ -71,6 +74,18 @@ class ReportsRepositoryImpl @Inject constructor(
     private val http = OkHttpClient()
     private val listSerializer = ListSerializer(StoredReport.serializer())
 
+    /**
+     * Hosts the reporter talks to, in order. The word-sync alignment box also
+     * serves /reports, so we use it when it's set — but reporting must NOT
+     * require the (optional) word-sync URL to be configured, which was making
+     * "Send report" throw "No service configured". Fall back to the default
+     * self-hosted box so a fresh install can file reports out of the box.
+     */
+    private suspend fun reportBases(): List<String> = buildList {
+        alignment.serviceUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }?.let { add(it) }
+        add(DEFAULT_REPORT_HOST)
+    }.distinct()
+
     override val myReports: Flow<List<MyReport>> =
         context.appSettingsDataStore.data.map { prefs ->
             decode(prefs[KEY_MY_REPORTS]).map { it.toDomain() }
@@ -83,30 +98,31 @@ class ReportsRepositoryImpl @Inject constructor(
         appVersion: String,
         screen: String?,
     ): FiledReport = withContext(Dispatchers.IO) {
-        val service = alignment.serviceUrl()
-            ?: error("No service configured — set the alignment service URL in Settings first.")
-        // Auto-attach the build, device, and the screen the user came from — so triage has
-        // context without the reporter having to type it (parity with Codex's reporter).
-        val meta = buildString {
-            append("\n\n— Audex ").append(appVersion)
-            append(" · ").append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL)
-            append(" · Android ").append(android.os.Build.VERSION.RELEASE)
-            append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(')')
-            if (!screen.isNullOrBlank()) append("\nScreen: ").append(screen)
-        }
-        val fullBody = body + meta
-        val payload = json.encodeToString(
+        val fullBody = if (screen != null) "$body\n\nScreen: $screen" else body
+        val payloadJson = json.encodeToString(
             WireReport.serializer(),
             WireReport(kind.name.lowercase(), title, fullBody, appVersion),
-        ).toRequestBody("application/json".toMediaType())
-        val request = Request.Builder().url("$service/reports").post(payload).build()
-        val filed = http.newCall(request).execute().use { response ->
-            check(response.isSuccessful) {
-                if (response.code == 503) "Report service isn't set up on the server yet."
-                else "Sending failed (HTTP ${response.code})."
+        )
+        // Try each host; the first that accepts the report wins. A fresh request
+        // body per attempt (OkHttp bodies aren't reusable across calls).
+        var lastError: Throwable? = null
+        var result: WireFiled? = null
+        for (base in reportBases()) {
+            val attempt = runCatching {
+                val payload = payloadJson.toRequestBody("application/json".toMediaType())
+                val request = Request.Builder().url("$base/reports").post(payload).build()
+                http.newCall(request).execute().use { response ->
+                    check(response.isSuccessful) {
+                        if (response.code == 503) "Report service isn't set up on the server yet."
+                        else "Sending failed (HTTP ${response.code})."
+                    }
+                    json.decodeFromString(WireFiled.serializer(), response.body?.string().orEmpty())
+                }
             }
-            json.decodeFromString(WireFiled.serializer(), response.body?.string().orEmpty())
+            if (attempt.isSuccess) { result = attempt.getOrThrow(); break }
+            lastError = attempt.exceptionOrNull()
         }
+        val filed = result ?: throw (lastError ?: IllegalStateException("Couldn't reach the report service."))
         // Remember it locally so "Your reports" can track the loop.
         context.appSettingsDataStore.edit { prefs ->
             val current = decode(prefs[KEY_MY_REPORTS])
@@ -126,22 +142,25 @@ class ReportsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshMyReports() = withContext(Dispatchers.IO) {
-        val service = alignment.serviceUrl() ?: return@withContext
         val current = decode(context.appSettingsDataStore.data.first()[KEY_MY_REPORTS])
         if (current.isEmpty()) return@withContext
+        val bases = reportBases()
         val updated = current.map { report ->
             if (report.state == "closed") return@map report // terminal; skip the call
-            runCatching {
-                val request = Request.Builder().url("$service/reports/${report.number}").get().build()
-                http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use report
-                    val status = json.decodeFromString(
-                        WireStatus.serializer(),
-                        response.body?.string().orEmpty(),
-                    )
-                    report.copy(state = status.state, fixedIn = status.fixedIn)
-                }
-            }.getOrDefault(report)
+            // First host that answers wins; otherwise keep the last-known status.
+            bases.firstNotNullOfOrNull { base ->
+                runCatching {
+                    val request = Request.Builder().url("$base/reports/${report.number}").get().build()
+                    http.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) return@use null
+                        val status = json.decodeFromString(
+                            WireStatus.serializer(),
+                            response.body?.string().orEmpty(),
+                        )
+                        report.copy(state = status.state, fixedIn = status.fixedIn)
+                    }
+                }.getOrNull()
+            } ?: report
         }
         context.appSettingsDataStore.edit { prefs ->
             prefs[KEY_MY_REPORTS] = json.encodeToString(listSerializer, updated)

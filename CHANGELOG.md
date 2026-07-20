@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.3.0
+
+- Fixed stale progress: a book whose progress you discarded/reset/finished on
+  another client no longer keeps showing its old percent — the sync now removes
+  progress the server no longer has (it previously only ever added/updated).
+- Home now shows how far you are in EITHER format: a book you've read further on
+  ebook than audio (or vice versa) shows that furthest spot.
 ## 0.4.2.0
 
 - Fixed bottom-tab navigation: every tab now lands on its own root. Home goes to

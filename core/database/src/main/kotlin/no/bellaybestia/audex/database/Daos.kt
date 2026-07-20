@@ -202,6 +202,22 @@ interface ProgressDao {
 
     @Query("DELETE FROM progress WHERE serverId = :serverId")
     suspend fun deleteForServer(serverId: String)
+
+    /**
+     * Reconcile deletions: drop SERVER-sourced rows for [serverId] whose item is
+     * NOT in the server's current mediaProgress ([keep]) — a book whose progress
+     * was discarded/cleared on the server (by any client) otherwise keeps showing
+     * stale progress forever, since the sync only ever upserts. Local-origin rows
+     * (LOCAL_READER / LOCAL_PLAYBACK / LOCAL_XFORMAT not yet pushed) are preserved.
+     * An empty [keep] (server has no progress) clears all SERVER rows for it.
+     */
+    @Query("DELETE FROM progress WHERE serverId = :serverId AND source = 'SERVER' AND libraryItemId NOT IN (:keep)")
+    suspend fun deleteStaleServerRows(serverId: String, keep: List<String>)
+
+    /** The [deleteStaleServerRows] variant for when the server has NO progress at
+     * all (empty keep-list) — clears every SERVER row, keeping local-origin ones. */
+    @Query("DELETE FROM progress WHERE serverId = :serverId AND source = 'SERVER'")
+    suspend fun deleteAllServerRows(serverId: String)
 }
 
 @Dao

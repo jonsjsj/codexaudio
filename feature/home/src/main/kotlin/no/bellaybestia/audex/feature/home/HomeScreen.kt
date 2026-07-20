@@ -427,8 +427,10 @@ private fun BigContinueRow(work: Work, onWorkClick: (Work) -> Unit) {
 
 /* ------------------------------ shared ------------------------------- */
 
+// The furthest you've gotten in EITHER format — a book you've read further on
+// ebook than audio (or vice versa) shows that further spot, not just the audio %.
 private fun furthestFraction(work: Work): Float =
-    (if (work.hasAudio) work.listenFraction else work.readFraction).toFloat()
+    maxOf(work.listenFraction, work.readFraction).toFloat()
 
 private fun subtitleOf(work: Work): String? {
     val parts = buildList {

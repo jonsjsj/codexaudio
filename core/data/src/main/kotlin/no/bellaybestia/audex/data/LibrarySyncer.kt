@@ -122,6 +122,12 @@ class LibrarySyncer @Inject constructor(
             if (local != null && local.source == "LOCAL_READER" && local.lastUpdate >= srv.lastUpdate) local else srv
         }
         progressDao.upsertAll(merged)
+        // Reconcile deletions: anything the server no longer has progress for was
+        // discarded/cleared elsewhere — drop the stale SERVER row so it stops
+        // showing (e.g. a "Continue" book you finished/reset on another client).
+        val keep = incoming.map { it.libraryItemId }
+        if (keep.isEmpty()) progressDao.deleteAllServerRows(serverId)
+        else progressDao.deleteStaleServerRows(serverId, keep)
     }
 }
 

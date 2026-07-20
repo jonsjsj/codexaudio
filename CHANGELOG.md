@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.0.0
+
+- The Now Playing screen is rebuilt to the new design: a full cover banner that
+  fades into the page, the title set in the display type, and a waveform under
+  the scrubber. Time-remaining now sits alongside the position and total length.
+- Cleaner controls: a large circular play button flanked by your chosen skip
+  amount, and one utility strip for Speed, Sleep, Bookmark and Go-to.
+- Chapters and Bookmarks are now tabs on the player.
 ## 0.3.12.0
 
 - A book's page has a 3-dot menu (top right) for its playback settings — the

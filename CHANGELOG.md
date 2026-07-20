@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.5.0
+
+- Automatic cross-format follow (with Merge progress on): pressing Listen now
+  resumes the audiobook at your furthest EBOOK spot instead of an older audio
+  position — so you don't re-listen what you already read, and the combined
+  progress moves as you go. (Reading already jumps to your listening spot.)
 ## 0.4.4.0
 
 - A book's progress bar now follows your LIVE listening position instead of

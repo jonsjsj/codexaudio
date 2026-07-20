@@ -178,7 +178,23 @@ class WorkDetailViewModel @Inject constructor(
 
     fun play(edition: Edition) {
         viewModelScope.launch {
-            playbackController.play(edition.serverId, edition.libraryItemId, title, author)
+            // Automatic cross-format follow (Merge progress on): if you're further
+            // along in the EBOOK, resume the audio at that reading spot instead of
+            // the older audio spot — otherwise you'd re-listen ground you already
+            // read and the merged % would sit still until the audio caught up.
+            // (The ebook→audio direction, opening the reader at the audio spot, is
+            // handled when you tap Read.)
+            var resumeAt: Double? = null
+            if (edition.format == Format.AUDIO && mergeProgress.value) {
+                val ebook = editions.value.firstOrNull { it.format == Format.EBOOK }
+                val dur = edition.durationS
+                if (ebook != null && dur != null && dur > 0 &&
+                    ebook.fraction > edition.fraction + 0.01
+                ) {
+                    resumeAt = ebook.fraction * dur
+                }
+            }
+            playbackController.play(edition.serverId, edition.libraryItemId, title, author, resumeAtS = resumeAt)
         }
     }
 

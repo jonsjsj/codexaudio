@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.4.0
+
+- A book's progress bar now follows your LIVE listening position instead of
+  sitting at the last-synced spot, so it moves as you listen (and never shows
+  less than the furthest you've reached across audio + ebook).
 ## 0.4.3.0
 
 - Fixed stale progress: a book whose progress you discarded/reset/finished on

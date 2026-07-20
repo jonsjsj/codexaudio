@@ -228,23 +228,28 @@ fun WorkDetailScreen(
                 }
             }
         }
+        // While the audio is actually playing, reflect the LIVE position instead
+        // of the last-saved fraction — otherwise the bar looks stuck at whatever
+        // was last synced (e.g. the ebook's furthest spot) while you're listening.
+        val livePlayingFraction: Double? = audioEdition?.let { ae ->
+            if (playback.libraryItemId == ae.libraryItemId && playback.durationMs > 0) {
+                (playback.positionMs.toDouble() / playback.durationMs).coerceIn(0.0, 1.0)
+            } else {
+                null
+            }
+        }
         if (mergeProgress && audioEdition != null && ebookEdition != null) {
             MergedEditionRow(
                 audio = audioEdition,
                 ebook = ebookEdition,
-                playback = playback,
-                audioDownload = downloadOf(audioEdition),
-                ebookDownload = downloadOf(ebookEdition),
-                onListen = { viewModel.play(audioEdition) },
-                onTogglePlayPause = { viewModel.togglePlayPause() },
-                onRead = { onOpenReader(ebookEdition.serverId, ebookEdition.libraryItemId, viewModel.title) },
-                onGetEbook = { viewModel.download(ebookEdition) },
+                liveAudioFraction = livePlayingFraction,
             )
         } else {
             editions.forEach { edition ->
                 val isThis = playback.libraryItemId == edition.libraryItemId
                 CompactEditionRow(
                     edition = edition,
+                    liveFraction = if (edition.format == Format.AUDIO) livePlayingFraction else null,
                     isPlayingThis = isThis && playback.isPlaying,
                     isLoadingThis = isThis && playback.isLoading,
                     download = downloadOf(edition),
@@ -345,6 +350,7 @@ private fun PillButton(
 @Composable
 private fun CompactEditionRow(
     edition: Edition,
+    liveFraction: Double?,
     isPlayingThis: Boolean,
     isLoadingThis: Boolean,
     download: no.bellaybestia.audex.domain.download.DownloadInfo?,
@@ -355,7 +361,8 @@ private fun CompactEditionRow(
     onRead: () -> Unit,
 ) {
     val isAudio = edition.format == Format.AUDIO
-    val percent = (edition.fraction.coerceIn(0.0, 1.0) * 100).roundToInt()
+    val fraction = (liveFraction ?: edition.fraction).coerceIn(0.0, 1.0)
+    val percent = (fraction * 100).roundToInt()
     val downloadLabel = when {
         download == null -> "Save"
         download.isActive -> "…"
@@ -386,7 +393,7 @@ private fun CompactEditionRow(
             Box(
                 Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(edition.fraction.coerceIn(0.0, 1.0).toFloat())
+                    .fillMaxWidth(fraction.toFloat())
                     .background(MaterialTheme.colorScheme.primary),
             )
         }
@@ -512,26 +519,20 @@ private fun DetailOverflowMenu(
 
 /**
  * Merged progress row (Merge progress on): the work's audio + ebook as ONE
- * progress bar (the further of the two) with both Listen and Read actions —
- * since the formats follow each other, a single % is enough.
+ * progress bar. While you're actually listening it tracks the LIVE audio
+ * position ([liveAudioFraction]) so it moves as you go; otherwise it shows the
+ * further of the two saved spots. Listen/Read are the buttons above.
  */
 @Composable
 private fun MergedEditionRow(
     audio: Edition,
     ebook: Edition,
-    playback: PlaybackState,
-    audioDownload: no.bellaybestia.audex.domain.download.DownloadInfo?,
-    ebookDownload: no.bellaybestia.audex.domain.download.DownloadInfo?,
-    onListen: () -> Unit,
-    onTogglePlayPause: () -> Unit,
-    onRead: () -> Unit,
-    onGetEbook: () -> Unit,
+    liveAudioFraction: Double?,
 ) {
-    val merged = maxOf(audio.fraction, ebook.fraction).coerceIn(0.0, 1.0)
+    // The furthest across both formats, updated LIVE while you listen: it never
+    // drops, and the moment your listening passes your reading spot it climbs.
+    val merged = maxOf(liveAudioFraction ?: 0.0, audio.fraction, ebook.fraction).coerceIn(0.0, 1.0)
     val percent = (merged * 100).roundToInt()
-    val isPlayingAudio = playback.libraryItemId == audio.libraryItemId && playback.isPlaying
-    val ebookReady = ebookDownload?.isComplete == true
-    val ebookFetching = ebookDownload?.isActive == true
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

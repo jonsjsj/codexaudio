@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.2.0
+
+- Fixed bottom-tab navigation: every tab now lands on its own root. Home goes to
+  Home (not "resume the last book"), Downloads goes to Downloads (not Library),
+  and the active-tab underline always follows.
+- A book's page: the primary button now reads Listen / Read, and the duplicate
+  Listen/Read actions were removed from the progress rows (which now just show
+  per-format progress and a Save toggle).
 ## 0.4.1.0
 
 - The rest of the app is brought to the new design: Home's shelves are now flat

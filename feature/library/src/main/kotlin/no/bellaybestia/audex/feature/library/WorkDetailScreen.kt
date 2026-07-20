@@ -212,7 +212,7 @@ fun WorkDetailScreen(
                 audioEdition?.let { ae ->
                     val playingThis = playback.libraryItemId == ae.libraryItemId && playback.isPlaying
                     PillButton(
-                        text = if (playingThis) "Pause" else "Resume",
+                        text = if (playingThis) "Pause" else "Listen",
                         filled = true,
                         modifier = Modifier.weight(1f),
                         onClick = { if (playingThis) viewModel.togglePlayPause() else viewModel.play(ae) },
@@ -356,20 +356,6 @@ private fun CompactEditionRow(
 ) {
     val isAudio = edition.format == Format.AUDIO
     val percent = (edition.fraction.coerceIn(0.0, 1.0) * 100).roundToInt()
-    val primaryAction: () -> Unit = when {
-        isAudio -> { { if (isPlayingThis) onTogglePlayPause() else onPlay() } }
-        download?.isComplete == true -> onRead
-        download?.isActive == true -> ({})
-        else -> onDownload
-    }
-    val primaryLabel = when {
-        isAudio && isLoadingThis -> "…"
-        isAudio && isPlayingThis -> "Pause"
-        isAudio -> "Listen"
-        download?.isComplete == true -> "Read"
-        download?.isActive == true -> "Fetching…"
-        else -> "Get"
-    }
     val downloadLabel = when {
         download == null -> "Save"
         download.isActive -> "…"
@@ -379,7 +365,6 @@ private fun CompactEditionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = primaryAction)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -390,7 +375,8 @@ private fun CompactEditionRow(
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // thin progress bar takes the middle
+        // thin progress bar takes the middle (display only — Listen/Read are the
+        // buttons above; this row just shows per-format progress + a Save toggle)
         Box(
             Modifier
                 .weight(1f)
@@ -408,13 +394,6 @@ private fun CompactEditionRow(
             text = "$percent%",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = primaryLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (primaryLabel == "Fetching…") MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable(enabled = !isLoadingThis, onClick = primaryAction),
         )
         Text(
             text = downloadLabel,
@@ -573,25 +552,7 @@ private fun MergedEditionRow(
                 Modifier.fillMaxHeight().fillMaxWidth(merged.toFloat()).background(MaterialTheme.colorScheme.primary),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            Text(
-                text = if (isPlayingAudio) "Pause" else "Listen",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { if (isPlayingAudio) onTogglePlayPause() else onListen() },
-            )
-            Text(
-                text = when {
-                    ebookReady -> "Read"
-                    ebookFetching -> "Fetching…"
-                    else -> "Get + read"
-                },
-                style = MaterialTheme.typography.labelLarge,
-                color = if (ebookFetching) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(enabled = !ebookFetching) { if (ebookReady) onRead() else onGetEbook() },
-            )
-        }
+        // Listen/Read are the buttons above; this merged row is display only.
     }
 }
 

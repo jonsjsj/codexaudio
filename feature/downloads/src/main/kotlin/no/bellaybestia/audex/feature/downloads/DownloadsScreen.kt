@@ -1,13 +1,19 @@
 package no.bellaybestia.audex.feature.downloads
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -28,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.designsystem.ScreenHeader
 import no.bellaybestia.audex.domain.download.DownloadInfo
 
@@ -60,6 +67,7 @@ fun DownloadsScreen(
                 items(items, key = { "${it.info.serverId}|${it.info.libraryItemId}|${it.info.format}" }) { display ->
                     DownloadRow(
                         info = display.info,
+                        coverUrl = display.coverUrl,
                         onRemove = { viewModel.remove(display.info) },
                         onOpen = display.workId?.let { wid ->
                             { onOpenWork(wid, display.info.title.orEmpty(), display.author) }
@@ -73,7 +81,9 @@ fun DownloadsScreen(
 }
 
 @Composable
-private fun DownloadRow(info: DownloadInfo, onRemove: () -> Unit, onOpen: (() -> Unit)?) {
+private fun DownloadRow(info: DownloadInfo, coverUrl: String?, onRemove: () -> Unit, onOpen: (() -> Unit)?) {
+    val running = info.state == "RUNNING" && info.bytesTotal > 0
+    val fraction = if (info.bytesTotal > 0) (info.bytesDone.toFloat() / info.bytesTotal).coerceIn(0f, 1f) else 0f
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -81,14 +91,19 @@ private fun DownloadRow(info: DownloadInfo, onRemove: () -> Unit, onOpen: (() ->
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        CoverImage(
+            url = coverUrl,
+            contentDescription = null,
+            modifier = Modifier.size(width = 44.dp, height = 60.dp),
+        )
+        Spacer(Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = info.title ?: info.libraryItemId,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -101,6 +116,22 @@ private fun DownloadRow(info: DownloadInfo, onRemove: () -> Unit, onOpen: (() ->
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Active transfer: a thin 2dp progress bar (mockup 2d).
+            if (running) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction)
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                }
+            }
         }
         // State on the right (mockup 2d): "On device" / "62%" / "Queued".
         // Remove is a two-tap confirm so a mis-tap can't delete a 300MB download.

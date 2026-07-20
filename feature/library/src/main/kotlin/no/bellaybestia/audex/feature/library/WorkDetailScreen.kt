@@ -1,7 +1,9 @@
 package no.bellaybestia.audex.feature.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,34 +89,37 @@ fun WorkDetailScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        // Hero: a full-bleed backdrop of the cover with a dark gradient foot,
-        // the title and (clickable) author/series/meta reversed out over it —
-        // the same editorial identity as Home's Nightfall hero, so the detail
-        // page reads as part of the app, not a plain metadata sheet.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(300.dp),
+        // Top bar (mockup 2c): overflow menu at the right — back is system nav.
+        // The "such things" (skip amount, merge, discard) live here, not in a row.
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DetailOverflowMenu(
+                skipSeconds = skipSeconds,
+                onSkip = viewModel::setSkipSeconds,
+                merged = mergeProgress,
+                onMerge = viewModel::setMergeProgress,
+                canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
+                onDiscard = viewModel::discardProgress,
+            )
+        }
+        // Cover tile beside a metadata column (mockup 2c) — the real cover art,
+        // series (clickable) / title / author (clickable) / narrator / meta.
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             CoverImage(
                 url = cover,
                 contentDescription = viewModel.title,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.4f to Color(0x66000000),
-                        1.0f to Color(0xF00A0B0F),
-                    ),
-                ),
+                modifier = Modifier.size(width = 112.dp, height = 152.dp),
             )
             Column(
-                Modifier.align(Alignment.BottomStart).padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                Modifier.weight(1f).align(Alignment.CenterVertically),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                // Series eyebrow (clickable) over the title.
                 work?.seriesName?.let { series ->
                     val pos = work?.seriesPosition?.let { p ->
                         " · #" + if (p % 1.0 == 0.0) p.toInt().toString() else p.toString()
@@ -123,7 +127,7 @@ fun WorkDetailScreen(
                     val seriesId = work?.seriesId
                     Text(
                         text = (series + pos).uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
@@ -139,63 +143,52 @@ fun WorkDetailScreen(
                     text = viewModel.title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFF4F6FA),
-                    maxLines = 2,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // Author · narrator on ONE line (author clickable).
                 val authorId = work?.authorId
-                val narrator = extras?.narrator?.takeIf { it.isNotBlank() }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    viewModel.author?.let { author ->
-                        Text(
-                            text = author,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = if (authorId != null) {
-                                Modifier.clickable { onAuthorClick(authorId, author) }
-                            } else {
-                                Modifier
-                            },
-                        )
-                    }
-                    narrator?.let {
-                        Text(
-                            text = "  ·  read by $it",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFB9C0CC),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                viewModel.author?.let { author ->
+                    Text(
+                        text = author,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = if (authorId != null) {
+                            Modifier.clickable { onAuthorClick(authorId, author) }
+                        } else {
+                            Modifier
+                        },
+                    )
+                }
+                extras?.narrator?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = "Narrated by $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 val meta = buildList {
                     work?.year?.let { add(it.toString()) }
                     editions.firstOrNull { it.format == Format.AUDIO }?.durationS?.let { s ->
                         add("${s / 3600}h ${(s % 3600) / 60}m")
                     }
+                    buildList {
+                        if (editions.any { it.format == Format.AUDIO }) add("Audio")
+                        if (editions.any { it.format == Format.EBOOK }) add("EPUB")
+                    }.joinToString(" + ").takeIf { it.isNotBlank() }?.let { add(it) }
                 }.joinToString(" · ")
                 if (meta.isNotBlank()) {
                     Text(
                         text = meta,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFB9C0CC),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            // Overflow: the "such things" go here (top-right, where they belong)
-            // instead of a prominent Discard row — playback settings + discard.
-            DetailOverflowMenu(
-                skipSeconds = skipSeconds,
-                onSkip = viewModel::setSkipSeconds,
-                merged = mergeProgress,
-                onMerge = viewModel::setMergeProgress,
-                canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
-                onDiscard = viewModel::discardProgress,
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp),
-            )
         }
 
         // Editions block. Normally one compact "sync" row per format; but when
@@ -208,6 +201,32 @@ fun WorkDetailScreen(
             it.serverId == edition.serverId &&
                 it.libraryItemId == edition.libraryItemId &&
                 it.format.name == edition.format.name
+        }
+        // Primary actions (mockup 2c): Resume (accent) + Read (outline). Detailed
+        // per-format progress + download management stay in the editions rows below.
+        if (audioEdition != null || ebookEdition != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                audioEdition?.let { ae ->
+                    val playingThis = playback.libraryItemId == ae.libraryItemId && playback.isPlaying
+                    PillButton(
+                        text = if (playingThis) "Pause" else "Resume",
+                        filled = true,
+                        modifier = Modifier.weight(1f),
+                        onClick = { if (playingThis) viewModel.togglePlayPause() else viewModel.play(ae) },
+                    )
+                }
+                ebookEdition?.let { ee ->
+                    PillButton(
+                        text = "Read",
+                        filled = false,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onOpenReader(ee.serverId, ee.libraryItemId, viewModel.title) },
+                    )
+                }
+            }
         }
         if (mergeProgress && audioEdition != null && ebookEdition != null) {
             MergedEditionRow(
@@ -288,6 +307,33 @@ fun WorkDetailScreen(
         description?.let { DescriptionBlock(it) }
 
         androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Mockup 2c primary action: a filled (accent) or outlined flat pill. */
+@Composable
+private fun PillButton(
+    text: String,
+    filled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(6.dp)
+    val shaped = modifier
+        .clip(shape)
+        .let {
+            if (filled) it.background(MaterialTheme.colorScheme.primary)
+            else it.border(1.dp, MaterialTheme.colorScheme.outline, shape)
+        }
+        .clickable(onClick = onClick)
+        .padding(vertical = 13.dp)
+    Box(shaped, contentAlignment = Alignment.Center) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -431,7 +477,7 @@ private fun DetailOverflowMenu(
     }
     Box(modifier) {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color(0xFFF4F6FA))
+            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Text(

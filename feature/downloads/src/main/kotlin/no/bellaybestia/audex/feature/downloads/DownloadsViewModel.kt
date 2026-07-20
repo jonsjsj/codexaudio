@@ -16,11 +16,12 @@ import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import javax.inject.Inject
 
-/** A download row enriched with what's needed to OPEN the book (its work + author). */
+/** A download row enriched with what's needed to OPEN the book (its work + author) + its cover. */
 data class DownloadDisplay(
     val info: DownloadInfo,
     val workId: String?,
     val author: String?,
+    val coverUrl: String? = null,
 )
 
 @HiltViewModel
@@ -36,8 +37,8 @@ class DownloadsViewModel @Inject constructor(
         .map { list ->
             list.map { info ->
                 val workId = catalogRepository.workIdForItem(info.serverId, info.libraryItemId)
-                val author = workId?.let { catalogRepository.work(it).first()?.authorName }
-                DownloadDisplay(info, workId, author)
+                val work = workId?.let { catalogRepository.work(it).first() }
+                DownloadDisplay(info, workId, work?.authorName, work?.coverUrl)
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

@@ -16,13 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import no.bellaybestia.audex.designsystem.PosterTile
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -40,6 +33,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.designsystem.ScreenHeader
@@ -86,7 +80,7 @@ fun LibraryScreen(
     // internally, so back-navigation restores them too — docs/02 §2.4).
     val authorsListState = rememberLazyListState()
     val seriesListState = rememberLazyListState()
-    val worksGridState = rememberLazyGridState()
+    val worksListState = rememberLazyListState()
 
     Column(modifier.fillMaxSize()) {
         // "15 works" (mockup 2b) — reflects the active search/filter, so it
@@ -113,10 +107,10 @@ fun LibraryScreen(
                 FilterRow(selected = filter, onSelect = viewModel::setFilter)
                 WorksList(
                     works = works,
-                    gridState = worksGridState,
+                    listState = worksListState,
                     onWorkClick = onWorkClick,
                     // Author shelf order reads best with section headers per author
-                    // (Codex's grouped browse); explicit sorts stay a flat list.
+                    // (Codex's grouped browse); explicit sorts stay ungrouped.
                     groupByAuthor = sort == WorkSort.AUTHOR.ordinal,
                 )
             }
@@ -134,8 +128,8 @@ private fun FilterRow(selected: Int, onSelect: (WorkFilter) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Show",
-            style = MaterialTheme.typography.labelSmall,
+            text = "SHOW",
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.6.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(12.dp))
@@ -170,8 +164,8 @@ private fun SortRow(selected: Int, onSelect: (WorkSort) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Sort",
-            style = MaterialTheme.typography.labelSmall,
+            text = "SORT",
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.6.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(12.dp))
@@ -311,66 +305,43 @@ fun SeriesList(
 }
 
 /**
- * The library as a cover grid — the change that makes it read like a media app
- * instead of a settings list. Responsive columns (adaptive to width), a 2:3
- * poster per work with a progress ribbon, and, when sorted by author, a
- * full-width author header spanning the row above each block.
+ * The library as a flat hairline list (mockup 2b): one [WorkRowItem] per work —
+ * cover + title + subline + dual listen/read bars — divided by hairlines. When
+ * sorted by author, an accent letter-spaced author eyebrow heads each block.
  */
 @Composable
 fun WorksList(
     works: List<Work>,
-    gridState: LazyGridState,
+    listState: LazyListState,
     onWorkClick: (Work) -> Unit = {},
     modifier: Modifier = Modifier,
     groupByAuthor: Boolean = false,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 108.dp),
-        state = gridState,
+    LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(bottom = 16.dp),
     ) {
-        if (groupByAuthor) {
-            works.forEachIndexed { index, work ->
+        itemsIndexed(works, key = { _, work -> work.id }) { index, work ->
+            if (groupByAuthor) {
                 val author = work.authorName ?: "Unknown author"
                 val previous = works.getOrNull(index - 1)
                 if (previous == null || (previous.authorName ?: "Unknown author") != author) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "author_$author") {
-                        Text(
-                            text = author.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
-                        )
-                    }
+                    Text(
+                        text = author.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.8.sp),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
+                    )
                 }
-                item(key = work.id) { WorkPoster(work, onWorkClick) }
             }
-        } else {
-            items(works, key = { it.id }) { work -> WorkPoster(work, onWorkClick) }
+            WorkRowItem(work = work, onClick = { onWorkClick(work) })
+            FlatDivider()
         }
     }
-}
-
-/** One grid cell: a work as a poster with its furthest-along fraction as ribbon. */
-@Composable
-private fun WorkPoster(work: Work, onWorkClick: (Work) -> Unit) {
-    val fraction = when {
-        work.hasAudio -> work.listenFraction
-        work.hasEbook -> work.readFraction
-        else -> 0.0
-    }.toFloat()
-    PosterTile(
-        coverUrl = work.coverUrl,
-        title = work.title,
-        subtitle = work.authorName?.takeIf { it.isNotBlank() },
-        progress = fraction.takeIf { it > 0f },
-        hasAudio = work.hasAudio,
-        hasEbook = work.hasEbook,
-        onClick = { onWorkClick(work) },
-    )
 }

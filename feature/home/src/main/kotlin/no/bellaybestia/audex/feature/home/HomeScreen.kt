@@ -17,15 +17,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -109,11 +112,19 @@ private fun NightfallHome(
         continueWorks.firstOrNull()?.let { hero ->
             item(key = "hero") { HeroCard(hero, onWorkClick) }
         }
+        // Below the hero: flat hairline rows per the mockup (2a) — the rest of
+        // in-progress books with dual listen/read bars, then recently added.
         if (continueWorks.size > 1) {
-            item(key = "cont") { PosterRail("Keep going", continueWorks.drop(1), onWorkClick) }
+            item(key = "l_cont") { SectionEyebrow("Continue") }
+            items(continueWorks.drop(1), key = { "c_${it.id}" }) { w ->
+                FlatWorkRow(w, showBars = true, onWorkClick)
+            }
         }
         if (recentWorks.isNotEmpty()) {
-            item(key = "recent") { PosterRail("Recently added", recentWorks, onWorkClick) }
+            item(key = "l_recent") { SectionEyebrow("Recently added") }
+            items(recentWorks, key = { "r_${it.id}" }) { w ->
+                FlatWorkRow(w, showBars = false, onWorkClick)
+            }
         }
         item(key = "tail") { Spacer(Modifier.height(24.dp)) }
     }
@@ -194,32 +205,93 @@ private fun HeroCard(work: Work, onWorkClick: (Work) -> Unit) {
     }
 }
 
+/** Mockup 2a section eyebrow: letter-spaced muted caps over a hairline. */
 @Composable
-private fun PosterRail(title: String, works: List<Work>, onWorkClick: (Work) -> Unit) {
-    Column {
+private fun SectionEyebrow(text: String) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp)) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+            text = text.uppercase(),
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 10.dp),
         )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+/**
+ * Flat hairline row (mockup 2a): small cover + title + subtitle, with dual
+ * listen/read bars when [showBars] (Continue) or plain when off (Recently added).
+ */
+@Composable
+private fun FlatWorkRow(work: Work, showBars: Boolean, onWorkClick: (Work) -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onWorkClick(work) }
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(works, key = { it.id }) { work ->
-                PosterTile(
-                    coverUrl = work.coverUrl,
-                    title = work.title,
-                    subtitle = work.authorName?.takeIf { it.isNotBlank() },
-                    progress = furthestFraction(work).takeIf { it > 0f },
-                    hasAudio = work.hasAudio,
-                    hasEbook = work.hasEbook,
-                    onClick = { onWorkClick(work) },
-                    modifier = Modifier.width(132.dp),
+            CoverImage(
+                url = work.coverUrl,
+                contentDescription = work.title,
+                progress = if (showBars) furthestFraction(work).takeIf { it > 0f } else null,
+                modifier = Modifier.size(width = 48.dp, height = 66.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                Text(
+                    text = work.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                subtitleOf(work)?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (showBars && work.hasAudio) {
+                    FlatFormatBar(Icons.Outlined.Headphones, "Listen progress", work.listenFraction)
+                }
+                if (showBars && work.hasEbook) {
+                    FlatFormatBar(Icons.Outlined.MenuBook, "Read progress", work.readFraction)
+                }
             }
         }
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp),
+        )
+    }
+}
+
+@Composable
+private fun FlatFormatBar(icon: ImageVector, contentDescription: String, fraction: Double) {
+    val clamped = fraction.coerceIn(0.0, 1.0).toFloat()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f).height(2.dp).background(MaterialTheme.colorScheme.outlineVariant)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(clamped).background(MaterialTheme.colorScheme.primary))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "${(clamped * 100).roundToInt()}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

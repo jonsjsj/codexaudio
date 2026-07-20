@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.1.0
+
+- The rest of the app is brought to the new design: Home's shelves are now flat
+  rows with dual listen/read bars, the Library "All" tab is a flat author-grouped
+  list (not a grid), Downloads shows cover + a live transfer bar, and a book's
+  page leads with a cover tile beside its details plus Resume / Read buttons.
+- Your requested touches stay: the single switchable skip, Settings tabs, the
+  book-page 3-dot menu, merge progress, go-to and format badges.
 ## 0.4.0.0
 
 - The Now Playing screen is rebuilt to the new design: a full cover banner that

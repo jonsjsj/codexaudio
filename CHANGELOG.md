@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.7.0
+
+- Bug reports now work off your home network: "Report a problem" falls back to
+  the public codex host, so the reporter reaches the service on mobile data too
+  (it used to only work on the LAN).
 ## 0.4.6.0
 
 - Book page redesigned (respecting the new Settings): a full-bleed cover header

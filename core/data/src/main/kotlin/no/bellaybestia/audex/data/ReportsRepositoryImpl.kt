@@ -26,8 +26,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 private val KEY_MY_REPORTS = stringPreferencesKey("my_reports")
 
-/** Default reports host — the self-hosted audex-align box (also serves word sync). */
+/** Default reports host — the self-hosted audex-align box (also serves word sync).
+ * LAN-only, so it can't be reached over mobile data. */
 private const val DEFAULT_REPORT_HOST = "http://192.168.68.212:8590"
+
+/** Public reports host — codex.* proxies /reports to align and is reachable over
+ * the internet (audex.* is a dead NPMplus page), so reporting works off-LAN too.
+ * Same alive host the OTA updater falls back to (BuildConfig.UPDATE_URL_ALT). */
+private const val PUBLIC_REPORT_HOST = "https://codex.bellaybestia.no"
 
 @Serializable
 private data class WireReport(
@@ -84,6 +90,9 @@ class ReportsRepositoryImpl @Inject constructor(
     private suspend fun reportBases(): List<String> = buildList {
         alignment.serviceUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }?.let { add(it) }
         add(DEFAULT_REPORT_HOST)
+        // Public fallback so reporting works off-LAN (mobile data). On LAN the box
+        // answers first; off-LAN the LAN hosts fail fast and this one takes it.
+        add(PUBLIC_REPORT_HOST)
     }.distinct()
 
     override val myReports: Flow<List<MyReport>> =

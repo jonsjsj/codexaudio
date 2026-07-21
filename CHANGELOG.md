@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.8.0
+
+- Cover tinting is now a clear switch in Settings → Appearance: "Tint from
+  cover art" (On/Off). On, the whole app takes its colours from the book you're
+  on; off, it holds still on a fixed accent (Mono / Blue / Gold / Cyan), which
+  now only appear when the switch is off. Previously "Cover" was buried as one
+  swatch among the fixed colours, so there was no obvious way to turn it off.
+
 ## 0.4.7.0
 
 - Bug reports now work off your home network: "Report a problem" falls back to

@@ -163,49 +163,75 @@ fun SettingsScreen(
             )
         }
         item(key = "appearance-accent") {
+            // Cover tinting is now an explicit toggle (On = cover-derived palette,
+            // Off = a fixed accent). Previously "Cover" was one swatch among the
+            // static accents, which read as a colour choice, not "follow the cover".
+            val coverTint = themePrefs.accent == AccentChoice.COVER
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text(text = "Accent", style = MaterialTheme.typography.bodyLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Tint from cover art",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (coverTint) "On" else "Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (coverTint) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            // On -> cover palette; Off -> fall back to a fixed accent
+                            // (Mono, a neutral greyscale, unless one was already picked).
+                            .clickable {
+                                viewModel.setAccent(
+                                    if (coverTint) AccentChoice.MONO else AccentChoice.COVER,
+                                )
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
                 Text(
-                    text = if (themePrefs.accent == AccentChoice.COVER) {
-                        "Colours follow the cover of the book you're on."
+                    text = if (coverTint) {
+                        "The whole app takes its colours from the cover of the book you're on."
                     } else {
-                        "Pick Cover to let each book colour the app."
+                        "Off — the app uses a fixed accent. Pick one below."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
-                Row(
-                    modifier = Modifier
-                        .padding(top = 10.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    AccentChoice.entries.forEach { choice ->
-                        val selected = themePrefs.accent == choice
-                        val dot = when (choice) {
-                            // The live derived accent — the swatch literally shows
-                            // the colour the current cover is tinting the app with.
-                            AccentChoice.COVER -> MaterialTheme.colorScheme.primary
-                            AccentChoice.MONO -> Color(0xFFEDEDED)
-                            AccentChoice.BLUE -> Color(0xFF5A9FE6)
-                            AccentChoice.GOLD -> Color(0xFFDCA85F)
-                            AccentChoice.CYAN -> Color(0xFF4DD0FF)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clickable { viewModel.setAccent(choice) }
-                                .padding(vertical = 4.dp),
-                        ) {
-                            Box(Modifier.size(14.dp).clip(CircleShape).background(dot))
-                            Text(
-                                text = choice.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 5.dp),
-                            )
+                // Fixed accents only matter when cover tinting is off.
+                if (!coverTint) {
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        AccentChoice.entries.filter { it != AccentChoice.COVER }.forEach { choice ->
+                            val selected = themePrefs.accent == choice
+                            val dot = when (choice) {
+                                AccentChoice.MONO -> Color(0xFFEDEDED)
+                                AccentChoice.BLUE -> Color(0xFF5A9FE6)
+                                AccentChoice.GOLD -> Color(0xFFDCA85F)
+                                AccentChoice.CYAN -> Color(0xFF4DD0FF)
+                                AccentChoice.COVER -> MaterialTheme.colorScheme.primary
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clickable { viewModel.setAccent(choice) }
+                                    .padding(vertical = 4.dp),
+                            ) {
+                                Box(Modifier.size(14.dp).clip(CircleShape).background(dot))
+                                Text(
+                                    text = choice.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 5.dp),
+                                )
+                            }
                         }
                     }
                 }

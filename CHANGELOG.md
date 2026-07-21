@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.6.0
+
+- Book page redesigned (respecting the new Settings): a full-bleed cover header
+  with series / title / narrator and small FORMAT ICONS (headphones, book, and a
+  W when word-sync is ready) instead of "Audio + EPUB" text; ONE combined
+  progress line with tappable bookmark ticks, a book-% (furthest read) and a
+  headphones-% (furthest listened); and the description now fills the space the
+  old rows used. Downloads moved into the 3-dot menu.
 ## 0.4.5.0
 
 - Automatic cross-format follow (with Merge progress on): pressing Listen now

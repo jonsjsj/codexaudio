@@ -20,6 +20,8 @@ import no.bellaybestia.audex.domain.download.Downloads
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Work
+import no.bellaybestia.audex.domain.playback.Bookmark
+import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
@@ -44,6 +46,7 @@ data class OtherFormat(
 class WorkDetailViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val playbackController: PlaybackController,
+    private val bookmarksRepository: BookmarksRepository,
     private val downloads: Downloads,
     private val alignmentRepository: AlignmentRepository,
     private val playbackSettings: PlaybackSettings,
@@ -108,6 +111,11 @@ class WorkDetailViewModel @Inject constructor(
     private val _furthestS = MutableStateFlow<Double?>(null)
     val furthestS: StateFlow<Double?> = _furthestS.asStateFlow()
 
+    /** Server-synced bookmarks for the audio edition — shown as ticks on the
+     * combined progress bar (redesign 4a). Empty when there's no audio edition. */
+    private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
+    val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
+
     val playback: StateFlow<PlaybackState> = playbackController.state
 
     val downloadStates: StateFlow<List<DownloadInfo>> = downloads.all()
@@ -146,7 +154,20 @@ class WorkDetailViewModel @Inject constructor(
                     _furthestS.value =
                         catalogRepository.furthestPositionS(audio.serverId, audio.libraryItemId)
                 }
+                if (audio != null) {
+                    _bookmarks.value = runCatching {
+                        bookmarksRepository.bookmarksFor(audio.serverId, audio.libraryItemId)
+                    }.getOrDefault(emptyList())
+                }
             }
+        }
+    }
+
+    /** Play the audio edition at [positionS] (tapping a bookmark on the bar). */
+    fun playAudioAt(positionS: Double) {
+        val audio = editions.value.firstOrNull { it.format == Format.AUDIO } ?: return
+        viewModelScope.launch {
+            playbackController.play(audio.serverId, audio.libraryItemId, title, author, resumeAtS = positionS)
         }
     }
 

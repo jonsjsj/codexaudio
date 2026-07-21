@@ -6,14 +6,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Headphones
@@ -38,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,6 +85,7 @@ fun WorkDetailScreen(
     val skipSeconds by viewModel.skipSeconds.collectAsState()
     val mergeProgress by viewModel.mergeProgress.collectAsState()
     val furthest by viewModel.furthestS.collectAsState()
+    val bookmarks by viewModel.bookmarks.collectAsState()
 
     val cover = editions.firstNotNullOfOrNull { it.coverUrl }
     // Browsing a book re-tints the whole app around it (mockup 2c).
@@ -89,36 +96,61 @@ fun WorkDetailScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        // Top bar (mockup 2c): overflow menu at the right — back is system nav.
-        // The "such things" (skip amount, merge, discard) live here, not in a row.
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DetailOverflowMenu(
-                skipSeconds = skipSeconds,
-                onSkip = viewModel::setSkipSeconds,
-                merged = mergeProgress,
-                onMerge = viewModel::setMergeProgress,
-                canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
-                onDiscard = viewModel::discardProgress,
-            )
+        val hasAudioFmt = editions.any { it.format == Format.AUDIO }
+        val hasEbookFmt = editions.any { it.format == Format.EBOOK }
+        val wordSyncReady = wordSync == WordSyncStatus.READY || wordSync == WordSyncStatus.RUNNING
+        val audioEdition = editions.firstOrNull { it.format == Format.AUDIO }
+        val ebookEdition = editions.firstOrNull { it.format == Format.EBOOK }
+        fun downloadOf(edition: Edition) = downloadStates.firstOrNull {
+            it.serverId == edition.serverId &&
+                it.libraryItemId == edition.libraryItemId &&
+                it.format.name == edition.format.name
         }
-        // Cover tile beside a metadata column (mockup 2c) — the real cover art,
-        // series (clickable) / title / author (clickable) / narrator / meta.
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            CoverImage(
-                url = cover,
-                contentDescription = viewModel.title,
-                modifier = Modifier.size(width = 112.dp, height = 152.dp),
+        // Downloads live in the 3-dot menu now that the edition rows are gone.
+        val downloadItems = buildList<Pair<String, () -> Unit>> {
+            audioEdition?.let { ae ->
+                val done = downloadOf(ae)?.isComplete == true
+                add((if (done) "Remove audiobook download" else "Download audiobook") to {
+                    if (done) viewModel.removeDownload(ae) else viewModel.download(ae)
+                })
+            }
+            ebookEdition?.let { ee ->
+                val done = downloadOf(ee)?.isComplete == true
+                add((if (done) "Remove ebook download" else "Download ebook") to {
+                    if (done) viewModel.removeDownload(ee) else viewModel.download(ee)
+                })
+            }
+        }
+        // Full-bleed cover header (redesign 4a): the real cover fades into the page;
+        // series / title / author·narrator + FORMAT ICONS (headphones · book · W)
+        // sit over the foot. No "Audio + EPUB" text — the icons carry it. The W
+        // (word sync) only appears when it's actually ready for this book.
+        Box(Modifier.fillMaxWidth().aspectRatio(0.96f)) {
+            CoverImage(url = cover, contentDescription = viewModel.title, modifier = Modifier.fillMaxSize())
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0.0f to Color.Transparent,
+                        0.5f to Color(0x55000000),
+                        1.0f to Color(0xF00A0B0F),
+                    ),
+                ),
             )
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp)) {
+                DetailOverflowMenu(
+                    skipSeconds = skipSeconds,
+                    onSkip = viewModel::setSkipSeconds,
+                    merged = mergeProgress,
+                    onMerge = viewModel::setMergeProgress,
+                    canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
+                    onDiscard = viewModel::discardProgress,
+                    downloadItems = downloadItems,
+                    tint = Color(0xFFEAEEF5),
+                )
+            }
             Column(
-                Modifier.weight(1f).align(Alignment.CenterVertically),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 work?.seriesName?.let { series ->
                     val pos = work?.seriesPosition?.let { p ->
@@ -127,83 +159,63 @@ fun WorkDetailScreen(
                     val seriesId = work?.seriesId
                     Text(
                         text = (series + pos).uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color(0xFFEAEEF5),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = if (seriesId != null) {
-                            Modifier.clickable { onSeriesClick(seriesId, series) }
-                        } else {
-                            Modifier
-                        },
+                        modifier = if (seriesId != null) Modifier.clickable { onSeriesClick(seriesId, series) } else Modifier,
                     )
                 }
                 Text(
                     text = viewModel.title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color(0xFFF7F9FC),
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val authorId = work?.authorId
-                viewModel.author?.let { author ->
+                val narrator = extras?.narrator?.takeIf { it.isNotBlank() }
+                val author = viewModel.author
+                val byline = buildString {
+                    author?.let { append(it) }
+                    narrator?.let { if (isNotEmpty()) append(" · "); append("Narrated by $it") }
+                }
+                if (byline.isNotBlank()) {
                     Text(
-                        text = author,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
+                        text = byline,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFC7CEDA),
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = if (authorId != null) {
+                        modifier = if (authorId != null && author != null) {
                             Modifier.clickable { onAuthorClick(authorId, author) }
                         } else {
                             Modifier
                         },
                     )
                 }
-                extras?.narrator?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        text = "Narrated by $it",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                val meta = buildList {
-                    work?.year?.let { add(it.toString()) }
-                    editions.firstOrNull { it.format == Format.AUDIO }?.durationS?.let { s ->
-                        add("${s / 3600}h ${(s % 3600) / 60}m")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val meta = buildList {
+                        work?.year?.let { add(it.toString()) }
+                        editions.firstOrNull { it.format == Format.AUDIO }?.durationS?.let { s ->
+                            add("${s / 3600}h ${(s % 3600) / 60}m")
+                        }
+                    }.joinToString(" · ")
+                    if (meta.isNotBlank()) {
+                        Text(meta, style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9B2C0))
                     }
-                    buildList {
-                        if (editions.any { it.format == Format.AUDIO }) add("Audio")
-                        if (editions.any { it.format == Format.EBOOK }) add("EPUB")
-                    }.joinToString(" + ").takeIf { it.isNotBlank() }?.let { add(it) }
-                }.joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Text(
-                        text = meta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (hasAudioFmt) Icon(Icons.Outlined.Headphones, "Audiobook", Modifier.size(17.dp), tint = Color(0xFFEAEEF5))
+                    if (hasEbookFmt) Icon(Icons.Outlined.MenuBook, "Ebook", Modifier.size(17.dp), tint = Color(0xFFEAEEF5))
+                    if (wordSyncReady) {
+                        Text("W", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
 
-        // Editions block. Normally one compact "sync" row per format; but when
-        // "Merge progress" is on (Settings/overflow), a book's audio+ebook share
-        // ONE progress bar with both Listen + Read — they follow each other, so a
-        // single % is enough.
-        val audioEdition = editions.firstOrNull { it.format == Format.AUDIO }
-        val ebookEdition = editions.firstOrNull { it.format == Format.EBOOK }
-        fun downloadOf(edition: Edition) = downloadStates.firstOrNull {
-            it.serverId == edition.serverId &&
-                it.libraryItemId == edition.libraryItemId &&
-                it.format.name == edition.format.name
-        }
-        // Primary actions (mockup 2c): Resume (accent) + Read (outline). Detailed
-        // per-format progress + download management stay in the editions rows below.
+        // Primary actions (redesign 4a): Listen (accent) + Read (outline).
         if (audioEdition != null || ebookEdition != null) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
@@ -228,9 +240,10 @@ fun WorkDetailScreen(
                 }
             }
         }
-        // While the audio is actually playing, reflect the LIVE position instead
-        // of the last-saved fraction — otherwise the bar looks stuck at whatever
-        // was last synced (e.g. the ebook's furthest spot) while you're listening.
+        // Combined progress bar (redesign 4a): ONE line — the ebook + audio fills
+        // overlaid, bookmark ticks you can tap, and a book-% (furthest read) +
+        // headphones-% (furthest listened) marker. Replaces the separate
+        // Listening / Furthest-listened rows. Audio fill follows the live position.
         val livePlayingFraction: Double? = audioEdition?.let { ae ->
             if (playback.libraryItemId == ae.libraryItemId && playback.durationMs > 0) {
                 (playback.positionMs.toDouble() / playback.durationMs).coerceIn(0.0, 1.0)
@@ -238,56 +251,19 @@ fun WorkDetailScreen(
                 null
             }
         }
-        if (mergeProgress && audioEdition != null && ebookEdition != null) {
-            MergedEditionRow(
-                audio = audioEdition,
-                ebook = ebookEdition,
-                liveAudioFraction = livePlayingFraction,
-            )
-        } else {
-            editions.forEach { edition ->
-                val isThis = playback.libraryItemId == edition.libraryItemId
-                CompactEditionRow(
-                    edition = edition,
-                    liveFraction = if (edition.format == Format.AUDIO) livePlayingFraction else null,
-                    isPlayingThis = isThis && playback.isPlaying,
-                    isLoadingThis = isThis && playback.isLoading,
-                    download = downloadOf(edition),
-                    onPlay = { viewModel.play(edition) },
-                    onTogglePlayPause = { viewModel.togglePlayPause() },
-                    onDownload = { viewModel.download(edition) },
-                    onRemoveDownload = { viewModel.removeDownload(edition) },
-                    onRead = { onOpenReader(edition.serverId, edition.libraryItemId, viewModel.title) },
-                )
-            }
-        }
-
-        // Compact one-liners for the extras (small text, no big rows).
-        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-
-        otherFormat?.let { other ->
-            val pct = (other.fraction.coerceIn(0.0, 1.0) * 100).roundToInt()
-            CompactActionLine(
-                text = if (other.toAudio) "Listen from your reading spot ($pct%)"
-                else "Read from your listening spot ($pct%)",
-                action = if (other.toAudio) "Go" else "Go",
-                onClick = {
-                    if (other.toAudio) viewModel.continueInAudio(other)
-                    else onOpenReader(other.edition.serverId, other.edition.libraryItemId, viewModel.title)
+        if (audioEdition != null || ebookEdition != null) {
+            CombinedProgressBar(
+                audioFraction = livePlayingFraction ?: audioEdition?.fraction ?: 0.0,
+                ebookFraction = ebookEdition?.fraction ?: 0.0,
+                hasAudio = audioEdition != null,
+                hasEbook = ebookEdition != null,
+                durationS = audioEdition?.durationS,
+                bookmarks = bookmarks,
+                onSeekBookmark = { viewModel.playAudioAt(it) },
+                onListenFurthest = { viewModel.jumpToFurthest() },
+                onReadSpot = ebookEdition?.let { ee ->
+                    { onOpenReader(ee.serverId, ee.libraryItemId, viewModel.title) }
                 },
-            )
-        }
-
-        val furthestFraction = furthest?.let { f ->
-            audioEdition?.durationS?.takeIf { it > 0 }?.let { (f / it).coerceIn(0.0, 1.0) }
-        }
-        if (audioEdition != null && furthestFraction != null &&
-            furthestFraction > audioEdition.fraction + 0.01
-        ) {
-            CompactActionLine(
-                text = "Furthest listened · ${(furthestFraction * 100).roundToInt()}%",
-                action = "Jump",
-                onClick = viewModel::jumpToFurthest,
             )
         }
 
@@ -302,16 +278,94 @@ fun WorkDetailScreen(
             )
         }
 
-        if (wordSync == WordSyncStatus.READY ||
-            wordSync == WordSyncStatus.RUNNING ||
-            wordSync == WordSyncStatus.NONE
-        ) {
-            WordSyncRow(status = wordSync, onPrepare = viewModel::requestWordSync)
-        }
-
         description?.let { DescriptionBlock(it) }
 
         androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * Redesign 4a — the single combined progress line: one 6dp bar with the ebook
+ * fill (translucent) and audio fill (accent) overlaid + tappable bookmark ticks,
+ * and below it a book-% (furthest read) and headphones-% (furthest listened)
+ * marker. Replaces the separate Listening / Furthest-listened rows.
+ */
+@Composable
+private fun CombinedProgressBar(
+    audioFraction: Double,
+    ebookFraction: Double,
+    hasAudio: Boolean,
+    hasEbook: Boolean,
+    durationS: Long?,
+    bookmarks: List<no.bellaybestia.audex.domain.playback.Bookmark>,
+    onSeekBookmark: (Double) -> Unit,
+    onListenFurthest: () -> Unit,
+    onReadSpot: (() -> Unit)?,
+) {
+    val aF = audioFraction.coerceIn(0.0, 1.0).toFloat()
+    val eF = ebookFraction.coerceIn(0.0, 1.0).toFloat()
+    Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BoxWithConstraints(Modifier.fillMaxWidth().height(14.dp)) {
+            val fullW = maxWidth
+            Box(
+                Modifier.fillMaxWidth().height(6.dp).align(Alignment.CenterStart)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                if (hasEbook) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(eF).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)))
+                }
+                if (hasAudio) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(aF).background(MaterialTheme.colorScheme.primary))
+                }
+            }
+            if (durationS != null && durationS > 0) {
+                bookmarks.forEach { bm ->
+                    val f = (bm.timeS.toDouble() / durationS).coerceIn(0.0, 1.0).toFloat()
+                    Box(
+                        Modifier.align(Alignment.CenterStart)
+                            .offset(x = fullW * f - 1.dp)
+                            .width(2.dp).height(14.dp)
+                            .background(MaterialTheme.colorScheme.onSurface)
+                            .clickable { onSeekBookmark(bm.timeS.toDouble()) },
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                if (hasEbook) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = (if (onReadSpot != null) Modifier.clickable(onClick = onReadSpot) else Modifier)
+                            .padding(vertical = 2.dp),
+                    ) {
+                        Icon(Icons.Outlined.MenuBook, "Furthest read", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${(eF * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Box {
+                if (hasAudio) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.clickable(onClick = onListenFurthest).padding(vertical = 2.dp),
+                    ) {
+                        Text("${(aF * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Outlined.Headphones, "Furthest listened", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -454,7 +508,9 @@ private fun DetailOverflowMenu(
     onMerge: (Boolean) -> Unit,
     canDiscard: Boolean,
     onDiscard: () -> Unit,
+    downloadItems: List<Pair<String, () -> Unit>> = emptyList(),
     modifier: Modifier = Modifier,
+    tint: Color? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
@@ -463,7 +519,7 @@ private fun DetailOverflowMenu(
     }
     Box(modifier) {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Text(
@@ -488,6 +544,15 @@ private fun DetailOverflowMenu(
                 onClick = { onMerge(!merged) },
                 trailingIcon = { check(merged) },
             )
+            if (downloadItems.isNotEmpty()) {
+                HorizontalDivider()
+                downloadItems.forEach { (label, action) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = { action(); expanded = false },
+                    )
+                }
+            }
             if (canDiscard) {
                 HorizontalDivider()
                 DropdownMenuItem(

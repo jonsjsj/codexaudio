@@ -238,6 +238,8 @@ private fun FlatWorkRow(work: Work, showBars: Boolean, onWorkClick: (Work) -> Un
                 url = work.coverUrl,
                 contentDescription = work.title,
                 progress = if (showBars) furthestFraction(work).takeIf { it > 0f } else null,
+                hasAudio = work.hasAudio,
+                hasEbook = work.hasEbook,
                 modifier = Modifier.size(width = 48.dp, height = 66.dp),
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
@@ -379,6 +381,8 @@ private fun BigContinueRow(work: Work, onWorkClick: (Work) -> Unit) {
             url = work.coverUrl,
             contentDescription = work.title,
             progress = furthestFraction(work).takeIf { it > 0f },
+            hasAudio = work.hasAudio,
+            hasEbook = work.hasEbook,
             modifier = Modifier.width(92.dp).aspectRatio(2f / 3f),
         )
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {

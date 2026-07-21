@@ -58,6 +58,8 @@ fun WorkRowItem(
             contentDescription = null,
             progress = (if (work.hasAudio) work.listenFraction else work.readFraction)
                 .toFloat().takeIf { it > 0f },
+            hasAudio = work.hasAudio,
+            hasEbook = work.hasEbook,
             modifier = Modifier.size(width = 52.dp, height = 78.dp),
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
@@ -86,14 +88,17 @@ fun WorkRowItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (work.hasAudio) {
+            // Progress bars only once you've actually started that format — the
+            // cover's format badge already says which formats the book has, so
+            // un-started books stay clean instead of showing empty 0% bars.
+            if (work.hasAudio && work.listenFraction > 0.0) {
                 FormatProgressBar(
                     icon = Icons.Outlined.Headphones,
                     contentDescription = "Listen progress",
                     fraction = work.listenFraction,
                 )
             }
-            if (work.hasEbook) {
+            if (work.hasEbook && work.readFraction > 0.0) {
                 FormatProgressBar(
                     icon = Icons.Outlined.MenuBook,
                     contentDescription = "Read progress",

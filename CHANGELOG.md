@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.9.0
+
+- Format badges now show on every book in Home and Library, not just the grid
+  tiles: the small headphones / book badge in the cover's corner tells you at a
+  glance whether a book has an audiobook, an ebook, or both — even before you
+  start it. (The flat lists were passing the cover the art but not the format,
+  so the badge never appeared there.) Library rows also drop the empty 0%
+  progress bars for books you haven't started, so the badge reads cleanly.
+
 ## 0.4.8.0
 
 - Cover tinting is now a clear switch in Settings → Appearance: "Tint from

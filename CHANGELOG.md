@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.10.0
+
+- The bottom navigation bar now has icons above each label — Home, Library,
+  Downloads and Settings each get a glyph, so the tabs read at a glance instead
+  of being text-only. Keeps the flat accent-underline style (no pill chips).
+
 ## 0.4.9.0
 
 - Format badges now show on every book in Home and Library, not just the grid

@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
@@ -68,6 +73,12 @@ private object Routes {
 }
 
 private val bottomTabs = listOf("Home", "Library", "Downloads", "Settings")
+private val bottomTabIcons = listOf(
+    Icons.Outlined.Home,
+    Icons.Outlined.LibraryBooks,
+    Icons.Outlined.Download,
+    Icons.Outlined.Settings,
+)
 private val bottomTabRoutes =
     listOf(Routes.HOME, Routes.LIBRARY, Routes.DOWNLOADS, Routes.SETTINGS)
 
@@ -108,6 +119,7 @@ fun AppNav() {
                         onSelect = { index ->
                             navController.navigateToTab(bottomTabRoutes[index])
                         },
+                        icons = bottomTabIcons,
                     )
                 }
             }

@@ -3,6 +3,17 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.12.0
+
+- Resume is now precise, and your local position always wins. When you reopen
+  the app (or stop and start), audio resumes at the exact second you left —
+  never rolling back to the last *synced* spot (which was losing chunks of
+  listening). A stale sync from the server can no longer move your position
+  backward; the server only wins when you genuinely got further on another
+  device. Ebook resume already used the exact page — now audio does too.
+- Discarding a book's progress now sticks: it can't be resurrected by the next
+  sync even if the server-side reset didn't land.
+
 ## 0.4.11.0
 
 - "Your listening" is now "Your activity" — it counts both LISTENING and

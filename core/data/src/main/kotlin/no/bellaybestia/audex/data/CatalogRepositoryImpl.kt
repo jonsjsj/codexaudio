@@ -128,6 +128,10 @@ class CatalogRepositoryImpl @Inject constructor(
                             ebookProgress = 0.0,
                             isFinished = false,
                             lastUpdate = System.currentTimeMillis(),
+                            // Mark the wipe as a LOCAL override so the next sync can't
+                            // resurrect the book from a server row (e.g. if the
+                            // server-side delete above didn't land) — local wins.
+                            source = "LOCAL_PLAYBACK",
                         ),
                     ),
                 )

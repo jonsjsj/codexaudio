@@ -110,16 +110,18 @@ class LibrarySyncer @Inject constructor(
     }
 
     /**
-     * Upsert server progress, but DON'T clobber a fresher LOCAL_READER position: that row
-     * holds our reader's EXACT Readium locator, whereas the server carries only the coarse
-     * epubcfi we (or the ABS app) uploaded. Keeping the local row preserves exact restore;
-     * for every other item the server row wins as before. Audio rows (LOCAL_PLAYBACK/SERVER)
-     * are unaffected.
+     * Upsert server progress, but NEVER let a stale server row roll back a fresher
+     * LOCAL position. Local is the source of truth: audio to the exact second
+     * (LOCAL_PLAYBACK, second-accurate vs the server's lagging currentTime) and
+     * ebook to the exact Readium locator (LOCAL_READER, vs the server's coarse
+     * epubcfi). The server only wins when it's genuinely newer (progress made on
+     * another device) — `local.lastUpdate >= srv.lastUpdate` keeps local on ties.
+     * This is what stops "reopened the app and it jumped back 20 minutes."
      */
     private suspend fun upsertProgressKeepingLocalReader(serverId: String, incoming: List<ProgressEntity>) {
         val merged = incoming.map { srv ->
             val local = progressDao.get(serverId, srv.libraryItemId)
-            if (local != null && local.source == "LOCAL_READER" && local.lastUpdate >= srv.lastUpdate) local else srv
+            if (local != null && local.source.startsWith("LOCAL") && local.lastUpdate >= srv.lastUpdate) local else srv
         }
         progressDao.upsertAll(merged)
         // Reconcile deletions: anything the server no longer has progress for was

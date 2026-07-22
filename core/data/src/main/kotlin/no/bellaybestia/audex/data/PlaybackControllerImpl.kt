@@ -136,8 +136,14 @@ class PlaybackControllerImpl @Inject constructor(
         val items = tracks.map { track ->
             mediaItem(base + track.contentUrl, serverId, libraryItemId, title, author)
         }
-        // Resume override (e.g. furthest-listened) wins over ABS's saved time.
-        val resumeAt = resumeAtS ?: session.currentTime
+        // Local precise position is the source of truth. Prefer the
+        // second-accurate LOCAL_PLAYBACK row over ABS's session.currentTime,
+        // which lags the last local tick — so resuming (app relaunch or
+        // stop/start) was snapping back to the last *synced* spot and losing
+        // recent listening. An explicit resumeAtS (e.g. cross-format furthest)
+        // still wins over both.
+        val localS = progressDao.get(serverId, libraryItemId)?.currentTimeS?.takeIf { it > 0.0 }
+        val resumeAt = resumeAtS ?: localS ?: session.currentTime
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }

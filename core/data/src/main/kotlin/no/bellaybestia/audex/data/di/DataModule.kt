@@ -18,6 +18,8 @@ import no.bellaybestia.audex.data.HighlightsRepositoryImpl
 import no.bellaybestia.audex.data.ReaderSettingsStoreImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
 import no.bellaybestia.audex.data.PlaybackSettingsImpl
+import no.bellaybestia.audex.data.ActivityRecorderImpl
+import no.bellaybestia.audex.data.ActivityStatsRepositoryImpl
 import no.bellaybestia.audex.data.StatsRepositoryImpl
 import no.bellaybestia.audex.data.ReportsRepositoryImpl
 import no.bellaybestia.audex.data.ServerRepositoryImpl

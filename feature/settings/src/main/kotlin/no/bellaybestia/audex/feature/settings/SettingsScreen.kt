@@ -388,7 +388,7 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = "Your listening", style = MaterialTheme.typography.bodyLarge)
+                Text(text = "Your activity", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = "View",
                     style = MaterialTheme.typography.bodyLarge,

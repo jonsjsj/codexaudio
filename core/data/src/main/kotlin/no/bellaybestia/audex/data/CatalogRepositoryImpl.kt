@@ -17,6 +17,7 @@ import no.bellaybestia.audex.database.AuthorEntity
 import no.bellaybestia.audex.database.CatalogDao
 import no.bellaybestia.audex.database.EditionEntity
 import no.bellaybestia.audex.database.OverrideDao
+import no.bellaybestia.audex.database.OverrideEntity
 import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.RemoteItemDao
@@ -200,6 +201,40 @@ class CatalogRepositoryImpl @Inject constructor(
 
     override suspend fun workIdForItem(serverId: String, libraryItemId: String): String? =
         catalogDao.workIdForItem(serverId, libraryItemId)
+
+    override suspend fun mergeAuthorInto(sourceAuthorId: String, targetAuthorId: String) {
+        if (sourceAuthorId == targetAuthorId) return
+        val subject = catalogDao.authorNormKey(sourceAuthorId) ?: return
+        val target = catalogDao.authorNormKey(targetAuthorId) ?: return
+        if (subject.isBlank() || subject == target) return
+        // Norm keys are the AUTHOR_MERGE subject/target contract (GraphBuilder
+        // matches n.authorKey directly, without re-normalizing) — see docs/06.
+        overrideDao.upsert(
+            OverrideEntity(
+                kind = OverrideKind.AUTHOR_MERGE.name,
+                subjectKey = subject,
+                targetKey = target,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        rebuildGraph()
+    }
+
+    override suspend fun mergeSeriesInto(sourceSeriesId: String, targetSeriesId: String) {
+        if (sourceSeriesId == targetSeriesId) return
+        val subject = catalogDao.seriesNormKey(sourceSeriesId) ?: return
+        val target = catalogDao.seriesNormKey(targetSeriesId) ?: return
+        if (subject.isBlank() || subject == target) return
+        overrideDao.upsert(
+            OverrideEntity(
+                kind = OverrideKind.SERIES_MERGE.name,
+                subjectKey = subject,
+                targetKey = target,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        rebuildGraph()
+    }
 
     override suspend fun rebuildGraph() = withContext(dispatcher) {
         val items = remoteItemDao.all().map { it.toRemoteBook(json) }

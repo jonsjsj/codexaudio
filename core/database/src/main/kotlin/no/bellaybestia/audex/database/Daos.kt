@@ -106,6 +106,13 @@ interface CatalogDao {
     )
     fun observeSeries(): Flow<List<SeriesRow>>
 
+    /** Immutable merge key for an author/series id — the subject of an override. */
+    @Query("SELECT normKey FROM authors WHERE authorId = :id")
+    suspend fun authorNormKey(id: String): String?
+
+    @Query("SELECT normKey FROM series WHERE seriesId = :id")
+    suspend fun seriesNormKey(id: String): String?
+
     @Query("$WORK_ROW_SELECT GROUP BY w.workId ORDER BY authorName COLLATE NOCASE, seriesName, w.seriesPosition, w.title")
     fun observeWorks(): Flow<List<WorkRow>>
 

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -31,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,9 +55,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
 import no.bellaybestia.audex.designsystem.CoverImage
+import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.designsystem.TintFromCover
+import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
@@ -86,6 +93,9 @@ fun WorkDetailScreen(
     val mergeProgress by viewModel.mergeProgress.collectAsState()
     val furthest by viewModel.furthestS.collectAsState()
     val bookmarks by viewModel.bookmarks.collectAsState()
+    val allAuthors by viewModel.allAuthors.collectAsState()
+    val allSeries by viewModel.allSeries.collectAsState()
+    var showFixMetadata by remember { mutableStateOf(false) }
 
     val cover = editions.firstNotNullOfOrNull { it.coverUrl }
     // Browsing a book re-tints the whole app around it (mockup 2c).
@@ -144,6 +154,8 @@ fun WorkDetailScreen(
                     onMerge = viewModel::setMergeProgress,
                     canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
                     onDiscard = viewModel::discardProgress,
+                    canFixMetadata = work?.authorId != null || work?.seriesId != null,
+                    onFixMetadata = { showFixMetadata = true },
                     downloadItems = downloadItems,
                     tint = Color(0xFFEAEEF5),
                 )
@@ -282,6 +294,132 @@ fun WorkDetailScreen(
 
         androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
     }
+
+    if (showFixMetadata) {
+        MetadataFixDialog(
+            currentAuthorId = work?.authorId,
+            currentAuthorName = viewModel.author,
+            currentSeriesId = work?.seriesId,
+            currentSeriesName = work?.seriesName,
+            authors = allAuthors,
+            series = allSeries,
+            onMergeAuthor = { viewModel.mergeAuthorInto(it) },
+            onMergeSeries = { viewModel.mergeSeriesInto(it) },
+            onDismiss = { showFixMetadata = false },
+        )
+    }
+}
+
+/**
+ * "Fix author / series" (docs/07 in-app metadata matching): fold this work's
+ * mistyped/duplicate author or series into an existing one. Picking a target
+ * writes a durable AUTHOR_MERGE / SERIES_MERGE override and rebuilds the graph,
+ * so the correction sticks across every re-sync. The current author/series is
+ * excluded from the list — you can't merge something into itself.
+ */
+@Composable
+private fun MetadataFixDialog(
+    currentAuthorId: String?,
+    currentAuthorName: String?,
+    currentSeriesId: String?,
+    currentSeriesName: String?,
+    authors: List<Author>,
+    series: List<Series>,
+    onMergeAuthor: (String) -> Unit,
+    onMergeSeries: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val hasAuthor = currentAuthorId != null
+    val hasSeries = currentSeriesId != null
+    var authorMode by remember { mutableStateOf(hasAuthor) }
+    var query by remember { mutableStateOf("") }
+    // (id, displayName) of the chosen merge target; null until one is tapped.
+    var selected by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val options: List<Pair<String, String>> =
+        if (authorMode) {
+            authors.filter { it.id != currentAuthorId }.map { it.id to it.name }
+        } else {
+            series.filter { it.id != currentSeriesId }.map { it.id to it.name }
+        }
+    val filtered = options.filter { (_, name) -> name.contains(query.trim(), ignoreCase = true) }
+        .take(60)
+
+    val subject = if (authorMode) currentAuthorName else currentSeriesName
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Fix author / series") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (hasAuthor && hasSeries) {
+                    FlatTabRow(
+                        tabs = listOf("Author", "Series"),
+                        selectedIndex = if (authorMode) 0 else 1,
+                        onSelect = { idx ->
+                            authorMode = idx == 0
+                            selected = null
+                            query = ""
+                        },
+                    )
+                }
+                Text(
+                    text = "Merge " + (subject?.let { "“$it”" } ?: (if (authorMode) "this author" else "this series")) +
+                        " into an existing " + (if (authorMode) "author" else "series") + ":",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    label = { Text("Search") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                ) {
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                "No matches",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                    items(filtered, key = { it.first }) { (id, name) ->
+                        val isSel = selected?.first == id
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = id to name }
+                                .padding(vertical = 10.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = selected != null,
+                onClick = {
+                    selected?.let { (id, _) ->
+                        if (authorMode) onMergeAuthor(id) else onMergeSeries(id)
+                    }
+                    onDismiss()
+                },
+            ) {
+                Text(selected?.let { "Merge into ${it.second}" } ?: "Merge")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**
@@ -508,6 +646,8 @@ private fun DetailOverflowMenu(
     onMerge: (Boolean) -> Unit,
     canDiscard: Boolean,
     onDiscard: () -> Unit,
+    canFixMetadata: Boolean = false,
+    onFixMetadata: () -> Unit = {},
     downloadItems: List<Pair<String, () -> Unit>> = emptyList(),
     modifier: Modifier = Modifier,
     tint: Color? = null,
@@ -544,6 +684,13 @@ private fun DetailOverflowMenu(
                 onClick = { onMerge(!merged) },
                 trailingIcon = { check(merged) },
             )
+            if (canFixMetadata) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Fix author / series") },
+                    onClick = { expanded = false; onFixMetadata() },
+                )
+            }
             if (downloadItems.isNotEmpty()) {
                 HorizontalDivider()
                 downloadItems.forEach { (label, action) ->

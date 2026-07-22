@@ -17,8 +17,10 @@ import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.DownloadFormat
 import no.bellaybestia.audex.domain.download.DownloadInfo
 import no.bellaybestia.audex.domain.download.Downloads
+import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.playback.Bookmark
 import no.bellaybestia.audex.domain.playback.BookmarksRepository
@@ -95,6 +97,26 @@ class WorkDetailViewModel @Inject constructor(
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** All authors/series in the catalog — the merge-target pickers for the
+     * "Fix author / series" action (docs/07, in-app metadata matching). */
+    val allAuthors: StateFlow<List<Author>> = catalogRepository.authors()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val allSeries: StateFlow<List<Series>> = catalogRepository.series()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Fold this work's author into an existing one, then the graph rebuilds and
+     * every surface follows. Source is the work's current author. */
+    fun mergeAuthorInto(targetAuthorId: String) {
+        val source = work.value?.authorId ?: return
+        viewModelScope.launch { catalogRepository.mergeAuthorInto(source, targetAuthorId) }
+    }
+
+    /** Fold this work's series into an existing one. */
+    fun mergeSeriesInto(targetSeriesId: String) {
+        val source = work.value?.seriesId ?: return
+        viewModelScope.launch { catalogRepository.mergeSeriesInto(source, targetSeriesId) }
+    }
 
     /** Description/narrator/ASIN, fetched live once an edition is known (null offline). */
     private val _extras = MutableStateFlow<BookExtras?>(null)

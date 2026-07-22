@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.13.0
+
+- Fix a mistyped or duplicate author/series right from the book page. The
+  3-dot menu now has "Fix author / series": pick the correct existing author
+  or series and this book folds into it. Handy when the same author shows up
+  twice from a typo (e.g. "Terry Pwatchet" vs "Terry Pratchett"). The
+  correction is remembered and re-applied on every library sync, so it sticks.
+
 ## 0.4.12.0
 
 - Resume is now precise, and your local position always wins. When you reopen

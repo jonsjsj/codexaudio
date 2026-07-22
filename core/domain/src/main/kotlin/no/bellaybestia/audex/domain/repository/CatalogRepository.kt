@@ -68,6 +68,17 @@ interface CatalogRepository {
         durationS: Long?,
     )
 
+    /**
+     * Merge this work's author into an existing one (the "Fix author" picker):
+     * records a durable AUTHOR_MERGE override on the two authors' immutable norm
+     * keys and re-runs the graph build, so the correction survives every re-sync.
+     * No-op when either id has no author row.
+     */
+    suspend fun mergeAuthorInto(sourceAuthorId: String, targetAuthorId: String)
+
+    /** As [mergeAuthorInto], for a series (SERIES_MERGE override). */
+    suspend fun mergeSeriesInto(sourceSeriesId: String, targetSeriesId: String)
+
     /** Full deterministic recompute from remote items + overrides. */
     suspend fun rebuildGraph()
 }

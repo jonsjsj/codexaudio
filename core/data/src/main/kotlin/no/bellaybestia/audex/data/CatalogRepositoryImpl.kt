@@ -18,7 +18,9 @@ import no.bellaybestia.audex.database.CatalogDao
 import no.bellaybestia.audex.database.EditionEntity
 import no.bellaybestia.audex.database.OverrideDao
 import no.bellaybestia.audex.database.OverrideEntity
+import no.bellaybestia.audex.database.EbookProgressQueueDao
 import no.bellaybestia.audex.database.ProgressDao
+import no.bellaybestia.audex.database.SessionDao
 import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.RemoteItemDao
 import no.bellaybestia.audex.database.RemoteItemEntity
@@ -51,6 +53,8 @@ class CatalogRepositoryImpl @Inject constructor(
     private val overrideDao: OverrideDao,
     private val serverDao: ServerDao,
     private val progressDao: ProgressDao,
+    private val sessionDao: SessionDao,
+    private val ebookProgressQueueDao: EbookProgressQueueDao,
     private val clientFactory: AbsClientFactory,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
@@ -117,6 +121,13 @@ class CatalogRepositoryImpl @Inject constructor(
                     if (recordId != null) api.deleteProgress(recordId)
                 }
             }
+            // Kill every queued path that could resurrect the wipe: an orphaned
+            // recording session (adopted RECORDING → PENDING at the next launch)
+            // or a queued ebook-position PATCH would re-post the old position to
+            // the server on app start — the "discarded book comes back after
+            // every update" bug.
+            sessionDao.deleteForItem(serverId, libraryItemId)
+            ebookProgressQueueDao.delete(serverId, libraryItemId)
             // Zero the local row so the detail page, Home, and library all reflect
             // the reset immediately (editions read their fraction from this row).
             progressDao.get(serverId, libraryItemId)?.let { row ->

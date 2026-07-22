@@ -3,6 +3,16 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.13.1
+
+- A discarded book can no longer come back from the dead. Discarding now also
+  purges any queued/orphaned listening session and pending ebook-position
+  update for that book (an old orphaned session was re-posting its stale
+  position to the server on the next app start — the "wiped book returns after
+  every update" bug), and if the book is currently loaded in the player it is
+  stopped first so the live player can't write its position back after the
+  wipe.
+
 ## 0.4.13.0
 
 - Fix a mistyped or duplicate author/series right from the book page. The

@@ -286,6 +286,16 @@ class WorkDetailViewModel @Inject constructor(
     fun discardProgress() {
         val eds = editions.value
         viewModelScope.launch {
+            // If this book is the one loaded in the player (even paused), stop it
+            // first — the live player would otherwise write its position straight
+            // back after the wipe, resurrecting the progress.
+            val now = playbackController.state.value
+            if (eds.any { it.serverId == now.serverId && it.libraryItemId == now.libraryItemId }) {
+                playbackController.stop()
+                // stop() finalizes its session asynchronously (a PENDING row) —
+                // give it a beat so the discard's purge below catches it too.
+                kotlinx.coroutines.delay(400)
+            }
             eds.forEach { catalogRepository.discardProgress(it.serverId, it.libraryItemId) }
         }
     }

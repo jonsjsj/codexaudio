@@ -246,6 +246,13 @@ interface SessionDao {
 
     @Query("DELETE FROM pending_sessions WHERE state = 'SYNCED' AND updatedAt < :olderThan")
     suspend fun purgeSynced(olderThan: Long)
+
+    /** Purge every queued/orphaned session for one item. A discarded book must
+     * not be resurrected by an old session uploading its stale position on the
+     * next app start (adoptOrphanedRecordings flips RECORDING → PENDING, so a
+     * session orphaned by a kill would otherwise re-post the old currentTime). */
+    @Query("DELETE FROM pending_sessions WHERE serverId = :serverId AND libraryItemId = :itemId")
+    suspend fun deleteForItem(serverId: String, itemId: String)
 }
 
 @Dao

@@ -313,3 +313,62 @@ interface HighlightDao {
     @Query("DELETE FROM highlights WHERE id = :id")
     suspend fun delete(id: String)
 }
+
+/** A book's summed activity of one kind, for the stats drill-down. */
+data class ActivityBookRow(
+    val serverId: String,
+    val libraryItemId: String,
+    val title: String?,
+    val seconds: Double,
+)
+
+@Dao
+abstract class ActivityDao {
+    /**
+     * Add [secs] to the (book, day, kind) bucket. Ensure-then-increment instead
+     * of SQLite UPSERT (ON CONFLICT DO UPDATE), which needs SQLite 3.24+ and so
+     * would crash on API 26–29. Both statements run in one transaction.
+     */
+    @Transaction
+    open suspend fun add(serverId: String, itemId: String, epochDay: Long, kind: String, secs: Double) {
+        ensureRow(ActivityEntity(serverId, itemId, epochDay, kind, 0.0))
+        increment(serverId, itemId, epochDay, kind, secs)
+    }
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun ensureRow(row: ActivityEntity)
+
+    @Query(
+        "UPDATE activity SET seconds = seconds + :secs WHERE serverId = :serverId AND " +
+            "libraryItemId = :itemId AND epochDay = :epochDay AND kind = :kind",
+    )
+    abstract suspend fun increment(serverId: String, itemId: String, epochDay: Long, kind: String, secs: Double)
+
+    /** One-time baseline at the sentinel day 0 — REPLACE so re-seeding is idempotent. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun upsertReplace(row: ActivityEntity)
+
+    suspend fun setSeed(serverId: String, itemId: String, kind: String, secs: Double) =
+        upsertReplace(ActivityEntity(serverId, itemId, 0, kind, secs))
+
+    @Query("SELECT COALESCE(SUM(seconds), 0) FROM activity WHERE kind = :kind")
+    abstract suspend fun total(kind: String): Double
+
+    @Query("SELECT COALESCE(SUM(seconds), 0) FROM activity WHERE kind = :kind AND epochDay >= :fromDay")
+    abstract suspend fun since(kind: String, fromDay: Long): Double
+
+    @Query("SELECT COUNT(DISTINCT epochDay) FROM activity WHERE kind = :kind AND epochDay > 0 AND seconds > 0")
+    abstract suspend fun daysActive(kind: String): Int
+
+    @Query("SELECT COUNT(DISTINCT libraryItemId) FROM activity WHERE kind = :kind AND seconds > 0")
+    abstract suspend fun books(kind: String): Int
+
+    @Query(
+        "SELECT a.serverId AS serverId, a.libraryItemId AS libraryItemId, r.title AS title, " +
+            "SUM(a.seconds) AS seconds FROM activity a " +
+            "LEFT JOIN remote_items r ON r.serverId = a.serverId AND r.libraryItemId = a.libraryItemId " +
+            "WHERE a.kind = :kind GROUP BY a.serverId, a.libraryItemId HAVING SUM(a.seconds) > 0 " +
+            "ORDER BY SUM(a.seconds) DESC",
+    )
+    abstract suspend fun breakdown(kind: String): List<ActivityBookRow>
+}

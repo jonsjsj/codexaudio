@@ -36,6 +36,8 @@ import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.settings.PlaybackSettings
+import no.bellaybestia.audex.domain.settings.ActivityRecorder
+import no.bellaybestia.audex.domain.settings.ActivityStatsRepository
 import no.bellaybestia.audex.domain.settings.ReportsRepository
 import no.bellaybestia.audex.domain.settings.StatsRepository
 import no.bellaybestia.audex.domain.settings.ThemeSettings
@@ -103,6 +105,12 @@ abstract class DataModule {
 
     @Binds
     abstract fun statsRepository(impl: StatsRepositoryImpl): StatsRepository
+
+    @Binds
+    abstract fun activityStatsRepository(impl: ActivityStatsRepositoryImpl): ActivityStatsRepository
+
+    @Binds
+    abstract fun activityRecorder(impl: ActivityRecorderImpl): ActivityRecorder
 
     companion object {
         @Provides

@@ -132,6 +132,28 @@ private fun EpubReader(
     val activity = LocalContext.current.findFragmentActivity() ?: return
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
 
+    // Read-time tracking for "Your activity": add 15s of reading time to the
+    // ledger every 15s while this reader is in the foreground — paused when the
+    // app is backgrounded so a reader left open doesn't inflate the numbers.
+    var readerForeground by remember { mutableStateOf(true) }
+    DisposableEffect(activity) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> readerForeground = true
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> readerForeground = false
+                else -> {}
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000)
+            if (readerForeground) viewModel.recordReadSeconds(15.0)
+        }
+    }
+
     // "Look up" on the text-selection toolbar: reads the current selection and
     // hands the word to the system (a dictionary/translate app, else a web
     // "define" search). Purely additive — native Copy/Share stay put. Reads

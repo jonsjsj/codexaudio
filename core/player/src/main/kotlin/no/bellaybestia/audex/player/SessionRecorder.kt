@@ -8,6 +8,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.database.PendingSessionEntity
 import no.bellaybestia.audex.database.SessionDao
+import no.bellaybestia.audex.domain.settings.ActivityKind
+import no.bellaybestia.audex.domain.settings.ActivityRecorder
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionRecorder @Inject constructor(
     private val sessionDao: SessionDao,
+    private val activityRecorder: ActivityRecorder,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -55,6 +58,12 @@ class SessionRecorder @Inject constructor(
         )
         active = updated
         scope.launch { sessionDao.upsert(updated) }
+        // Feed the same listened delta into the durable activity ledger (stats).
+        if (listenedDeltaS > 0.0) {
+            scope.launch {
+                activityRecorder.record(row.serverId, row.libraryItemId, ActivityKind.LISTEN, listenedDeltaS)
+            }
+        }
     }
 
     fun finalizeActive() {

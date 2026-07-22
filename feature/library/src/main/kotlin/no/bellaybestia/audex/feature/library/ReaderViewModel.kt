@@ -89,6 +89,7 @@ class ReaderViewModel @Inject constructor(
     private val alignmentRepository: AlignmentRepository,
     private val readerSettings: ReaderSettingsStore,
     private val highlightsRepository: HighlightsRepository,
+    private val activityRecorder: no.bellaybestia.audex.domain.settings.ActivityRecorder,
     themeSettings: no.bellaybestia.audex.domain.settings.ThemeSettings,
     playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
@@ -117,6 +118,20 @@ class ReaderViewModel @Inject constructor(
     /** Where the reader currently is (totalProgression 0..1), for the jump chip. */
     private val _currentProgression = MutableStateFlow<Double?>(null)
     val currentProgression: StateFlow<Double?> = _currentProgression.asStateFlow()
+
+    /** Called by the reader screen's foreground ticker: adds real reading time
+     * (this book, today) to the activity ledger that feeds "Your activity". */
+    fun recordReadSeconds(seconds: Double) {
+        if (seconds <= 0.0) return
+        viewModelScope.launch {
+            activityRecorder.record(
+                serverId,
+                libraryItemId,
+                no.bellaybestia.audex.domain.settings.ActivityKind.READ,
+                seconds,
+            )
+        }
+    }
 
     /** Audio↔ebook bridging: itemIds of this work's AUDIO editions (any server). */
     private val audioItemKeys = MutableStateFlow<Set<String>>(emptySet())

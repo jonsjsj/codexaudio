@@ -3,6 +3,16 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.11.0
+
+- "Your listening" is now "Your activity" — it counts both LISTENING and
+  READING time, measured by Audex itself as you actually listen and read
+  (rather than trusting the server's opaque all-time total, which was showing
+  inflated hours). Tap either section to drill in and see exactly which books
+  make up the time. This week / today are now accurate from now on; the
+  all-time total is seeded once from the server's per-book listening history so
+  it isn't empty.
+
 ## 0.4.10.0
 
 - The bottom navigation bar now has icons above each label — Home, Library,

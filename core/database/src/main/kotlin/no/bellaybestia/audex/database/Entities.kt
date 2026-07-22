@@ -187,3 +187,21 @@ data class HighlightEntity(
     val text: String,
     val createdAt: Long,
 )
+
+/**
+ * Durable per-book, per-day activity — the backbone of the "Your activity"
+ * stats. [kind] is "AUDIO" (wall-clock time actually listened) or "EBOOK"
+ * (wall-clock time in the reader). [epochDay] is LocalDate.toEpochDay() so the
+ * screen can sum today / this week / all-time; a sentinel `epochDay = 0` (1970)
+ * holds a one-time baseline seeded from the server's per-book listening totals,
+ * counted toward all-time and per-book breakdowns but never toward today/week.
+ * Seconds accumulate via UPSERT so each tick just adds to the day's bucket.
+ */
+@Entity(tableName = "activity", primaryKeys = ["serverId", "libraryItemId", "epochDay", "kind"])
+data class ActivityEntity(
+    val serverId: String,
+    val libraryItemId: String,
+    val epochDay: Long,
+    val kind: String,
+    val seconds: Double = 0.0,
+)

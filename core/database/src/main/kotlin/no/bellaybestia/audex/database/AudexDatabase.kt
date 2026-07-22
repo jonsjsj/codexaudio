@@ -28,8 +28,9 @@ import javax.inject.Singleton
         PendingEbookProgressEntity::class,
         DownloadEntity::class,
         HighlightEntity::class,
+        ActivityEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AudexDatabase : RoomDatabase() {
@@ -43,6 +44,7 @@ abstract class AudexDatabase : RoomDatabase() {
     abstract fun ebookProgressQueueDao(): EbookProgressQueueDao
     abstract fun downloadDao(): DownloadDao
     abstract fun highlightDao(): HighlightDao
+    abstract fun activityDao(): ActivityDao
 }
 
 /**
@@ -62,6 +64,19 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** v2→v3 adds the `activity` table (per-book, per-day listen/read seconds). SQL
+ * matches Room's generated schema for [ActivityEntity] exactly. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `activity` (" +
+                "`serverId` TEXT NOT NULL, `libraryItemId` TEXT NOT NULL, `epochDay` INTEGER NOT NULL, " +
+                "`kind` TEXT NOT NULL, `seconds` REAL NOT NULL, " +
+                "PRIMARY KEY(`serverId`, `libraryItemId`, `epochDay`, `kind`))",
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -70,11 +85,12 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AudexDatabase =
         Room.databaseBuilder(context, AudexDatabase::class.java, "audex.db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .fallbackToDestructiveMigration()
             .build()
 
     @Provides fun highlightDao(db: AudexDatabase) = db.highlightDao()
+    @Provides fun activityDao(db: AudexDatabase) = db.activityDao()
 
     @Provides fun serverDao(db: AudexDatabase) = db.serverDao()
     @Provides fun remoteItemDao(db: AudexDatabase) = db.remoteItemDao()

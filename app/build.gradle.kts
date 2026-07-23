@@ -76,6 +76,7 @@ kotlin {
 dependencies {
     implementation(project(":feature:home"))
     implementation(project(":feature:library"))
+    implementation(project(":feature:podcasts"))
     implementation(project(":feature:player"))
     implementation(project(":feature:downloads"))
     implementation(project(":feature:settings"))

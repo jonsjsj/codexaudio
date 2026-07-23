@@ -149,6 +149,9 @@ data class PendingSessionEntity(
     val deviceInfoJson: String,
     val state: String = "RECORDING", // RECORDING | PENDING | SYNCING | SYNCED | FAILED
     val attempts: Int = 0,
+    /** Set for podcast-episode sessions; null for books. Carried into the
+     * /api/session/local-all upload so ABS accounts the listen to the episode. */
+    val episodeId: String? = null,
 )
 
 @Entity(tableName = "pending_ebook_progress", primaryKeys = ["serverId", "libraryItemId"])
@@ -204,4 +207,67 @@ data class ActivityEntity(
     val epochDay: Long,
     val kind: String,
     val seconds: Double = 0.0,
+)
+
+// --- podcasts (parallel pipeline; NOT part of the Authors→Series→Works graph) ---
+
+/**
+ * A subscribed podcast (a podcast library item on one server). Kept in its own
+ * table rather than the book graph: podcasts have no cross-server de-dup, no
+ * author/series matching, and no ebook/audio editions. Added in schema v4.
+ * [autoDownload]/[autoDownloadSchedule]/[maxEpisodesToKeep] mirror the server's
+ * subscription settings (the ABS server, not the app, polls the feed).
+ */
+@Entity(tableName = "podcasts", primaryKeys = ["serverId", "libraryItemId"])
+data class PodcastEntity(
+    val serverId: String,
+    val libraryItemId: String,
+    val libraryId: String,
+    val title: String,
+    val author: String? = null,
+    val description: String? = null,
+    val feedUrl: String? = null,
+    val autoDownload: Boolean = false,
+    val autoDownloadSchedule: String? = null,
+    val maxEpisodesToKeep: Int = 0,
+    val numEpisodes: Int = 0,
+    val updatedAtRemote: Long = 0,
+)
+
+/** One podcast episode. Keyed per (server, podcast item, episode). */
+@Entity(
+    tableName = "episodes",
+    primaryKeys = ["serverId", "libraryItemId", "episodeId"],
+    indices = [Index(value = ["serverId", "libraryItemId"]), Index("publishedAt")],
+)
+data class EpisodeEntity(
+    val serverId: String,
+    val libraryItemId: String,
+    val episodeId: String,
+    val title: String,
+    val subtitle: String? = null,
+    val description: String? = null,
+    val pubDate: String? = null,
+    val publishedAt: Long? = null,
+    val durationS: Double? = null,
+    val sizeBytes: Long? = null,
+    val season: String? = null,
+    val episodeNum: String? = null,
+    val idx: Int = 0,
+)
+
+/**
+ * Per-episode progress, keyed by (server, podcast item, episode). Parallel to
+ * the book [ProgressEntity] so podcast rows never touch the book progress path.
+ */
+@Entity(tableName = "episode_progress", primaryKeys = ["serverId", "libraryItemId", "episodeId"])
+data class EpisodeProgressEntity(
+    val serverId: String,
+    val libraryItemId: String,
+    val episodeId: String,
+    val pct: Double = 0.0,
+    val currentTimeS: Double? = null,
+    val isFinished: Boolean = false,
+    val lastUpdate: Long = 0,
+    val source: String = "SERVER", // SERVER | LOCAL_PLAYBACK
 )

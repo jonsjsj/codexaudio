@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
@@ -41,6 +42,9 @@ import no.bellaybestia.audex.feature.library.LibraryScreen
 import no.bellaybestia.audex.feature.library.ReaderScreen
 import no.bellaybestia.audex.feature.library.SeriesDetailScreen
 import no.bellaybestia.audex.feature.library.WorkDetailScreen
+import no.bellaybestia.audex.feature.podcasts.AddPodcastScreen
+import no.bellaybestia.audex.feature.podcasts.PodcastDetailScreen
+import no.bellaybestia.audex.feature.podcasts.PodcastsScreen
 import no.bellaybestia.audex.feature.player.MiniPlayer
 import no.bellaybestia.audex.feature.player.PlayerScreen
 import no.bellaybestia.audex.feature.settings.AboutScreen
@@ -52,6 +56,7 @@ import no.bellaybestia.audex.feature.settings.SettingsScreen
 private object Routes {
     const val HOME = "home"
     const val LIBRARY = "library"
+    const val PODCASTS = "podcasts"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
     const val ADD_SERVER = "add_server"
@@ -63,6 +68,11 @@ private object Routes {
     const val SERIES = "series/{id}?name={name}"
     const val WORK = "work/{id}?title={title}&author={author}"
     const val READER = "reader/{serverId}/{itemId}?title={title}"
+    const val ADD_PODCAST = "add_podcast"
+    const val PODCAST = "podcast/{serverId}/{itemId}"
+
+    fun podcast(serverId: String, itemId: String) =
+        "podcast/${Uri.encode(serverId)}/${Uri.encode(itemId)}"
 
     fun author(id: String, name: String) = "author/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun series(id: String, name: String) = "series/${Uri.encode(id)}?name=${Uri.encode(name)}"
@@ -72,15 +82,16 @@ private object Routes {
         "reader/${Uri.encode(serverId)}/${Uri.encode(itemId)}?title=${Uri.encode(title)}"
 }
 
-private val bottomTabs = listOf("Home", "Library", "Downloads", "Settings")
+private val bottomTabs = listOf("Home", "Library", "Podcasts", "Downloads", "Settings")
 private val bottomTabIcons = listOf(
     Icons.Outlined.Home,
     Icons.Outlined.LibraryBooks,
+    Icons.Outlined.Podcasts,
     Icons.Outlined.Download,
     Icons.Outlined.Settings,
 )
 private val bottomTabRoutes =
-    listOf(Routes.HOME, Routes.LIBRARY, Routes.DOWNLOADS, Routes.SETTINGS)
+    listOf(Routes.HOME, Routes.LIBRARY, Routes.PODCASTS, Routes.DOWNLOADS, Routes.SETTINGS)
 
 /**
  * The single-activity shell: a flat bottom bar (FlatTabRow — Material3's
@@ -96,8 +107,9 @@ fun AppNav() {
     val selectedTab = when (currentRoute) {
         Routes.HOME -> 0
         Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER -> 1
-        Routes.DOWNLOADS -> 2
-        Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.REPORT -> 3
+        Routes.PODCASTS, Routes.PODCAST, Routes.ADD_PODCAST -> 2
+        Routes.DOWNLOADS -> 3
+        Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.REPORT -> 4
         else -> 0
     }
 
@@ -145,6 +157,26 @@ fun AppNav() {
                     },
                     onWorkClick = { work -> navController.navigateToWork(work) },
                 )
+            }
+            composable(Routes.PODCASTS) {
+                PodcastsScreen(
+                    onAddClick = { navController.navigate(Routes.ADD_PODCAST) },
+                    onPodcastClick = { serverId, itemId ->
+                        navController.navigate(Routes.podcast(serverId, itemId))
+                    },
+                )
+            }
+            composable(Routes.ADD_PODCAST) {
+                AddPodcastScreen(onSubscribed = { navController.popBackStack() })
+            }
+            composable(
+                route = Routes.PODCAST,
+                arguments = listOf(
+                    navArgument("serverId") { type = NavType.StringType },
+                    navArgument("itemId") { type = NavType.StringType },
+                ),
+            ) {
+                PodcastDetailScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.DOWNLOADS) {
                 DownloadsScreen(

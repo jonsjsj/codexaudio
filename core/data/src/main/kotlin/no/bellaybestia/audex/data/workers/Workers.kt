@@ -16,6 +16,7 @@ import no.bellaybestia.audex.data.DownloadKind
 import no.bellaybestia.audex.data.DownloadManager
 import no.bellaybestia.audex.data.EbookProgressUploader
 import no.bellaybestia.audex.data.LibrarySyncer
+import no.bellaybestia.audex.data.PodcastSyncer
 import no.bellaybestia.audex.data.SessionUploader
 
 /**
@@ -37,6 +38,28 @@ class LibrarySyncWorker @AssistedInject constructor(
 
     companion object {
         const val UNIQUE_NAME = "library-sync"
+    }
+}
+
+/**
+ * Ingests every enabled server's PODCAST libraries into the podcast tables and
+ * reconciles per-episode progress. Parallel to [LibrarySyncWorker] and does not
+ * rebuild the catalog graph. Per-server failures are isolated inside the syncer.
+ */
+@HiltWorker
+class PodcastSyncWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val syncer: PodcastSyncer,
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result = runCatching {
+        syncer.syncAll()
+        Result.success()
+    }.getOrElse { Result.retry() }
+
+    companion object {
+        const val UNIQUE_NAME = "podcast-sync"
     }
 }
 

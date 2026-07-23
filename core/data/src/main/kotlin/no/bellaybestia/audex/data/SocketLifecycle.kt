@@ -27,6 +27,7 @@ class SocketLifecycle @Inject constructor(
     private val serverDao: ServerDao,
     private val tokenStore: ServerTokenStore,
     private val librarySyncer: LibrarySyncer,
+    private val podcastSyncer: PodcastSyncer,
     private val workScheduler: WorkScheduler,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : DefaultLifecycleObserver {
@@ -46,16 +47,21 @@ class SocketLifecycle @Inject constructor(
     private fun connectAll() {
         scope.launch {
             for (server in serverDao.enabled()) {
-                // GET /api/me reconcile on (re)connect.
+                // GET /api/me reconcile on (re)connect (books + podcast episodes).
                 launch { runCatching { librarySyncer.reconcileProgress(server.serverId) } }
+                launch { runCatching { podcastSyncer.reconcileEpisodeProgress(server.serverId) } }
                 if (sockets.containsKey(server.serverId)) continue
                 val socket = AbsSocket(
                     baseUrl = server.baseUrl,
                     tokenProvider = { tokenStore.accessToken(server.serverId) },
                     onUserUpdated = {
                         scope.launch { runCatching { librarySyncer.reconcileProgress(server.serverId) } }
+                        scope.launch { runCatching { podcastSyncer.reconcileEpisodeProgress(server.serverId) } }
                     },
-                    onLibraryChanged = { workScheduler.syncNow() },
+                    onLibraryChanged = {
+                        workScheduler.syncNow()
+                        workScheduler.syncPodcastsNow()
+                    },
                 )
                 runCatching { socket.connect() }
                 sockets[server.serverId] = socket

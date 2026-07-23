@@ -17,6 +17,7 @@ import no.bellaybestia.audex.data.EbookProgressWriterImpl
 import no.bellaybestia.audex.data.HighlightsRepositoryImpl
 import no.bellaybestia.audex.data.ReaderSettingsStoreImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
+import no.bellaybestia.audex.data.PodcastRepositoryImpl
 import no.bellaybestia.audex.data.PlaybackSettingsImpl
 import no.bellaybestia.audex.data.ActivityRecorderImpl
 import no.bellaybestia.audex.data.ActivityStatsRepositoryImpl
@@ -35,6 +36,7 @@ import no.bellaybestia.audex.domain.reader.HighlightsRepository
 import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
 import no.bellaybestia.audex.domain.repository.AuthRepository
 import no.bellaybestia.audex.domain.repository.CatalogRepository
+import no.bellaybestia.audex.domain.repository.PodcastRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.settings.PlaybackSettings
@@ -56,6 +58,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun catalogRepository(impl: CatalogRepositoryImpl): CatalogRepository
+
+    @Binds
+    abstract fun podcastRepository(impl: PodcastRepositoryImpl): PodcastRepository
 
     @Binds
     abstract fun serverRepository(impl: ServerRepositoryImpl): ServerRepository

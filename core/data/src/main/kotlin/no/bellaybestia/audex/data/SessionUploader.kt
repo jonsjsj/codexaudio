@@ -48,6 +48,7 @@ class SessionUploader @Inject constructor(
                     AbsLocalSession(
                         id = row.localId,
                         libraryItemId = row.libraryItemId,
+                        episodeId = row.episodeId,
                         deviceInfo = runCatching {
                             json.decodeFromString<AbsDeviceInfo>(row.deviceInfoJson)
                         }.getOrDefault(AbsDeviceInfo()),

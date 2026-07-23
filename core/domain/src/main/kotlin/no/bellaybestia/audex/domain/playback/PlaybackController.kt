@@ -11,6 +11,8 @@ data class PlaybackState(
     val isLoading: Boolean = false,
     val serverId: String? = null,
     val libraryItemId: String? = null,
+    /** Set while a podcast episode is playing; null for books. */
+    val episodeId: String? = null,
     val title: String? = null,
     val author: String? = null,
     val coverUrl: String? = null,
@@ -52,6 +54,8 @@ interface PlaybackController {
         title: String,
         author: String?,
         resumeAtS: Double? = null,
+        /** Non-null plays a podcast episode of [libraryItemId] instead of a book. */
+        episodeId: String? = null,
     )
 
     fun togglePlayPause()

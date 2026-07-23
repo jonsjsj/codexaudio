@@ -126,8 +126,13 @@ be confirmed against the deployed server (Phase-4 — see [08](08-open-questions
   the local `/api/session/local-all` upload carries `episodeId` so ABS accounts the listen to the
   episode. Audio progress still **never** goes through `PATCH /api/me/progress`.
 - **Subscribe** (the "add a podcast" verb — server-wide, needs upload permission):
-  `GET /api/search/podcasts?term=` [verify: bare array vs `{results}`] to find a feed, or take a
-  raw RSS URL; `POST /api/podcasts/feed {rssFeed}` to preview it (SSRF-validated); then
+  `GET /api/search/podcast?term=` — **SINGULAR, returns a BARE ARRAY** (verified live against
+  2.35.1 on 2026-07-23; the plural `/api/search/podcasts` **404s**). Result fields: `id,
+  title, artistName, description, descriptionPlain, cover, feedUrl, genres[], trackCount,
+  explicit, artistId, pageUrl, releaseDate`. Or take a raw RSS URL;
+  `POST /api/podcasts/feed {rssFeed}` to preview it (SSRF-validated) → `{podcast:{metadata,
+  episodes[]}}`; **metadata sends `image` and `categories`** (NOT `imageUrl`/`genres`) — both
+  verified live; then
   `POST /api/podcasts {libraryId, folderId, path, media:{metadata, autoDownloadEpisodes}}` where
   `path = folder.fullPath + "/" + sanitized title`. Permission comes from `GET /api/me`
   (`type` root/admin, or `permissions.upload`).

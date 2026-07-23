@@ -32,13 +32,29 @@ class SessionUploader @Inject constructor(
         // ABS stores session `date` as YYYY-MM-DD and `dayOfWeek` as the weekday name.
         val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
         val DOW_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.US)
+
+        /** Give up on a session after this many tries — a request that "fails"
+         * on the client but actually lands on the server would otherwise retry
+         * forever, re-writing an old position each time. */
+        const val MAX_ATTEMPTS = 5
     }
 
     /** @return true when nothing is left pending (worker success). */
     suspend fun flush(): Boolean {
         var allDrained = true
         for (server in serverDao.enabled()) {
-            val pending = sessionDao.pendingForServer(server.serverId)
+            val all = sessionDao.pendingForServer(server.serverId)
+            // A session with no listening time carries NOTHING but a stale
+            // position — uploading it just rewrites the server's progress for
+            // that book. That is how a discarded/never-really-played book kept
+            // coming back from the dead (it re-posted its old position on every
+            // launch). Drop them instead of sending them. Same for anything that
+            // has already burned through its retries, so nothing can loop forever
+            // re-asserting an old position.
+            val (junk, pending) = all.partition {
+                it.timeListeningS <= 0.0 || it.attempts >= MAX_ATTEMPTS
+            }
+            if (junk.isNotEmpty()) sessionDao.deleteByIds(junk.map { it.localId })
             if (pending.isEmpty()) continue
 
             val api = clientFactory.api(server.serverId, server.baseUrl)

@@ -159,9 +159,24 @@ class CatalogRepositoryImpl @Inject constructor(
     ) = withContext(dispatcher) {
         val f = fraction.coerceIn(0.0, 1.0)
         val existing = progressDao.get(serverId, libraryItemId)
+        // FORWARD-ONLY. This mirror exists so that reading AHEAD of where you
+        // listened carries over to the audiobook — it must never drag the audio
+        // position BACKWARD. Merely opening the ebook (or a locator that hasn't
+        // restored yet) reports an early position, and that was silently
+        // overwriting hours of listening: open the text for a second, come back
+        // to the audiobook, and you'd resume way behind. If the audio is already
+        // further along, keep it.
+        val newTimeS = durationS?.let { f * it }
+        val existingTimeS = existing?.currentTimeS ?: 0.0
+        val alreadyFurther = when {
+            existing == null -> false
+            newTimeS != null -> existingTimeS >= newTimeS - 1.0
+            else -> (existing.pct) >= f - 0.0005
+        }
+        if (alreadyFurther) return@withContext
         val row = (existing ?: ProgressEntity(serverId = serverId, libraryItemId = libraryItemId)).copy(
             pct = f,
-            currentTimeS = durationS?.let { f * it } ?: existing?.currentTimeS ?: 0.0,
+            currentTimeS = newTimeS ?: existingTimeS,
             isFinished = f >= 0.999,
             lastUpdate = System.currentTimeMillis(),
             source = "LOCAL_XFORMAT",

@@ -253,6 +253,9 @@ interface SessionDao {
      * session orphaned by a kill would otherwise re-post the old currentTime). */
     @Query("DELETE FROM pending_sessions WHERE serverId = :serverId AND libraryItemId = :itemId")
     suspend fun deleteForItem(serverId: String, itemId: String)
+
+    @Query("DELETE FROM pending_sessions WHERE localId IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 @Dao

@@ -3,6 +3,20 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.13.2
+
+- Opening the ebook can no longer throw away your listening position. The
+  cross-format sync is now FORWARD-ONLY: reading ahead of where you listened
+  still carries over to the audiobook, but merely opening the text (or a page
+  position that hasn't restored yet) can never drag the audiobook backward.
+  This is what lost hours of Demon World after a quick look at the text.
+- Books stop coming back from the dead for good: a "session" with no actual
+  listening time is now discarded instead of uploaded (it carried nothing but
+  a stale position and was re-posting it to the server on every launch), and
+  any upload that keeps failing is given up on after a few tries instead of
+  re-asserting an old position forever.
+
+
 ## 0.4.13.1
 
 - A discarded book can no longer come back from the dead. Discarding now also

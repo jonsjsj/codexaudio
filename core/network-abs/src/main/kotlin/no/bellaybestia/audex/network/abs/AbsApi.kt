@@ -171,8 +171,10 @@ interface AbsApi {
 
     // --- podcasts: search, subscribe, manage (docs/03 §3.8) ---
 
-    /** Search the configured podcast index (iTunes) by name. */
-    @GET("api/search/podcasts")
+    /** Search the configured podcast index (iTunes) by name. The route is
+     * SINGULAR and returns a BARE ARRAY — verified against ABS 2.35.1
+     * (`/api/search/podcasts` 404s). */
+    @GET("api/search/podcast")
     suspend fun searchPodcasts(@Query("term") term: String): List<AbsPodcastSearchResult>
 
     /**

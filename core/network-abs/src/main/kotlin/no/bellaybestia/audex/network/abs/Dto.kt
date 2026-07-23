@@ -1,5 +1,6 @@
 package no.bellaybestia.audex.network.abs
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -452,9 +453,12 @@ data class AbsPodcastFeedMetadata(
     val author: String? = null,
     val description: String? = null,
     val descriptionPlain: String? = null,
-    val imageUrl: String? = null,
+    // ABS 2.35.1 sends `image` and `categories` here (NOT imageUrl/genres —
+    // verified against the live feed endpoint); without the mapping the
+    // subscribe preview silently showed no cover.
+    @SerialName("image") val imageUrl: String? = null,
     val feedUrl: String? = null,
-    val genres: List<String> = emptyList(),
+    @SerialName("categories") val genres: List<String> = emptyList(),
 )
 
 @Serializable

@@ -66,9 +66,14 @@ class LibrarySyncer @Inject constructor(
         if (seen.isNotEmpty()) remoteItemDao.pruneMissing(serverId, seen)
 
         // Bulk progress reconcile — resume pointers only; listening time is
-        // additive and only ever flows out through the sessions API.
+        // additive and only ever flows out through the sessions API. Episode
+        // progress (episodeId != null) belongs to the podcast pipeline, not the
+        // book progress table — PodcastSyncer reconciles those.
         val me = api.me()
-        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(
+            serverId,
+            me.mediaProgress.filter { it.episodeId == null }.map { it.toProgressEntity(serverId) },
+        )
         serverDao.upsert(
             serverDao.enabled().first { it.serverId == serverId }
                 .copy(absUserId = me.id, lastFullSyncAt = System.currentTimeMillis())
@@ -106,7 +111,10 @@ class LibrarySyncer @Inject constructor(
         val server = serverDao.enabled().firstOrNull { it.serverId == serverId } ?: return
         val api = clientFactory.api(serverId, server.baseUrl)
         val me = runCatching { api.me() }.getOrNull() ?: return
-        upsertProgressKeepingLocalReader(serverId, me.mediaProgress.map { it.toProgressEntity(serverId) })
+        upsertProgressKeepingLocalReader(
+            serverId,
+            me.mediaProgress.filter { it.episodeId == null }.map { it.toProgressEntity(serverId) },
+        )
     }
 
     /**

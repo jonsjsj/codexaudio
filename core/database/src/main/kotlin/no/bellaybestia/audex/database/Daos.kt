@@ -320,6 +320,81 @@ interface DownloadDao {
 }
 
 @Dao
+interface PodcastDao {
+    @Query("SELECT * FROM podcasts ORDER BY title COLLATE NOCASE")
+    fun observeAll(): Flow<List<PodcastEntity>>
+
+    @Query("SELECT * FROM podcasts WHERE serverId = :serverId AND libraryItemId = :itemId")
+    fun observe(serverId: String, itemId: String): Flow<PodcastEntity?>
+
+    @Query("SELECT * FROM podcasts WHERE serverId = :serverId AND libraryItemId = :itemId")
+    suspend fun get(serverId: String, itemId: String): PodcastEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<PodcastEntity>)
+
+    @Query("DELETE FROM podcasts WHERE serverId = :serverId AND libraryItemId NOT IN (:keep)")
+    suspend fun pruneMissing(serverId: String, keep: List<String>)
+
+    @Query("DELETE FROM podcasts WHERE serverId = :serverId")
+    suspend fun deleteForServer(serverId: String)
+}
+
+/** An episode joined with its per-episode progress, for the podcast detail list. */
+data class EpisodeWithProgress(
+    val serverId: String,
+    val libraryItemId: String,
+    val episodeId: String,
+    val title: String,
+    val subtitle: String?,
+    val pubDate: String?,
+    val publishedAt: Long?,
+    val durationS: Double?,
+    val idx: Int,
+    val pct: Double,
+    val isFinished: Boolean,
+    val currentTimeS: Double?,
+)
+
+@Dao
+interface EpisodeDao {
+    @Query(
+        """SELECT e.serverId AS serverId, e.libraryItemId AS libraryItemId, e.episodeId AS episodeId,
+                  e.title AS title, e.subtitle AS subtitle, e.pubDate AS pubDate,
+                  e.publishedAt AS publishedAt, e.durationS AS durationS, e.idx AS idx,
+                  COALESCE(p.pct, 0) AS pct, COALESCE(p.isFinished, 0) AS isFinished,
+                  p.currentTimeS AS currentTimeS
+           FROM episodes e
+           LEFT JOIN episode_progress p
+               ON p.serverId = e.serverId AND p.libraryItemId = e.libraryItemId AND p.episodeId = e.episodeId
+           WHERE e.serverId = :serverId AND e.libraryItemId = :itemId
+           ORDER BY COALESCE(e.publishedAt, 0) DESC, e.idx DESC"""
+    )
+    fun observeForPodcast(serverId: String, itemId: String): Flow<List<EpisodeWithProgress>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<EpisodeEntity>)
+
+    @Query("DELETE FROM episodes WHERE serverId = :serverId AND libraryItemId = :itemId")
+    suspend fun deleteForPodcast(serverId: String, itemId: String)
+
+    @Query("DELETE FROM episodes WHERE serverId = :serverId")
+    suspend fun deleteForServer(serverId: String)
+}
+
+@Dao
+interface EpisodeProgressDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<EpisodeProgressEntity>)
+
+    @Query("SELECT * FROM episode_progress WHERE serverId = :serverId AND libraryItemId = :itemId AND episodeId = :episodeId")
+    suspend fun get(serverId: String, itemId: String, episodeId: String): EpisodeProgressEntity?
+
+    @Query("DELETE FROM episode_progress WHERE serverId = :serverId")
+    suspend fun deleteForServer(serverId: String)
+}
+
+@Dao
 interface HighlightDao {
     @Query("SELECT * FROM highlights WHERE serverId = :serverId AND libraryItemId = :itemId ORDER BY createdAt DESC")
     fun observe(serverId: String, itemId: String): Flow<List<HighlightEntity>>

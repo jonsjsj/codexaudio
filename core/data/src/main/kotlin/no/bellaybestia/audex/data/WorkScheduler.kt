@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import no.bellaybestia.audex.data.workers.DownloadWorker
 import no.bellaybestia.audex.data.workers.EbookProgressUploadWorker
 import no.bellaybestia.audex.data.workers.LibrarySyncWorker
+import no.bellaybestia.audex.data.workers.PodcastSyncWorker
 import no.bellaybestia.audex.data.workers.SessionUploadWorker
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -57,6 +58,15 @@ class WorkScheduler @Inject constructor(
                 .setConstraints(connected)
                 .build(),
         )
+        // Podcasts refresh more often than books: episodes drop daily and the
+        // server auto-downloads on its own cron, so a 3h pull keeps the list live.
+        workManager.enqueueUniquePeriodicWork(
+            PodcastSyncWorker.UNIQUE_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<PodcastSyncWorker>(3, TimeUnit.HOURS)
+                .setConstraints(connected)
+                .build(),
+        )
     }
 
     /** Flush queued ebook positions as soon as there's connectivity. */
@@ -74,6 +84,15 @@ class WorkScheduler @Inject constructor(
             "${LibrarySyncWorker.UNIQUE_NAME}-now",
             ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<LibrarySyncWorker>().setConstraints(connected).build(),
+        )
+    }
+
+    /** Ingest podcast libraries now (after login, subscribe, or a socket change). */
+    fun syncPodcastsNow() {
+        workManager.enqueueUniqueWork(
+            "${PodcastSyncWorker.UNIQUE_NAME}-now",
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<PodcastSyncWorker>().setConstraints(connected).build(),
         )
     }
 

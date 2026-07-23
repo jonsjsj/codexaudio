@@ -94,9 +94,10 @@ class PlaybackControllerImpl @Inject constructor(
         title: String,
         author: String?,
         resumeAtS: Double?,
+        episodeId: String?,
     ) {
         _state.update {
-            it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, title = title, author = author)
+            it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, episodeId = episodeId, title = title, author = author)
         }
         val server = serverDao.enabled().firstOrNull { it.serverId == serverId }
         if (server == null) {
@@ -105,12 +106,13 @@ class PlaybackControllerImpl @Inject constructor(
         }
         _state.update { it.copy(coverUrl = absCoverUrl(server.baseUrl, libraryItemId)) }
 
-        // Offline-first: play downloaded files if present, otherwise stream.
-        val local = downloadManager.localAudioTracks(serverId, libraryItemId)
+        // Podcast episodes always stream (episode downloads aren't built yet).
+        // Books are offline-first: play downloaded files if present, else stream.
+        val local = if (episodeId == null) downloadManager.localAudioTracks(serverId, libraryItemId) else null
         if (local != null) {
             playLocal(serverId, libraryItemId, title, author, local, resumeAtS)
         } else {
-            playStreaming(serverId, server.baseUrl, libraryItemId, title, author, resumeAtS)
+            playStreaming(serverId, server.baseUrl, libraryItemId, title, author, resumeAtS, episodeId)
         }
     }
 
@@ -121,9 +123,12 @@ class PlaybackControllerImpl @Inject constructor(
         title: String,
         author: String?,
         resumeAtS: Double?,
+        episodeId: String?,
     ) {
         val api = clientFactory.api(serverId, baseUrl)
-        val session = runCatching { api.play(libraryItemId) }.getOrElse {
+        val session = runCatching {
+            if (episodeId != null) api.playEpisode(libraryItemId, episodeId) else api.play(libraryItemId)
+        }.getOrElse {
             _state.update { it.copy(isLoading = false, error = "Couldn't start playback.") }
             return
         }
@@ -142,7 +147,8 @@ class PlaybackControllerImpl @Inject constructor(
         // stop/start) was snapping back to the last *synced* spot and losing
         // recent listening. An explicit resumeAtS (e.g. cross-format furthest)
         // still wins over both.
-        val localS = progressDao.get(serverId, libraryItemId)?.currentTimeS?.takeIf { it > 0.0 }
+        // Episodes have no book progress row; resume from the server's session time.
+        val localS = if (episodeId == null) progressDao.get(serverId, libraryItemId)?.currentTimeS?.takeIf { it > 0.0 } else null
         val resumeAt = resumeAtS ?: localS ?: session.currentTime
         activeApi = api
         activeSessionId = session.id
@@ -155,7 +161,7 @@ class PlaybackControllerImpl @Inject constructor(
             },
         )
         totalDurationS = tracks.sumOf { it.duration }
-        sessionRecorder.start(serverId, libraryItemId, resumeAt)
+        sessionRecorder.start(serverId, libraryItemId, resumeAt, episodeId)
         startPlayback(items, resumeAt)
         _state.update { it.copy(isLoading = false, chapters = activeChapters) }
         startSyncLoop()
@@ -467,14 +473,19 @@ class PlaybackControllerImpl @Inject constructor(
                 }
                 val itemId = _state.value.libraryItemId
                 val finished = totalDurationS > 0 && position >= totalDurationS - 1.0
-                // Keep the LOCAL progress row current so the detail slider, Home,
-                // and library reflect where you are AS you listen — it used to
-                // freeze at the last server reconcile (the "stuck at 90%" bug).
-                writeLocalProgress(itemId, position, finished)
-                // Optional: mirror progress to Codex immediately (best-effort; no
-                // effect unless the user configured Codex sync in Settings).
-                if (itemId != null) {
-                    runCatching { codexSync.pushAudioProgress(itemId, position, finished) }
+                // Books only: episodes have no book progress row, and Codex tracks
+                // books, not podcast episodes. Episode position is carried by the
+                // server session (synced above) + the local SessionRecorder row.
+                if (_state.value.episodeId == null) {
+                    // Keep the LOCAL progress row current so the detail slider, Home,
+                    // and library reflect where you are AS you listen — it used to
+                    // freeze at the last server reconcile (the "stuck at 90%" bug).
+                    writeLocalProgress(itemId, position, finished)
+                    // Optional: mirror progress to Codex immediately (best-effort; no
+                    // effect unless the user configured Codex sync in Settings).
+                    if (itemId != null) {
+                        runCatching { codexSync.pushAudioProgress(itemId, position, finished) }
+                    }
                 }
             }
         }

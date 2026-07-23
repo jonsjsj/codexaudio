@@ -31,7 +31,7 @@ class SessionRecorder @Inject constructor(
 
     private var active: PendingSessionEntity? = null
 
-    fun start(serverId: String, libraryItemId: String, startTimeS: Double) {
+    fun start(serverId: String, libraryItemId: String, startTimeS: Double, episodeId: String? = null) {
         val now = System.currentTimeMillis()
         val row = PendingSessionEntity(
             localId = UUID.randomUUID().toString(),
@@ -44,6 +44,7 @@ class SessionRecorder @Inject constructor(
             timeListeningS = 0.0,
             deviceInfoJson = deviceInfoJson(),
             state = "RECORDING",
+            episodeId = episodeId,
         )
         active = row
         scope.launch { sessionDao.upsert(row) }

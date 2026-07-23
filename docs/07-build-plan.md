@@ -68,6 +68,16 @@ survives a forced full re-sync.
 - Wear remote (stretch).
 - Distribution / auto-update channel (open question — [08](08-open-questions.md), question 2).
 
+**Status (podcasts, 2026-07-23):** the full subscribe pipeline landed as a parallel stack —
+`:core:network-abs` DTOs/endpoints (search, feed preview, create, settings, episode play),
+`:core:database` `podcasts`/`episodes`/`episode_progress` tables (schema v4, `MIGRATION_3_4`) +
+`episodeId` on `pending_sessions`, a `PodcastSyncer` + `PodcastSyncWorker` independent of the graph,
+`PodcastRepository`, `episodeId` threaded through the player/SessionRecorder/uploader, and a new
+`:feature:podcasts` module (list, detail with the auto-download toggle, and the search→preview→
+subscribe flow) on its own bottom-nav tab. The ABS-API `[verify]` items in
+[03 §3.8](03-abs-api-usage.md#38-podcasts-parallel-pipeline) still need a live check on the deployed
+server (search response shape, `checknew` route, `/play/{episodeId}` session fields).
+
 ## Ordering rationale
 
 The catalog engine comes first because it carries the highest novelty risk and has zero UI

@@ -25,6 +25,15 @@ data class AbsLibrary(
     val id: String,
     val name: String = "",
     val mediaType: String = "book",
+    // Present on GET /api/libraries. A podcast subscription (POST /api/podcasts)
+    // needs a target folder's absolute path to place the new podcast directory.
+    val folders: List<AbsLibraryFolder> = emptyList(),
+)
+
+@Serializable
+data class AbsLibraryFolder(
+    val id: String = "",
+    val fullPath: String = "",
 )
 
 @Serializable
@@ -84,7 +93,40 @@ data class AbsMedia(
     // per-file offline downloads (each file addressed by its `ino`).
     val audioFiles: List<AbsAudioFile> = emptyList(),
     val ebookFile: AbsEbookFile? = null,
+    // --- podcast media (mediaType == "podcast") ---
+    // Episodes are only present on the expanded item detail; the library-items
+    // list projection carries `numEpisodes` but not the episode array.
+    val episodes: List<AbsPodcastEpisode> = emptyList(),
+    val numEpisodes: Int = 0,
+    // Server-side "subscription" settings: with autoDownloadEpisodes on, the ABS
+    // server polls the feed on its cron and pulls new episodes for the library.
+    val autoDownloadEpisodes: Boolean = false,
+    val autoDownloadSchedule: String? = null,
+    val maxEpisodesToKeep: Int = 0,
+    val maxNewEpisodesToDownload: Int = 0,
 )
+
+/** One podcast episode on a podcast library item (media.episodes[]). */
+@Serializable
+data class AbsPodcastEpisode(
+    val id: String = "",
+    val index: Int = 0,
+    val season: String? = null,
+    val episode: String? = null,
+    val title: String = "",
+    val subtitle: String? = null,
+    val description: String? = null,
+    // RSS pubDate string plus the parsed epoch-ms ABS derives from it.
+    val pubDate: String? = null,
+    val publishedAt: Long? = null,
+    // Episode duration may live on the episode or only on its audioFile.
+    val duration: Double? = null,
+    val size: Long? = null,
+    val audioFile: AbsAudioFile? = null,
+) {
+    /** Best available duration (episode field, else the audio file's). */
+    val durationS: Double? get() = duration ?: audioFile?.duration?.takeIf { it > 0 }
+}
 
 @Serializable
 data class AbsAudioFile(
@@ -131,6 +173,12 @@ data class AbsMetadata(
     val abridged: Boolean = false,
     // Expanded item detail only (never in the minified list projection).
     val description: String? = null,
+    // --- podcast metadata (mediaType == "podcast") ---
+    // Podcasts carry a single `author` string (not the authors[] array), plus the
+    // RSS feed URL and a cover image URL from the feed.
+    val author: String? = null,
+    val feedUrl: String? = null,
+    val imageUrl: String? = null,
 )
 
 @Serializable
@@ -167,8 +215,23 @@ data class AbsChapter(
 data class AbsUser(
     val id: String,
     val username: String = "",
+    // "root" | "admin" | "user" | "guest". Root/admin can always add podcasts.
+    val type: String = "user",
+    val permissions: AbsPermissions? = null,
     val mediaProgress: List<AbsMediaProgress> = emptyList(),
     val bookmarks: List<AbsBookmark> = emptyList(),
+) {
+    /** Whether this account may create a podcast subscription on the server. */
+    val canUpload: Boolean
+        get() = type == "root" || type == "admin" || permissions?.upload == true
+}
+
+@Serializable
+data class AbsPermissions(
+    val upload: Boolean = false,
+    val update: Boolean = false,
+    val delete: Boolean = false,
+    val download: Boolean = true,
 )
 
 @Serializable
@@ -189,6 +252,9 @@ data class AbsMediaProgress(
      * DELETE endpoint needs to discard progress. Absent in some projections. */
     val id: String? = null,
     val libraryItemId: String,
+    // Set on podcast-episode progress records; null for books. Podcast progress
+    // is keyed per (libraryItemId, episodeId).
+    val episodeId: String? = null,
     val progress: Double = 0.0,
     val currentTime: Double = 0.0,
     val isFinished: Boolean = false,
@@ -343,4 +409,110 @@ data class AbsLoginUser(
     val username: String = "",
     val accessToken: String? = null,
     val refreshToken: String? = null,
+)
+
+// --- podcasts: search, feed preview, subscribe ---
+
+/**
+ * One result of GET /api/search/podcasts?term= — the iTunes-normalized shape ABS
+ * returns. `artistName` is the podcast author; `feedUrl` is what a subscription
+ * is created from.
+ */
+@Serializable
+data class AbsPodcastSearchResult(
+    val id: Int? = null,
+    val title: String = "",
+    val artistName: String? = null,
+    val description: String? = null,
+    val descriptionPlain: String? = null,
+    val cover: String? = null,
+    val feedUrl: String = "",
+    val genres: List<String> = emptyList(),
+    val trackCount: Int = 0,
+    val explicit: Boolean = false,
+)
+
+/** Body for POST /api/podcasts/feed — preview a raw RSS URL before subscribing. */
+@Serializable
+data class AbsPodcastFeedRequest(val rssFeed: String)
+
+@Serializable
+data class AbsPodcastFeedResponse(val podcast: AbsPodcastFeed = AbsPodcastFeed())
+
+@Serializable
+data class AbsPodcastFeed(
+    val metadata: AbsPodcastFeedMetadata = AbsPodcastFeedMetadata(),
+    val episodes: List<AbsPodcastFeedEpisode> = emptyList(),
+    val numEpisodes: Int = 0,
+)
+
+@Serializable
+data class AbsPodcastFeedMetadata(
+    val title: String? = null,
+    val author: String? = null,
+    val description: String? = null,
+    val descriptionPlain: String? = null,
+    val imageUrl: String? = null,
+    val feedUrl: String? = null,
+    val genres: List<String> = emptyList(),
+)
+
+@Serializable
+data class AbsPodcastFeedEpisode(
+    val title: String? = null,
+    val subtitle: String? = null,
+    val description: String? = null,
+    val pubDate: String? = null,
+    val publishedAt: Long? = null,
+    val duration: Double? = null,
+    val enclosure: AbsEnclosure? = null,
+)
+
+@Serializable
+data class AbsEnclosure(
+    val url: String? = null,
+    val length: String? = null,
+    val type: String? = null,
+)
+
+/**
+ * Body for POST /api/podcasts — creates the podcast library item (the
+ * subscription). `path` is the absolute directory ABS will create for it
+ * (folder.fullPath + "/" + sanitized title); `folderId`/`libraryId` target a
+ * podcast library. `media.autoDownloadEpisodes` turns on server-side polling.
+ */
+@Serializable
+data class AbsPodcastCreateRequest(
+    val libraryId: String,
+    val folderId: String,
+    val path: String,
+    val media: AbsPodcastCreateMedia,
+)
+
+@Serializable
+data class AbsPodcastCreateMedia(
+    val metadata: AbsPodcastCreateMetadata,
+    val autoDownloadEpisodes: Boolean = false,
+)
+
+@Serializable
+data class AbsPodcastCreateMetadata(
+    val title: String,
+    val author: String? = null,
+    val description: String? = null,
+    val feedUrl: String,
+    val imageUrl: String? = null,
+)
+
+/**
+ * Body for PATCH /api/items/{id}/media — updates a podcast's server-side
+ * subscription settings. Nulls are omitted (explicitNulls=false), so this only
+ * changes the fields you set.
+ */
+@Serializable
+data class AbsPodcastSettingsBody(
+    val autoDownloadEpisodes: Boolean? = null,
+    val autoDownloadSchedule: String? = null,
+    val maxEpisodesToKeep: Int? = null,
+    val maxNewEpisodesToDownload: Int? = null,
 )

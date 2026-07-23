@@ -97,6 +97,16 @@ interface AbsApi {
     @POST("api/items/{id}/play")
     suspend fun play(@Path("id") itemId: String, @Body body: AbsPlayRequest = AbsPlayRequest()): AbsPlaybackSession
 
+    // Podcast episode playback — same session shape as a book, with the episode
+    // in the path. The returned session's `episodeId` must be carried into the
+    // sessions API for correct per-episode listening accounting.
+    @POST("api/items/{id}/play/{episodeId}")
+    suspend fun playEpisode(
+        @Path("id") itemId: String,
+        @Path("episodeId") episodeId: String,
+        @Body body: AbsPlayRequest = AbsPlayRequest(),
+    ): AbsPlaybackSession
+
     @POST("api/session/{id}/sync")
     suspend fun syncSession(@Path("id") sessionId: String, @Body body: AbsSessionSyncBody): Response<Unit>
 
@@ -158,4 +168,36 @@ interface AbsApi {
     suspend fun deleteProgress(
         @Path("progressId") progressId: String,
     ): Response<Unit>
+
+    // --- podcasts: search, subscribe, manage (docs/03 §3.8) ---
+
+    /** Search the configured podcast index (iTunes) by name. */
+    @GET("api/search/podcasts")
+    suspend fun searchPodcasts(@Query("term") term: String): List<AbsPodcastSearchResult>
+
+    /**
+     * Preview a raw RSS URL before subscribing (SSRF-validated server-side).
+     * Distinct from an existing item's feed — this takes an arbitrary URL.
+     */
+    @POST("api/podcasts/feed")
+    suspend fun getPodcastFeed(@Body body: AbsPodcastFeedRequest): AbsPodcastFeedResponse
+
+    /** Create the podcast library item (the subscription). Returns the new item. */
+    @POST("api/podcasts")
+    suspend fun createPodcast(@Body body: AbsPodcastCreateRequest): AbsLibraryItem
+
+    /**
+     * Update a podcast's server-side subscription settings (auto-download on/off,
+     * schedule, retention). Body nulls are omitted, so only set fields change.
+     */
+    @PATCH("api/items/{id}/media")
+    suspend fun updatePodcastSettings(
+        @Path("id") itemId: String,
+        @Body body: AbsPodcastSettingsBody,
+    ): Response<Unit>
+
+    /** Ask the server to check the feed for new episodes now. [verify] route
+     * across ABS versions — best-effort; the periodic sync covers the rest. */
+    @GET("api/podcasts/{id}/checknew")
+    suspend fun checkNewEpisodes(@Path("id") itemId: String): Response<Unit>
 }

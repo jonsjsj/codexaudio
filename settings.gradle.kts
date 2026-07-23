@@ -35,6 +35,7 @@ include(
     ":core:designsystem",
     ":feature:home",
     ":feature:library",
+    ":feature:podcasts",
     ":feature:player",
     ":feature:downloads",
     ":feature:settings",

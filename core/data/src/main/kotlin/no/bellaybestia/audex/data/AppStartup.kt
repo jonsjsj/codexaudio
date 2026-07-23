@@ -42,5 +42,8 @@ class AppStartup @Inject constructor(
         // rows the UI can never act on. FAILED shows "Retry".
         downloadDao.adoptOrphanedActive()
         workScheduler.get().uploadSessionsNow()
+        // Populate podcasts promptly on launch (the periodic worker's first run
+        // can be deferred a while by WorkManager).
+        workScheduler.get().syncPodcastsNow()
     }
 }

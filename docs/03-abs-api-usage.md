@@ -107,3 +107,32 @@ the app is foregrounded or the playback service is active.
   resolve via the furthest/most-recent policy.
 - **Codex note**: all writes described in 3.3/3.4 are exactly what Codex's `sync_abs`/webhook
   consume — Codex correctness requires nothing more from this app.
+
+## 3.8 Podcasts (parallel pipeline)
+
+Podcasts run in a pipeline parallel to the book catalog (own Room tables, own syncer, no graph
+rebuild). All calls are per-server and bearer-authed like the rest. Items marked **[verify]** must
+be confirmed against the deployed server (Phase-4 — see [08](08-open-questions.md), item 17).
+
+- **Ingest**: `GET /api/libraries` → filter `mediaType == "podcast"` (each library carries
+  `folders[]{id,fullPath}`, needed to subscribe). `GET /api/libraries/{id}/items` for the item set;
+  `GET /api/items/{id}?expanded=1` for the full `media.episodes[]` + the subscription settings
+  (`autoDownloadEpisodes`, `autoDownloadSchedule`, `maxEpisodesToKeep`, `maxNewEpisodesToDownload`,
+  `numEpisodes`).
+- **Episode progress**: reconciled from `GET /api/me` — `mediaProgress[]` rows carry `episodeId`
+  for podcasts. The **book** progress path filters `episodeId == null`; the podcast path takes the
+  rest, keyed by `(libraryItemId, episodeId)`.
+- **Episode playback**: `POST /api/items/{id}/play/{episodeId}` — same session shape as a book;
+  the local `/api/session/local-all` upload carries `episodeId` so ABS accounts the listen to the
+  episode. Audio progress still **never** goes through `PATCH /api/me/progress`.
+- **Subscribe** (the "add a podcast" verb — server-wide, needs upload permission):
+  `GET /api/search/podcasts?term=` [verify: bare array vs `{results}`] to find a feed, or take a
+  raw RSS URL; `POST /api/podcasts/feed {rssFeed}` to preview it (SSRF-validated); then
+  `POST /api/podcasts {libraryId, folderId, path, media:{metadata, autoDownloadEpisodes}}` where
+  `path = folder.fullPath + "/" + sanitized title`. Permission comes from `GET /api/me`
+  (`type` root/admin, or `permissions.upload`).
+- **Manage**: `PATCH /api/items/{id}/media` with the auto-download settings to toggle a
+  subscription; `GET /api/podcasts/{id}/checknew` [verify] to trigger a feed check now.
+- **Not a webhook**: ABS "webhooks" (Apprise notifications) are outbound-only and are **not** used —
+  new-episode arrivals reach the app via the existing socket.io `item_updated`/`items_updated`
+  stream, which re-pulls the affected podcast.

@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.14.0
+
+- Podcasts. A new Podcasts tab: browse what you're subscribed to, open a show
+  to see its episodes and play them through the normal player, and subscribe to
+  something new by searching or pasting an RSS feed — with optional
+  server-side auto-download of new episodes. Podcast listening syncs like
+  everything else, so positions match the Audiobookshelf app.
+
+
 ## 0.4.13.2
 
 - Opening the ebook can no longer throw away your listening position. The

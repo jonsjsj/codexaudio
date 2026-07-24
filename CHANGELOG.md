@@ -3,6 +3,17 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.14.1
+
+- The big one: your position is now saved continuously while you listen, so it
+  can't be lost. Before, the resume position was only written by the online
+  sync loop and the session position only when you PAUSED — so listening done
+  offline, or ended by the app being killed instead of paused, was never saved
+  and you resumed behind where you actually were. Now the always-running player
+  ticker persists your exact position (and the session) every ~5 seconds,
+  online or off, so a kill loses at most a few seconds.
+
+
 ## 0.4.14.0
 
 - Podcasts. A new Podcasts tab: browse what you're subscribed to, open a show

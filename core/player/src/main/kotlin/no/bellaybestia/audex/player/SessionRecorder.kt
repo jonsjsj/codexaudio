@@ -73,16 +73,16 @@ class SessionRecorder @Inject constructor(
         scope.launch { sessionDao.upsert(row.copy(state = "PENDING", updatedAt = System.currentTimeMillis())) }
     }
 
-    /** Bridges ExoPlayer state changes into the recorder lifecycle. */
+    /**
+     * Bridges ExoPlayer state changes into the recorder lifecycle. Listened TIME
+     * is now accrued by PlaybackController's always-on ticker (so it counts
+     * offline and survives a kill); this listener only SNAPS the saved position
+     * on a pause or seek (delta 0.0) — accruing a delta here too would
+     * double-count the listening time.
+     */
     fun playerListener(player: Player): Player.Listener = object : Player.Listener {
-        private var lastTickMs = 0L
-
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) {
-                lastTickMs = System.currentTimeMillis()
-            } else {
-                tickNow()
-            }
+            if (!isPlaying) tick(player.currentPosition / 1000.0, 0.0)
         }
 
         override fun onPositionDiscontinuity(
@@ -90,14 +90,7 @@ class SessionRecorder @Inject constructor(
             newPosition: Player.PositionInfo,
             reason: Int,
         ) {
-            tickNow()
-        }
-
-        private fun tickNow() {
-            val now = System.currentTimeMillis()
-            val delta = if (lastTickMs > 0) (now - lastTickMs) / 1000.0 else 0.0
-            lastTickMs = now
-            tick(player.currentPosition / 1000.0, delta.coerceAtLeast(0.0))
+            tick(player.currentPosition / 1000.0, 0.0)
         }
     }
 

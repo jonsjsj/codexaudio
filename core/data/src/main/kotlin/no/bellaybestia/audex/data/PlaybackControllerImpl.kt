@@ -47,6 +47,9 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val SYNC_INTERVAL_MS = 15_000L
+/** How often the always-on ticker persists the live position locally (progress
+ * row + session), so a kill or offline session loses at most this many seconds. */
+private const val PERSIST_EVERY_S = 5
 private val KEY_PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 
 @Singleton
@@ -404,6 +407,7 @@ class PlaybackControllerImpl @Inject constructor(
     private fun startTicker() {
         tickJob?.cancel()
         tickJob = scope.launch {
+            var secondsSincePersist = 0
             while (true) {
                 val (posMs, playing) = withContext(main) {
                     (overallPositionS() * 1000).toLong() to (controller?.isPlaying == true)
@@ -422,6 +426,31 @@ class PlaybackControllerImpl @Inject constructor(
                         isPlaying = playing,
                         currentChapterIndex = chapterIdx,
                     )
+                }
+                // Persist the live position every ~5s WHILE PLAYING, straight from
+                // this always-running ticker — NOT from the online sync loop. Before,
+                // the resume-critical local progress row was only written by
+                // startSyncLoop (online) and the session position only by a pause/seek,
+                // so listening done offline, or ended by an app-kill instead of a
+                // pause, was never saved anywhere and was lost on relaunch. This runs
+                // regardless of network and captures within 5s of a kill.
+                if (playing) {
+                    secondsSincePersist++
+                    if (secondsSincePersist >= PERSIST_EVERY_S) {
+                        val posS = posMs / 1000.0
+                        val finished = totalDurationS > 0 && posS >= totalDurationS - 1.0
+                        // Session row: fresh currentTime + accrued listen time, so a
+                        // killed session uploads the real position (not its stale start)
+                        // and isn't dropped as a zero-listening session.
+                        sessionRecorder.tick(posS, secondsSincePersist.toDouble())
+                        // Book progress row (skip podcast episodes — they have none).
+                        if (_state.value.episodeId == null) {
+                            writeLocalProgress(_state.value.libraryItemId, posS, finished)
+                        }
+                        secondsSincePersist = 0
+                    }
+                } else {
+                    secondsSincePersist = 0
                 }
                 delay(1000)
             }

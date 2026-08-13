@@ -62,6 +62,20 @@ data class Edition(
     val coverUrl: String? = null,
 )
 
+/**
+ * Where the Home "Resume" button jumps to: the edition you used last. AUDIO →
+ * start the audiobook at [resumeAtS]; EBOOK → open the reader. Lets Resume act
+ * immediately instead of going through the detail screen.
+ */
+data class ResumeTarget(
+    val serverId: String,
+    val libraryItemId: String,
+    val format: Format,
+    val title: String,
+    val author: String?,
+    val resumeAtS: Double?,
+)
+
 data class ServerAccount(
     val serverId: String,
     val name: String,

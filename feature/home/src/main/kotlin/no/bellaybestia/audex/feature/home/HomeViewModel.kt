@@ -4,22 +4,51 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Work
+import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.HomeLook
 import no.bellaybestia.audex.domain.settings.ThemeSettings
 
+/** One-shot event: open the reader for this ebook edition (Resume on an ebook). */
+data class ReaderNav(val serverId: String, val libraryItemId: String, val title: String)
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    catalogRepository: CatalogRepository,
+    private val catalogRepository: CatalogRepository,
+    private val playbackController: PlaybackController,
     serverRepository: ServerRepository,
     themeSettings: ThemeSettings,
 ) : ViewModel() {
+
+    private val _openReader = MutableSharedFlow<ReaderNav>(extraBufferCapacity = 1)
+    val openReader: SharedFlow<ReaderNav> = _openReader.asSharedFlow()
+
+    /**
+     * Home "Resume": jump straight into the book's last-used edition — start the
+     * audiobook (mini-player), or open the reader for an ebook — instead of
+     * detouring through the detail screen.
+     */
+    fun resume(work: Work) {
+        viewModelScope.launch {
+            val t = catalogRepository.resumeTarget(work.id) ?: return@launch
+            if (t.format == Format.AUDIO) {
+                playbackController.play(t.serverId, t.libraryItemId, t.title, t.author, resumeAtS = t.resumeAtS)
+            } else {
+                _openReader.emit(ReaderNav(t.serverId, t.libraryItemId, t.title))
+            }
+        }
+    }
 
     /** Which home layout to render (Settings → Appearance → Look). */
     val look: StateFlow<HomeLook> = themeSettings.prefs

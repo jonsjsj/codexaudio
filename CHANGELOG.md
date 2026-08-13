@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.15.0
+
+- Resume now takes you straight in. Pressing Resume on the Home hero starts the
+  audiobook immediately (no stop at the book page), or opens the reader if the
+  book is an ebook — whichever format you used last. Tapping the cover still
+  opens the book page as before.
+
+
 ## 0.4.14.1
 
 - The big one: your position is now saved continuously while you listen, so it

@@ -145,7 +145,12 @@ fun AppNav() {
                 .padding(innerPadding),
         ) {
             composable(Routes.HOME) {
-                HomeScreen(onWorkClick = { work -> navController.navigateToWork(work) })
+                HomeScreen(
+                    onWorkClick = { work -> navController.navigateToWork(work) },
+                    onOpenReader = { serverId, itemId, title ->
+                        navController.navigate(Routes.reader(serverId, itemId, title))
+                    },
+                )
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(

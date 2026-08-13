@@ -31,6 +31,8 @@ import no.bellaybestia.audex.database.WorkRow
 import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Edition
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.model.ResumeTarget
+import kotlinx.coroutines.flow.first
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.model.absCoverUrl
@@ -227,6 +229,31 @@ class CatalogRepositoryImpl @Inject constructor(
 
     override suspend fun workIdForItem(serverId: String, libraryItemId: String): String? =
         catalogDao.workIdForItem(serverId, libraryItemId)
+
+    override suspend fun resumeTarget(workId: String): ResumeTarget? = withContext(dispatcher) {
+        val editions = editionsForWork(workId).first()
+        if (editions.isEmpty()) return@withContext null
+        val work = work(workId).first() ?: return@withContext null
+        // Pair each edition with its saved progress, then pick the one you touched
+        // most recently. Fall back to any started edition, then audio, then the
+        // first — so a fresh (un-started) book still resumes (into audio if it has one).
+        val withProgress = editions.map { ed -> ed to progressDao.get(ed.serverId, ed.libraryItemId) }
+        val started = withProgress.filter { (ed, p) ->
+            ed.fraction > 0.0 ||
+                (p != null && (p.pct > 0.0 || (p.currentTimeS ?: 0.0) > 0.0 || (p.ebookProgress ?: 0.0) > 0.0))
+        }
+        val (ed, prog) = started.maxByOrNull { (_, p) -> p?.lastUpdate ?: 0L }
+            ?: withProgress.firstOrNull { (e, _) -> e.format == Format.AUDIO }
+            ?: withProgress.first()
+        ResumeTarget(
+            serverId = ed.serverId,
+            libraryItemId = ed.libraryItemId,
+            format = ed.format,
+            title = work.title,
+            author = work.authorName,
+            resumeAtS = prog?.currentTimeS,
+        )
+    }
 
     override suspend fun mergeAuthorInto(sourceAuthorId: String, targetAuthorId: String) {
         if (sourceAuthorId == targetAuthorId) return

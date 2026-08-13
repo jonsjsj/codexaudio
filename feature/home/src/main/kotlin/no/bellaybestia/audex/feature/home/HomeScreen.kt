@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ import no.bellaybestia.audex.domain.settings.HomeLook
 @Composable
 fun HomeScreen(
     onWorkClick: (Work) -> Unit = {},
+    onOpenReader: (String, String, String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -59,6 +61,11 @@ fun HomeScreen(
     val recentWorks by viewModel.recentWorks.collectAsState()
     val totalBooks by viewModel.totalBooks.collectAsState()
     val serverCount by viewModel.serverCount.collectAsState()
+
+    // Resume on an ebook opens the reader; audio starts in-place (mini-player).
+    LaunchedEffect(Unit) {
+        viewModel.openReader.collect { onOpenReader(it.serverId, it.libraryItemId, it.title) }
+    }
 
     if (continueWorks.isEmpty() && recentWorks.isEmpty()) {
         Column(modifier.fillMaxSize().padding(24.dp)) {
@@ -75,9 +82,9 @@ fun HomeScreen(
 
     when (look) {
         HomeLook.NIGHTFALL ->
-            NightfallHome(continueWorks, recentWorks, serverCount, onWorkClick, modifier)
+            NightfallHome(continueWorks, recentWorks, serverCount, onWorkClick, viewModel::resume, modifier)
         HomeLook.STACKS ->
-            StacksHome(continueWorks, recentWorks, totalBooks, serverCount, onWorkClick, modifier)
+            StacksHome(continueWorks, recentWorks, totalBooks, serverCount, onWorkClick, viewModel::resume, modifier)
     }
 }
 
@@ -96,6 +103,7 @@ private fun NightfallHome(
     recentWorks: List<Work>,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
+    onResume: (Work) -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(state = rememberLazyListState(), modifier = modifier.fillMaxSize()) {
@@ -110,7 +118,7 @@ private fun NightfallHome(
             }
         }
         continueWorks.firstOrNull()?.let { hero ->
-            item(key = "hero") { HeroCard(hero, onWorkClick) }
+            item(key = "hero") { HeroCard(hero, onWorkClick, onResume) }
         }
         // Below the hero: flat hairline rows per the mockup (2a) — the rest of
         // in-progress books with dual listen/read bars, then recently added.
@@ -132,7 +140,7 @@ private fun NightfallHome(
 
 /** Full-bleed featured card for the book you're mid-way through. */
 @Composable
-private fun HeroCard(work: Work, onWorkClick: (Work) -> Unit) {
+private fun HeroCard(work: Work, onWorkClick: (Work) -> Unit, onResume: (Work) -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Box(
         Modifier
@@ -183,7 +191,7 @@ private fun HeroCard(work: Work, onWorkClick: (Work) -> Unit) {
                     .padding(top = 14.dp)
                     .clip(RoundedCornerShape(30.dp))
                     .background(accent)
-                    .clickable { onWorkClick(work) }
+                    .clickable { onResume(work) }
                     .padding(horizontal = 22.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -306,6 +314,7 @@ private fun StacksHome(
     totalBooks: Int,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
+    onResume: (Work) -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(

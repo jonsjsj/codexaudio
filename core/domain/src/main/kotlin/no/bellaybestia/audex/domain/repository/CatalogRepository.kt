@@ -28,6 +28,13 @@ interface CatalogRepository {
     /** The work an item's edition belongs to — bridges audio↔ebook editions of one work. */
     suspend fun workIdForItem(serverId: String, libraryItemId: String): String?
 
+    /**
+     * The edition to jump into when "Resume" is pressed on Home: the one you used
+     * most recently (by saved progress time), so Resume starts the audiobook or
+     * opens the reader directly. Null if the work has no editions.
+     */
+    suspend fun resumeTarget(workId: String): no.bellaybestia.audex.domain.model.ResumeTarget?
+
     /** One work by id, observable (title/author/series/year/progress). */
     fun work(workId: String): Flow<Work?>
 

@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.16.0
+
+- Word-sync read-along, on the book page. Any book that has both an audiobook
+  and an ebook now shows a "Word-sync read-along" row: tap Align to build the
+  narration-to-text map on your alignment service, watch a live progress bar and
+  ETA while it works, and get an aligned check once the map is ready. Then turn
+  on "Follow audio" in the reader and each word highlights as it is narrated.
+
+
 ## 0.4.15.0
 
 - Resume now takes you straight in. Pressing Resume on the Home hero starts the

@@ -39,6 +39,6 @@ NOTES=$(awk -v v="## $VNAME" '
 ' "$CHANGELOG")
 [ -n "$NOTES" ] || { echo "gen-manifest: no CHANGELOG section for $VNAME" >&2; exit 1; }
 
-printf '{"versionCode":%s,"versionName":"%s","url":"/audex-%s.apk","notes":"%s"}\n' \
-  "$VCODE" "$VNAME" "$VNAME" "$NOTES" > "$OUT"
+printf '{"versionCode":%s,"versionName":"%s","url":"/audex-%s.apk?v=%s","notes":"%s"}\n' \
+  "$VCODE" "$VNAME" "$VNAME" "$VCODE" "$NOTES" > "$OUT"
 echo "gen-manifest: wrote $OUT (v$VNAME / vc$VCODE)"

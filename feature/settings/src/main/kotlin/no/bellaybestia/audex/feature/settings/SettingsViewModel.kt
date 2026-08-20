@@ -46,6 +46,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { readerSettings.set(readerPrefs.value.copy(barPosition = position)) }
     }
 
+    fun setReaderReadAlong(enabled: Boolean) {
+        viewModelScope.launch { readerSettings.set(readerPrefs.value.copy(readAlong = enabled)) }
+    }
+
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 

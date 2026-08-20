@@ -1,6 +1,7 @@
 package no.bellaybestia.audex.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -17,6 +18,7 @@ import no.bellaybestia.audex.domain.reader.ReaderTheme
 private val KEY_FONT_PCT = intPreferencesKey("reader_font_pct")
 private val KEY_THEME = stringPreferencesKey("reader_theme")
 private val KEY_BAR_POS = stringPreferencesKey("reader_bar_position")
+private val KEY_READALONG = booleanPreferencesKey("reader_readalong")
 
 @Singleton
 class ReaderSettingsStoreImpl @Inject constructor(
@@ -32,6 +34,7 @@ class ReaderSettingsStoreImpl @Inject constructor(
             barPosition = p[KEY_BAR_POS]?.let { stored ->
                 ReaderBarPosition.entries.firstOrNull { it.name == stored }
             } ?: ReaderBarPosition.BOTTOM,
+            readAlong = p[KEY_READALONG] ?: true,
         )
     }
 
@@ -40,6 +43,7 @@ class ReaderSettingsStoreImpl @Inject constructor(
             p[KEY_FONT_PCT] = prefs.fontSizePct.coerceIn(70, 200)
             p[KEY_THEME] = prefs.theme.name
             p[KEY_BAR_POS] = prefs.barPosition.name
+            p[KEY_READALONG] = prefs.readAlong
         }
     }
 }

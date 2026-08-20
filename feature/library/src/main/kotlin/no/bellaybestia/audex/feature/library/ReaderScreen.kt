@@ -566,12 +566,14 @@ private fun EpubReader(
     // so reading ahead just means pausing the audio first. Jump only when the target
     // anchor CHANGES so per-second ticks don't thrash the navigator.
     val audioNow = companion
-    val followAnchor = if (audioNow?.isPlaying == true) {
+    // Read-along is user-toggleable (Settings → Reader → Read-along highlight).
+    val readAlong = prefs.readAlong
+    val followAnchor = if (readAlong && audioNow?.isPlaying == true) {
         syncMap?.takeIf { it.chapters.isNotEmpty() }?.anchorAt(audioNow.positionS)
     } else {
         null
     }
-    val followTargetIndex = if (audioNow?.isPlaying == true && followAnchor == null) {
+    val followTargetIndex = if (readAlong && audioNow?.isPlaying == true && followAnchor == null) {
         val progression = syncMap?.progressionAt(audioNow.positionS) ?: audioNow.fraction
         targetPositionIndex(ready.positions, progression)
     } else {
@@ -591,7 +593,7 @@ private fun EpubReader(
     // narrated while the audiobook plays, so reading alongside the narration is
     // visibly in sync. Keyed on the anchor's char offset so a highlight is
     // applied once per sentence, not per playback tick.
-    val narrationAnchor = if (audioNow?.isPlaying == true) {
+    val narrationAnchor = if (readAlong && audioNow?.isPlaying == true) {
         syncMap?.anchorAt(audioNow.positionS)?.takeIf { !it.text.isNullOrBlank() }
     } else {
         null

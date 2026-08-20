@@ -348,6 +348,33 @@ fun SettingsScreen(
                 )
             }
         }
+        item(key = "reader-readalong") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Read-along highlight",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (readerPrefs.readAlong) "On" else "Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (readerPrefs.readAlong) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { viewModel.setReaderReadAlong(!readerPrefs.readAlong) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+                Text(
+                    text = "While the audiobook is playing, follow the narration and highlight " +
+                        "the sentence being read aloud. Off = read at your own pace with the " +
+                        "audio going.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         item(key = "wordsync-header") { SectionHeader("Audio-ebook sync") }
         item(key = "wordsync-url") {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

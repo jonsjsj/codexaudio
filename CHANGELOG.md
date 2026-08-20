@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.21.0
+
+- **Read-along is now a setting you can turn on and off** (Settings → Reader →
+  "Read-along highlight", on by default). Off means the page won't follow the
+  audiobook or highlight the narration — you just read at your own pace while the
+  audio plays.
+
 ## 0.4.20.0
 
 - **Read-along is back — and word-exact.** While the audiobook is playing, open the

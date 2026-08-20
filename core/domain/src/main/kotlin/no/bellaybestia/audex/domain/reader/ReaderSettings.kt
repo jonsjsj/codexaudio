@@ -14,6 +14,11 @@ data class ReaderPrefs(
     val theme: ReaderTheme = ReaderTheme.LIGHT,
     /** Edge the controls bar appears at when you tap the centre of the page. */
     val barPosition: ReaderBarPosition = ReaderBarPosition.BOTTOM,
+    /**
+     * Read-along: while the audiobook plays, follow the narration and highlight the
+     * sentence being read aloud. Off = read at your own pace even while listening.
+     */
+    val readAlong: Boolean = true,
 )
 
 interface ReaderSettingsStore {

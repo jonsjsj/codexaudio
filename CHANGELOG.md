@@ -3,6 +3,21 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.17.0
+
+- The read-along feature is now called **audio-ebook sync**, and the reader says
+  "Synced with audio" instead of "follows audio" — the ebook and audiobook keep
+  each other in sync rather than one following the other.
+- **Your reading position is now authoritative.** If you read past where the
+  audiobook is, close the book, and open it again, it stays exactly where you
+  left off instead of jumping back to the audiobook's spot. Your exact page is
+  stored (the audiobook keeps its exact second), and reading nudges the
+  audiobook forward so switching to listening resumes where you read.
+- **Reader controls fold away.** The separate audio-follow bar is gone; the
+  reading controls now stay hidden while you read and appear only when you tap
+  the centre of the page. A new Settings → Reader option puts that bar at the
+  top or the bottom (default bottom).
+
 ## 0.4.16.0
 
 - Word-sync read-along, on the book page. Any book that has both an audiobook

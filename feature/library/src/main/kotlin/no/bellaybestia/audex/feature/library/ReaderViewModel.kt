@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -75,10 +77,11 @@ data class AudioCompanion(
  * [onLocatorChanged], are debounced (~1.2s of no page turns), and flow out
  * through the offline-safe ebook queue — never the audio path (docs/03).
  *
- * Read-along (docs/09 Tier 1/2, proportional — no timing data needed): when the
- * SAME WORK's audio edition is loaded in the player, [audioCompanion] carries
- * its live fraction; with [followAudio] on, the screen keeps the page in step
- * (audio stays the master clock). Word-level sync is Tier 3 (forced alignment).
+ * Audio-ebook sync: your read position is authoritative — the page never
+ * auto-jumps to the audiobook. When the SAME WORK's audio edition is loaded,
+ * [audioCompanion] carries its live position so the narrated sentence can be
+ * highlighted as you read; positions also mirror across formats so switching
+ * between listening and reading resumes in the right place.
  */
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
@@ -149,19 +152,6 @@ class ReaderViewModel @Inject constructor(
         .map { it?.fraction }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /**
-     * Follow-audio toggle, ON by default: opening the ebook of a book you're
-     * listening to should land you where the narration is, without hunting for
-     * a "Follow audio" button first (it's a no-op when no audio companion is
-     * loaded). Turn it off to read ahead independently.
-     */
-    private val _followAudio = MutableStateFlow(true)
-    val followAudio: StateFlow<Boolean> = _followAudio.asStateFlow()
-
-    fun setFollowAudio(enabled: Boolean) {
-        _followAudio.value = enabled
-    }
-
     val audioCompanion: StateFlow<AudioCompanion?> =
         combine(playbackController.state, audioItemKeys) { playback, keys ->
             val playingKey = playback.serverId?.let { s -> playback.libraryItemId?.let { "$s|$it" } }
@@ -227,17 +217,15 @@ class ReaderViewModel @Inject constructor(
                     absLocation = absCfiFor(locator),
                     progress = progress,
                 )
-                // Cross-format: when reading independently (NOT following the audio),
-                // nudge the audiobook's saved position to match — proportionally — so
-                // switching to listening resumes where you read, no manual jump.
-                // Skipped in follow mode, where the audio is the master (avoids a loop).
-                if (!_followAudio.value) {
-                    _audioEdition.value?.let { audio ->
-                        runCatching {
-                            catalogRepository.mirrorAudioProgress(
-                                audio.serverId, audio.libraryItemId, progress, audio.durationS,
-                            )
-                        }
+                // Cross-format sync: your read position is authoritative. Nudge the
+                // audiobook's saved position forward to match — proportionally — so
+                // switching to listening resumes where you read. mirrorAudioProgress is
+                // forward-only, so reading can never rewind the audiobook.
+                _audioEdition.value?.let { audio ->
+                    runCatching {
+                        catalogRepository.mirrorAudioProgress(
+                            audio.serverId, audio.libraryItemId, progress, audio.durationS,
+                        )
                     }
                 }
             }
@@ -298,9 +286,30 @@ class ReaderViewModel @Inject constructor(
         _state.value = ReaderUiState.Ready(
             publication = publication,
             navigatorFactory = EpubNavigatorFactory(publication),
-            initialLocator = restoreLocator(),
+            // Your last-read ebook position is authoritative and restored exactly.
+            // Only when you've never opened this ebook do we start it where the
+            // audiobook is (proportionally) — a first-open convenience, never an
+            // override of a real read position.
+            initialLocator = restoreLocator() ?: crossFormatStartLocator(positions),
             positions = positions,
         )
+    }
+
+    /**
+     * First-open cross-format start: if this ebook has no saved position but the
+     * work's audiobook has progress, begin at the audiobook's spot (proportional —
+     * the only mapping available before any exact ebook position exists).
+     */
+    private suspend fun crossFormatStartLocator(positions: List<Locator>): Locator? {
+        if (positions.isEmpty()) return null
+        val workId = catalogRepository.workIdForItem(serverId, libraryItemId) ?: return null
+        val editions = catalogRepository.editionsForWork(workId).first()
+        val fraction = editions
+            .filter { it.format == Format.AUDIO }
+            .maxOfOrNull { it.fraction }
+            ?.takeIf { it > 0.0 } ?: return null
+        val index = (fraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+        return positions[index]
     }
 
     /**

@@ -44,9 +44,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commitNow
 import androidx.hilt.navigation.compose.hiltViewModel
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import no.bellaybestia.audex.domain.reader.ReaderBarPosition
 import no.bellaybestia.audex.domain.reader.ReaderPrefs
 import no.bellaybestia.audex.domain.reader.ReaderTheme
 import no.bellaybestia.audex.domain.reader.SyncMap
@@ -202,10 +202,7 @@ private fun EpubReader(
     }
 
     val companion by viewModel.audioCompanion.collectAsState()
-    val followAudio by viewModel.followAudio.collectAsState()
-    val currentProgression by viewModel.currentProgression.collectAsState()
     val syncMap by viewModel.syncMap.collectAsState()
-    val savedAudioFraction by viewModel.savedAudioFraction.collectAsState()
     val prefs by viewModel.readerPrefs.collectAsState()
     val highlights by viewModel.highlights.collectAsState()
     val progressUnit by viewModel.progressUnit.collectAsState()
@@ -213,29 +210,39 @@ private fun EpubReader(
     var showToc by remember { mutableStateOf(false) }
     var showHighlights by remember { mutableStateOf(false) }
     var showGoTo by remember { mutableStateOf(false) }
-    // Immersive mode: tapping the page hides all chrome for text-only reading.
-    var immersive by remember { mutableStateOf(false) }
+    // Reading controls fold away by default (Kindle-style). A tap on the centre
+    // of the page reveals them at the configured edge; tap again to fold.
+    var chromeVisible by remember { mutableStateOf(false) }
     // Current page (1-based) / total, for the indicator when chrome is showing.
     var pageInfo by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val barAtTop = prefs.barPosition == ReaderBarPosition.TOP
+    // The ebook and audiobook stay position-synced; while the narration is
+    // playing the read sentence is highlighted. Purely informational — the page
+    // never jumps on its own (your read position is authoritative).
+    val syncedWithAudio = companion != null || syncMap != null
+
+    @Composable
+    fun appearanceBar() {
+        AppearanceBar(
+            prefs = prefs,
+            expanded = showAppearance,
+            syncedWithAudio = syncedWithAudio,
+            onToggle = { showAppearance = !showAppearance },
+            onFontDelta = viewModel::adjustFontSize,
+            onCycleTheme = viewModel::cycleTheme,
+            onToc = { showToc = !showToc; if (showToc) showHighlights = false },
+            tocOpen = showToc,
+            onHighlights = { showHighlights = !showHighlights; if (showHighlights) showToc = false },
+            highlightsOpen = showHighlights,
+            onGoTo = { showGoTo = true },
+        )
+    }
 
     Column(modifier.fillMaxSize()) {
-        if (!immersive) {
-            AppearanceBar(
-                prefs = prefs,
-                expanded = showAppearance,
-                onToggle = { showAppearance = !showAppearance },
-                onFontDelta = viewModel::adjustFontSize,
-                onCycleTheme = viewModel::cycleTheme,
-                onToc = { showToc = !showToc; if (showToc) showHighlights = false },
-                tocOpen = showToc,
-                onHighlights = { showHighlights = !showHighlights; if (showHighlights) showToc = false },
-                highlightsOpen = showHighlights,
-                onGoTo = { showGoTo = true },
-            )
-        }
+        if (chromeVisible && barAtTop) appearanceBar()
         // In-reader table of contents (flat list, tap to jump) — the Kindle
         // affordance the reader was missing.
-        if (showToc && !immersive) {
+        if (showToc && chromeVisible) {
             val toc = remember(ready.publication) {
                 flattenToc(ready.publication.tableOfContents)
             }
@@ -281,7 +288,7 @@ private fun EpubReader(
             }
         }
         // Highlights panel: saved passages, newest first — tap to jump, or delete.
-        if (showHighlights && !immersive) {
+        if (showHighlights && chromeVisible) {
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -327,38 +334,13 @@ private fun EpubReader(
                 }
             }
         }
-        // Read-along bar (docs/09). Shows whenever the work HAS an audiobook — live
-        // when it's playing (word-sync anchors, or proportional), else from the
-        // audiobook's SAVED position, so you can still toggle Follow / jump to it
-        // when the audio isn't loaded. A live map maps through real anchors.
-        val effectiveAudio = companion
-            ?: savedAudioFraction?.let { AudioCompanion(isPlaying = false, fraction = it, positionS = 0.0) }
-        if (!immersive) effectiveAudio?.let { audio ->
-            val audioProgression = if (companion != null) {
-                syncMap?.progressionAt(audio.positionS) ?: audio.fraction
-            } else {
-                audio.fraction
-            }
-            ReadAlongBar(
-                audio = audio,
-                precise = syncMap != null && companion != null,
-                following = followAudio,
-                showJump = !followAudio &&
-                    abs((currentProgression ?: 0.0) - audioProgression) > 0.02,
-                onToggleFollow = { viewModel.setFollowAudio(!followAudio) },
-                onJump = {
-                    locatorForFraction(ready.positions, audioProgression)
-                        ?.let { navigator?.go(it) }
-                },
-            )
-        }
-        // Discoverability: a sync map exists but there's no audio info at all —
-        // tell the reader how to activate read-along instead of hiding it.
-        if (!immersive && effectiveAudio == null && syncMap != null) {
+        // Discoverability: a sync map exists but the audiobook isn't loaded — tell
+        // the reader that starting it will highlight the narrated text in sync.
+        if (chromeVisible && companion == null && syncMap != null) {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
                 Text(
-                    text = "Word sync ready — start the audiobook (Play on the book page) " +
-                        "and the text will follow the narration here.",
+                    text = "Audio-ebook sync ready — start the audiobook (Play on the book " +
+                        "page) and the narrated text highlights here as you read.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -494,8 +476,8 @@ private fun EpubReader(
                     },
                 ) { change, amount -> dx += amount; change.consume() }
             }
-            // Edge tap zones (left = back, right = forward); center tap toggles
-            // immersive mode (hide/show chrome) — the Kindle affordance.
+            // Edge tap zones (left = back, right = forward); center tap reveals or
+            // folds the reading controls — the Kindle affordance.
             Row(Modifier.fillMaxSize().then(swipe)) {
                 Box(
                     Modifier
@@ -507,7 +489,7 @@ private fun EpubReader(
                     Modifier
                         .weight(0.56f)
                         .fillMaxHeight()
-                        .pointerInput(Unit) { detectTapGestures { immersive = !immersive } },
+                        .pointerInput(Unit) { detectTapGestures { chromeVisible = !chromeVisible } },
                 )
                 Box(
                     Modifier
@@ -518,7 +500,7 @@ private fun EpubReader(
             }
 
             // Page indicator (bottom-center) while chrome is showing.
-            if (!immersive) {
+            if (chromeVisible) {
                 pageInfo?.let { (page, total) ->
                     Text(
                         text = "Page $page of $total",
@@ -531,6 +513,8 @@ private fun EpubReader(
                 }
             }
         }
+
+        if (chromeVisible && !barAtTop) appearanceBar()
     }
 
     // "Go to…" jump (item 7): percent, or an exact page number, per the
@@ -575,59 +559,15 @@ private fun EpubReader(
         )
     }
 
-    // Follow-audio: audio is the master clock; jump only when the target
-    // CHANGES, so second-by-second ticks don't thrash the navigator. With a
-    // v1.1 map the target is the narrated anchor's chapter locator (exact —
-    // char-based progression inside the right resource); otherwise fall back
-    // to the byte-based positions list, which is only proportional.
+    // The page never auto-jumps to the audiobook — your read position is
+    // authoritative (audio-ebook sync is position-based + the passive narration
+    // highlight below, not a live "follow" that would yank the page).
     val audioNow = companion
-    val followAnchor = if (followAudio && audioNow?.isPlaying == true) {
-        syncMap?.takeIf { it.chapters.isNotEmpty() }?.anchorAt(audioNow.positionS)
-    } else {
-        null
-    }
-    val followTargetIndex = if (followAudio && audioNow?.isPlaying == true && followAnchor == null) {
-        val progression = syncMap?.progressionAt(audioNow.positionS) ?: audioNow.fraction
-        targetPositionIndex(ready.positions, progression)
-    } else {
-        null
-    }
-    LaunchedEffect(followAnchor?.c0, followTargetIndex, navigator) {
-        val map = syncMap
-        when {
-            followAnchor != null && map != null ->
-                narrationLocator(ready.publication, map, followAnchor)
-                    ?.let { navigator?.go(it) }
-            followTargetIndex != null ->
-                ready.positions.getOrNull(followTargetIndex)?.let { navigator?.go(it) }
-        }
-    }
-
-    // Jump to the audiobook's spot the MOMENT Follow is switched on — even when
-    // the audio isn't loaded/playing. Before, this bailed when `companion` was
-    // null (audio not in the player), so pressing Follow "did nothing / stayed at
-    // 36%". Now it falls back to the audiobook's SAVED position (savedAudioFraction),
-    // jumping proportionally. When the audio IS live + word-synced, it uses the
-    // exact narration anchor.
-    LaunchedEffect(followAudio, navigator, syncMap != null, savedAudioFraction) {
-        if (!followAudio) return@LaunchedEffect
-        val audio = companion
-        val map = syncMap
-        val savedFrac = savedAudioFraction
-        val locator = when {
-            audio != null && map != null && map.chapters.isNotEmpty() ->
-                map.anchorAt(audio.positionS)?.let { narrationLocator(ready.publication, map, it) }
-                    ?: locatorForFraction(ready.positions, map.progressionAt(audio.positionS) ?: audio.fraction)
-            audio != null -> locatorForFraction(ready.positions, audio.fraction)
-            savedFrac != null -> locatorForFraction(ready.positions, savedFrac)
-            else -> null
-        }
-        locator?.let { navigator?.go(it) }
-    }
 
     // Sentence highlighting (map v1.1): tint the anchor currently being
-    // narrated. Keyed on the anchor's char offset so a highlight is applied
-    // once per sentence, not per playback tick.
+    // narrated while the audiobook plays, so reading alongside the narration is
+    // visibly in sync. Keyed on the anchor's char offset so a highlight is
+    // applied once per sentence, not per playback tick.
     val narrationAnchor = if (audioNow?.isPlaying == true) {
         syncMap?.anchorAt(audioNow.positionS)?.takeIf { !it.text.isNullOrBlank() }
     } else {
@@ -690,6 +630,7 @@ private fun EpubReader(
 private fun AppearanceBar(
     prefs: ReaderPrefs,
     expanded: Boolean,
+    syncedWithAudio: Boolean,
     onToggle: () -> Unit,
     onFontDelta: (Int) -> Unit,
     onCycleTheme: () -> Unit,
@@ -700,6 +641,14 @@ private fun AppearanceBar(
     onGoTo: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        if (syncedWithAudio) {
+            Text(
+                text = "Synced with audio",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, top = 6.dp),
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -779,56 +728,6 @@ private fun AppearanceBar(
                 modifier = Modifier
                     .clickable(onClick = onToggle)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-        }
-        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-    }
-}
-
-/** Flat read-along strip: audio %, follow toggle, and a one-tap catch-up jump. */
-@Composable
-private fun ReadAlongBar(
-    audio: AudioCompanion,
-    precise: Boolean,
-    following: Boolean,
-    showJump: Boolean,
-    onToggleFollow: () -> Unit,
-    onJump: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            val playGlyph = if (audio.isPlaying) "▶" else "⏸"
-            Text(
-                text = "Audio ${(audio.fraction * 100).roundToInt()}% $playGlyph" +
-                    if (precise) " · synced" else "",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            if (showJump) {
-                Text(
-                    text = "Jump to audio",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onJump)
-                        .padding(vertical = 4.dp),
-                )
-            }
-            Text(
-                text = if (following) "Following ✓" else "Follow audio",
-                style = MaterialTheme.typography.labelLarge,
-                color = if (following) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .clickable(onClick = onToggleFollow)
-                    .padding(vertical = 4.dp),
             )
         }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)

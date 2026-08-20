@@ -832,18 +832,18 @@ private fun WordSyncRow(status: WordSyncStatus, progress: WordSyncProgress, onPr
             )
             androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(text = "Word-sync read-along", style = MaterialTheme.typography.bodyLarge)
+                Text(text = "Audio-ebook sync", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = when (status) {
                         WordSyncStatus.READY ->
-                            "Aligned — turn on \"Follow audio\" in the reader and each word highlights as it's narrated."
+                            "Synced — open the ebook while the audiobook plays and the narrated text highlights as you read."
                         WordSyncStatus.RUNNING -> buildString {
                             append(progress.phase ?: "Preparing on the server")
                             progress.etaSeconds?.let { append(" · ~${formatEta(it)} left") }
                         }
                         WordSyncStatus.NOT_CONFIGURED ->
-                            "Set the alignment service URL in Settings → Word sync to enable."
-                        else -> "Align narration with the ebook text for precise read-along."
+                            "Set the alignment service URL in Settings → Audio-ebook sync to enable."
+                        else -> "Align the narration with the ebook text so the two stay in sync."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -39,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.designsystem.ScreenHeader
 import no.bellaybestia.audex.domain.model.ServerAccount
+import no.bellaybestia.audex.domain.reader.ReaderBarPosition
 import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.HomeLook
 import no.bellaybestia.audex.domain.settings.ProgressUnit
@@ -67,6 +68,7 @@ fun SettingsScreen(
     val codexEnabled by viewModel.codexEnabled.collectAsState()
     val skipSilence by viewModel.skipSilence.collectAsState()
     val themePrefs by viewModel.themePrefs.collectAsState()
+    val readerPrefs by viewModel.readerPrefs.collectAsState()
     val updateChannel by viewModel.updateChannel.collectAsState()
     val listState = rememberLazyListState()
 
@@ -328,7 +330,25 @@ fun SettingsScreen(
                 )
             }
         }
-        item(key = "wordsync-header") { SectionHeader("Word sync") }
+        item(key = "reader-header") { SectionHeader("Reader") }
+        item(key = "reader-barpos") {
+            Column {
+                ChoiceRow(
+                    label = "Controls bar",
+                    options = listOf("Top", "Bottom"),
+                    selectedIndex = readerPrefs.barPosition.ordinal,
+                    onSelect = { viewModel.setReaderBarPosition(ReaderBarPosition.entries[it]) },
+                )
+                Text(
+                    text = "Where the reading controls appear when you tap the centre of the " +
+                        "page. They stay folded away while you read.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
+        item(key = "wordsync-header") { SectionHeader("Audio-ebook sync") }
         item(key = "wordsync-url") {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
@@ -356,7 +376,7 @@ fun SettingsScreen(
                 }
                 Text(
                     text = "Self-hosted audex-align service that prepares audio↔text " +
-                        "sync maps for precise read-along.",
+                        "sync maps so the ebook and audiobook stay in sync.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

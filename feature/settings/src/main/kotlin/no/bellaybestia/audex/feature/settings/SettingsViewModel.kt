@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.model.ServerAccount
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.reader.ReaderBarPosition
+import no.bellaybestia.audex.domain.reader.ReaderPrefs
+import no.bellaybestia.audex.domain.reader.ReaderSettingsStore
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.CodexSync
@@ -33,7 +36,15 @@ class SettingsViewModel @Inject constructor(
     private val updateSettings: UpdateSettings,
     private val codexSync: CodexSync,
     private val playbackSettings: PlaybackSettings,
+    private val readerSettings: ReaderSettingsStore,
 ) : ViewModel() {
+
+    val readerPrefs: StateFlow<ReaderPrefs> = readerSettings.prefs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReaderPrefs())
+
+    fun setReaderBarPosition(position: ReaderBarPosition) {
+        viewModelScope.launch { readerSettings.set(readerPrefs.value.copy(barPosition = position)) }
+    }
 
     val skipSilence: StateFlow<Boolean> = playbackSettings.skipSilence
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

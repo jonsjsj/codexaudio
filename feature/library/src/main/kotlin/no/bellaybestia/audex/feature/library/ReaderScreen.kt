@@ -559,10 +559,33 @@ private fun EpubReader(
         )
     }
 
-    // The page never auto-jumps to the audiobook — your read position is
-    // authoritative (audio-ebook sync is position-based + the passive narration
-    // highlight below, not a live "follow" that would yank the page).
+    // Read-along: WHILE THE AUDIOBOOK IS PLAYING, the page follows the narration
+    // and the spoken sentence is highlighted — word-exact via the sync map's
+    // anchors, else proportional. Only while playing: pause (or close the book) and
+    // your position is authoritative again — nothing yanks a paused/closed reader,
+    // so reading ahead just means pausing the audio first. Jump only when the target
+    // anchor CHANGES so per-second ticks don't thrash the navigator.
     val audioNow = companion
+    val followAnchor = if (audioNow?.isPlaying == true) {
+        syncMap?.takeIf { it.chapters.isNotEmpty() }?.anchorAt(audioNow.positionS)
+    } else {
+        null
+    }
+    val followTargetIndex = if (audioNow?.isPlaying == true && followAnchor == null) {
+        val progression = syncMap?.progressionAt(audioNow.positionS) ?: audioNow.fraction
+        targetPositionIndex(ready.positions, progression)
+    } else {
+        null
+    }
+    LaunchedEffect(followAnchor?.c0, followTargetIndex, navigator) {
+        val map = syncMap
+        when {
+            followAnchor != null && map != null ->
+                narrationLocator(ready.publication, map, followAnchor)?.let { navigator?.go(it) }
+            followTargetIndex != null ->
+                ready.positions.getOrNull(followTargetIndex)?.let { navigator?.go(it) }
+        }
+    }
 
     // Sentence highlighting (map v1.1): tint the anchor currently being
     // narrated while the audiobook plays, so reading alongside the narration is

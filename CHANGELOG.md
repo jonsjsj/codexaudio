@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.20.0
+
+- **Read-along is back — and word-exact.** While the audiobook is playing, open the
+  ebook and the page now follows the narration, highlighting the sentence being read
+  aloud (using the alignment map, so it tracks to the word). This was lost when the
+  old follow bar was removed. It only follows while the audio is actually playing —
+  pause (or close the book) and your position is your own again, so reading ahead just
+  means pausing first.
+
 ## 0.4.19.0
 
 - **Audio-ebook sync now works through Codex, so it works away from home.** If you've

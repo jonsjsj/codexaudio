@@ -45,6 +45,13 @@ import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
 
+/**
+ * How far ahead (fraction of the book) the audiobook must be past your last-read
+ * ebook page before opening the ebook jumps to the audiobook's spot. Avoids a jump
+ * on tiny rounding differences when the two are effectively level.
+ */
+private const val CROSS_FORMAT_MARGIN = 0.005
+
 /** What the reader screen should show. */
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
@@ -286,39 +293,47 @@ class ReaderViewModel @Inject constructor(
         _state.value = ReaderUiState.Ready(
             publication = publication,
             navigatorFactory = EpubNavigatorFactory(publication),
-            // Your last-read ebook position is authoritative and restored exactly.
-            // Only when you've never opened this ebook do we start it where the
-            // audiobook is (proportionally) — a first-open convenience, never an
-            // override of a real read position.
-            initialLocator = restoreLocator() ?: crossFormatStartLocator(positions),
+            initialLocator = resolveInitialLocator(positions),
             positions = positions,
         )
     }
 
     /**
-     * First-open cross-format start: if this ebook has no saved position but the
-     * work's audiobook has progress, begin at the audiobook's spot (proportional —
-     * the only mapping available before any exact ebook position exists).
+     * Cross-format resume — BOTH formats are authoritative, the furthest wins.
+     * Open the ebook and it lands at whichever is further ahead: your exact last-read
+     * page (restored precisely) OR, if you've listened past that, the audiobook's spot.
+     * Reading mirrors forward to the audiobook too, so switching either way resumes at
+     * the latest position. Audio→ebook is proportional (exact once a sync map is loaded);
+     * ebook→ebook is always the exact Readium locator.
      */
-    private suspend fun crossFormatStartLocator(positions: List<Locator>): Locator? {
-        if (positions.isEmpty()) return null
+    private suspend fun resolveInitialLocator(positions: List<Locator>): Locator? {
+        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)
+        val ebookLocator = saved?.location?.let { parseSavedLocation(it) }
+        val ebookFraction = saved?.progress ?: 0.0
+        val audioFraction = audioFractionForWork() ?: 0.0
+        // Only jump to the audiobook when it's clearly ahead of where you last read
+        // (the margin avoids a jump on tiny rounding differences).
+        return if (audioFraction > ebookFraction + CROSS_FORMAT_MARGIN && positions.isNotEmpty()) {
+            val index = (audioFraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+            positions[index]
+        } else {
+            ebookLocator
+        }
+    }
+
+    /** The work's furthest audiobook progress fraction (0..1), or null if none. */
+    private suspend fun audioFractionForWork(): Double? {
         val workId = catalogRepository.workIdForItem(serverId, libraryItemId) ?: return null
         val editions = catalogRepository.editionsForWork(workId).first()
-        val fraction = editions
-            .filter { it.format == Format.AUDIO }
-            .maxOfOrNull { it.fraction }
-            ?.takeIf { it > 0.0 } ?: return null
-        val index = (fraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
-        return positions[index]
+        return editions.filter { it.format == Format.AUDIO }.maxOfOrNull { it.fraction }?.takeIf { it > 0.0 }
     }
 
     /**
-     * Restore the last position. Our own reader writes Readium locator JSON (exact
+     * Parse a saved ebook position. Our own reader writes Readium locator JSON (exact
      * restore); an ABS `epubcfi` (read in the Audiobookshelf app, synced back) resolves
      * to its chapter so we resume roughly there instead of at the beginning.
      */
-    private suspend fun restoreLocator(): Locator? {
-        val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)?.location ?: return null
+    private fun parseSavedLocation(saved: String): Locator? {
         if (saved.startsWith("{")) {
             return runCatching { Locator.fromJSON(JSONObject(saved)) }.getOrNull()
         }

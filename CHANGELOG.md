@@ -3,6 +3,15 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.18.0
+
+- **Audio and ebook now pull each other both ways.** Whichever is further ahead
+  wins: read past where you were listening and the audiobook catches up to your
+  page; listen past where you were reading and opening the ebook jumps forward to
+  the narration's spot. Switch between listening and reading whenever you like and
+  you always resume at the latest place. (Ebook→ebook restores your exact page;
+  audio→ebook is proportional, and becomes exact once a sync map is built.)
+
 ## 0.4.17.0
 
 - The read-along feature is now called **audio-ebook sync**, and the reader says

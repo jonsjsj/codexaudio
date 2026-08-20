@@ -124,6 +124,22 @@ enum class WordSyncStatus {
 }
 
 /**
+ * Live status of word sync for one work, with progress + ETA while a build is
+ * running. The align service reports coarse phases (downloading → transcribing →
+ * aligning), not a percentage, so [progress]/[etaSeconds] are best-effort estimates
+ * derived from the phase + elapsed time + the audiobook duration.
+ */
+data class WordSyncProgress(
+    val status: WordSyncStatus,
+    /** 0..1 while RUNNING, 1.0 when READY, null when unknown. */
+    val progress: Float? = null,
+    /** Estimated seconds remaining, or null when not estimable. */
+    val etaSeconds: Long? = null,
+    /** Short phase label, e.g. "Transcribing". */
+    val phase: String? = null,
+)
+
+/**
  * Client for the self-hosted audex-align service (alignment-service/ in this
  * repo). The service URL is user configuration — the feature is hidden until
  * it's set. Maps are cached on disk so the reader works offline once fetched.
@@ -147,4 +163,15 @@ interface AlignmentRepository {
 
     /** Coarse status for the work-detail row. */
     suspend fun status(serverId: String, audioItemId: String): WordSyncStatus
+
+    /**
+     * Live status + progress + ETA for a work's alignment. [audioDurationS] lets the
+     * client estimate an ETA from the running phase (the service reports phases, not a
+     * percentage). Returns READY (progress 1.0) once the map exists.
+     */
+    suspend fun progress(
+        serverId: String,
+        audioItemId: String,
+        audioDurationS: Double?,
+    ): WordSyncProgress
 }

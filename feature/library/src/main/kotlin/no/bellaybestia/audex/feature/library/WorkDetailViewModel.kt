@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.download.DownloadFormat
 import no.bellaybestia.audex.domain.download.DownloadInfo
@@ -27,6 +29,7 @@ import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.reader.WordSyncProgress
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 import no.bellaybestia.audex.domain.repository.BookExtras
 import no.bellaybestia.audex.domain.repository.CatalogRepository
@@ -147,7 +150,28 @@ class WorkDetailViewModel @Inject constructor(
     private val _wordSync = MutableStateFlow(WordSyncStatus.UNAVAILABLE)
     val wordSync: StateFlow<WordSyncStatus> = _wordSync.asStateFlow()
 
+    /** Live progress + ETA while an alignment build is running (drives the row's bar). */
+    private val _wordSyncProgress = MutableStateFlow(WordSyncProgress(WordSyncStatus.UNAVAILABLE))
+    val wordSyncProgress: StateFlow<WordSyncProgress> = _wordSyncProgress.asStateFlow()
+
     init {
+        // Poll live alignment progress + ETA while a build is running.
+        viewModelScope.launch {
+            while (isActive) {
+                val audio = editions.value.firstOrNull { it.format == Format.AUDIO }
+                if (audio != null && _wordSync.value == WordSyncStatus.RUNNING) {
+                    val p = alignmentRepository.progress(
+                        audio.serverId, audio.libraryItemId, audio.durationS?.toDouble(),
+                    )
+                    _wordSyncProgress.value = p
+                    if (p.status == WordSyncStatus.READY) _wordSync.value = WordSyncStatus.READY
+                    delay(5_000)
+                } else {
+                    _wordSyncProgress.value = WordSyncProgress(_wordSync.value)
+                    delay(3_000)
+                }
+            }
+        }
         viewModelScope.launch {
             editions.collect { eds ->
                 val audio = eds.firstOrNull { it.format == Format.AUDIO }

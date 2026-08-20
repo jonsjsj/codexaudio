@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.foundation.lazy.LazyColumn
@@ -63,6 +65,7 @@ import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.playback.PlaybackState
+import no.bellaybestia.audex.domain.reader.WordSyncProgress
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 
 /**
@@ -84,6 +87,7 @@ fun WorkDetailScreen(
     val playback by viewModel.playback.collectAsState()
     val downloadStates by viewModel.downloadStates.collectAsState()
     val wordSync by viewModel.wordSync.collectAsState()
+    val wordSyncProgress by viewModel.wordSyncProgress.collectAsState()
     val work by viewModel.work.collectAsState()
     val nextInSeries by viewModel.nextInSeries.collectAsState()
     val description by viewModel.description.collectAsState()
@@ -291,6 +295,16 @@ fun WorkDetailScreen(
         }
 
         description?.let { DescriptionBlock(it) }
+
+        // Word-sync read-along — build/align option, live progress + ETA, aligned icon.
+        if (wordSync != WordSyncStatus.UNAVAILABLE) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+            WordSyncRow(
+                status = wordSync,
+                progress = wordSyncProgress,
+                onPrepare = { viewModel.requestWordSync() },
+            )
+        }
 
         androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
     }
@@ -803,51 +817,73 @@ private fun DescriptionBlock(text: String) {
  * precisely instead of proportionally.
  */
 @Composable
-private fun WordSyncRow(status: WordSyncStatus, onPrepare: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun WordSyncRow(status: WordSyncStatus, progress: WordSyncProgress, onPrepare: () -> Unit) {
+    val prog = progress.progress
+    val pct = ((prog ?: 0f).coerceIn(0f, 1f) * 100).roundToInt()
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = "Word sync", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = when (status) {
-                    WordSyncStatus.READY ->
-                        "Ready — play the audiobook, then open the ebook and turn on " +
-                            "\"Follow audio\": the text highlights as it's narrated."
-                    WordSyncStatus.RUNNING -> "Preparing on the server — this can take a while."
-                    WordSyncStatus.NOT_CONFIGURED ->
-                        "Aligns narration with the ebook text for precise read-along. " +
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.GraphicEq, contentDescription = null, modifier = Modifier.size(20.dp),
+                tint = if (status == WordSyncStatus.READY) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(text = "Word-sync read-along", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = when (status) {
+                        WordSyncStatus.READY ->
+                            "Aligned — turn on \"Follow audio\" in the reader and each word highlights as it's narrated."
+                        WordSyncStatus.RUNNING -> buildString {
+                            append(progress.phase ?: "Preparing on the server")
+                            progress.etaSeconds?.let { append(" · ~${formatEta(it)} left") }
+                        }
+                        WordSyncStatus.NOT_CONFIGURED ->
                             "Set the alignment service URL in Settings → Word sync to enable."
-                    else -> "Align audio and text for precise read-along."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                        else -> "Align narration with the ebook text for precise read-along."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            when (status) {
+                WordSyncStatus.READY -> Icon(
+                    Icons.Outlined.CheckCircle, contentDescription = "Aligned",
+                    modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary,
+                )
+                WordSyncStatus.RUNNING -> Text(
+                    text = "$pct%", style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                WordSyncStatus.NOT_CONFIGURED -> Unit
+                else -> Text(
+                    text = "Align", style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable(onClick = onPrepare).padding(vertical = 4.dp, horizontal = 8.dp),
+                )
+            }
         }
-        when (status) {
-            WordSyncStatus.READY -> Text(
-                text = "Ready ✓",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            WordSyncStatus.RUNNING -> Text(
-                text = "Preparing…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            WordSyncStatus.NOT_CONFIGURED -> Unit
-            else -> Text(
-                text = "Prepare",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clickable(onClick = onPrepare)
-                    .padding(vertical = 4.dp, horizontal = 4.dp),
-            )
+        if (status == WordSyncStatus.RUNNING) {
+            Box(
+                Modifier.fillMaxWidth().height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    Modifier.fillMaxHeight().fillMaxWidth((prog ?: 0.03f).coerceIn(0.03f, 1f))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
         }
     }
+}
+
+private fun formatEta(seconds: Long): String {
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 

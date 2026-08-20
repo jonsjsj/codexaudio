@@ -180,7 +180,7 @@ class WorkDetailViewModel @Inject constructor(
                     audio == null || ebook == null -> WordSyncStatus.UNAVAILABLE
                     // Both formats exist — surface the feature even before the
                     // service is configured, or nobody ever discovers it.
-                    alignmentRepository.serviceUrl() == null -> WordSyncStatus.NOT_CONFIGURED
+                    !alignmentRepository.isConfigured() -> WordSyncStatus.NOT_CONFIGURED
                     else -> alignmentRepository.status(audio.serverId, audio.libraryItemId)
                 }
                 // One live fetch is enough; ebook items usually carry the

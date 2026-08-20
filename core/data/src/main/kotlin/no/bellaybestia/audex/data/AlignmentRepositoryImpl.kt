@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.database.ServerDao
+import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.SyncAnchor
 import no.bellaybestia.audex.domain.reader.SyncChapter
@@ -67,6 +68,16 @@ private data class WireJobStatus(val state: String = "queued", val detail: Strin
 @Serializable
 private data class WireHealth(val jobs: Map<String, String> = emptyMap())
 
+/** Codex read-along gateway status (`GET {codex}/audex/align/status/{itemId}`). */
+@Serializable
+private data class WireGatewayStatus(
+    val configured: Boolean = false,
+    val available: Boolean = false,
+    val state: String = "none",
+    val progress: Float = 0f,
+    val eta_seconds: Long? = null,
+)
+
 /**
  * Talks to the self-hosted audex-align service (alignment-service/). The book
  * key must match the service's: sha1("{serverUrl}|{audioItemId}")[:16] with the
@@ -78,11 +89,31 @@ class AlignmentRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val serverDao: ServerDao,
     private val tokenStore: ServerTokenStore,
+    private val codexSync: CodexSync,
 ) : AlignmentRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val http = OkHttpClient()
     private val cacheDir = File(context.filesDir, "syncmaps").apply { mkdirs() }
+
+    /**
+     * Preferred path: reach the alignment service THROUGH Codex, by ABS item id. This
+     * works off-network (Codex is public; the align box is LAN-only) and needs no
+     * key/URL matching — Codex computes the map key from its own ABS connection, so a
+     * map Codex already built is found. Active whenever a Codex URL is set, independent
+     * of the progress-push toggle. Returns the `{codex}/audex/align` base, or null.
+     */
+    private suspend fun codexAlignBase(): String? {
+        val url = codexSync.settings.first().url.trim().trimEnd('/')
+        return url.takeIf { it.isNotBlank() }?.let { "$it/audex/align" }
+    }
+
+    private suspend fun codexToken(): String? =
+        codexSync.settings.first().token.trim().takeIf { it.isNotBlank() }
+
+    /** Local cache filename for a Codex-fetched map (keyed by ABS item id). */
+    private fun codexCacheFile(audioItemId: String): File =
+        File(cacheDir, "codex-${audioItemId.take(64)}.json")
 
     // Book keys we queued this process; promotes status to RUNNING until READY.
     private val requested = ConcurrentHashMap.newKeySet<String>()
@@ -106,6 +137,22 @@ class AlignmentRepositoryImpl @Inject constructor(
         audioItemId: String,
         ebookItemId: String?,
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        codexAlignBase()?.let { base ->
+            return@withContext runCatching {
+                val payload = buildString {
+                    append("{")
+                    if (ebookItemId != null) append("\"ebook_item_id\":\"$ebookItemId\"")
+                    append("}")
+                }.toRequestBody("application/json".toMediaType())
+                val builder = Request.Builder().url("$base/build/$audioItemId").post(payload)
+                codexToken()?.let { builder.header("Authorization", "Bearer $it") }
+                http.newCall(builder.build()).execute().use { response ->
+                    check(response.isSuccessful) { "Codex align build said HTTP ${response.code}" }
+                }
+                requested.add(audioItemId)
+                Unit
+            }
+        }
         runCatching {
             val service = serviceUrl() ?: error("No alignment service configured")
             val baseUrl = baseUrlFor(serverId) ?: error("Unknown server")
@@ -132,6 +179,17 @@ class AlignmentRepositoryImpl @Inject constructor(
 
     override suspend fun syncMap(serverId: String, audioItemId: String): SyncMap? =
         withContext(Dispatchers.IO) {
+            // Preferred: fetch by ABS item id through Codex (works off-network, no key match).
+            codexAlignBase()?.let { base ->
+                val cached = codexCacheFile(audioItemId)
+                runCatching {
+                    val request = Request.Builder().url("$base/map/$audioItemId").get().build()
+                    http.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) cached.writeText(response.body?.string().orEmpty())
+                    }
+                }
+                return@withContext if (cached.exists()) parseMap(cached.readText()) else null
+            }
             val baseUrl = baseUrlFor(serverId) ?: return@withContext null
             val key = bookKey(baseUrl, audioItemId)
             val cached = File(cacheDir, "$key.json")
@@ -147,19 +205,38 @@ class AlignmentRepositoryImpl @Inject constructor(
                 }
             }
             if (!cached.exists()) return@withContext null
-            runCatching {
-                val wire = json.decodeFromString(WireMap.serializer(), cached.readText())
-                SyncMap(
-                    durationS = wire.durationS,
-                    anchors = wire.entries.map {
-                        SyncAnchor(it.t0, it.t1, it.p, it.href, it.text, it.c0)
-                    },
-                    chapters = wire.chapters.map { SyncChapter(it.href, it.c0, it.c1) },
-                )
-            }.getOrNull()
+            parseMap(cached.readText())
         }
 
-    override suspend fun status(serverId: String, audioItemId: String): WordSyncStatus {
+    private fun parseMap(text: String): SyncMap? = runCatching {
+        val wire = json.decodeFromString(WireMap.serializer(), text)
+        SyncMap(
+            durationS = wire.durationS,
+            anchors = wire.entries.map { SyncAnchor(it.t0, it.t1, it.p, it.href, it.text, it.c0) },
+            chapters = wire.chapters.map { SyncChapter(it.href, it.c0, it.c1) },
+        )
+    }.getOrNull()
+
+    override suspend fun isConfigured(): Boolean =
+        codexAlignBase() != null || serviceUrl() != null
+
+    override suspend fun status(serverId: String, audioItemId: String): WordSyncStatus =
+        withContext(Dispatchers.IO) {
+            codexAlignBase()?.let { base ->
+                if (codexCacheFile(audioItemId).exists()) return@withContext WordSyncStatus.READY
+                val gw = fetchGatewayStatus(base, audioItemId)
+                    ?: return@withContext if (audioItemId in requested) WordSyncStatus.RUNNING
+                    else WordSyncStatus.NONE
+                return@withContext when {
+                    gw.available -> WordSyncStatus.READY
+                    gw.state !in setOf("none", "error") || audioItemId in requested -> WordSyncStatus.RUNNING
+                    else -> WordSyncStatus.NONE
+                }
+            }
+            statusDirect(serverId, audioItemId)
+        }
+
+    private suspend fun statusDirect(serverId: String, audioItemId: String): WordSyncStatus {
         serviceUrl() ?: return WordSyncStatus.UNAVAILABLE
         val baseUrl = baseUrlFor(serverId) ?: return WordSyncStatus.UNAVAILABLE
         val key = bookKey(baseUrl, audioItemId)
@@ -178,6 +255,27 @@ class AlignmentRepositoryImpl @Inject constructor(
         audioItemId: String,
         audioDurationS: Double?,
     ): WordSyncProgress = withContext(Dispatchers.IO) {
+        codexAlignBase()?.let { base ->
+            if (codexCacheFile(audioItemId).exists()) {
+                return@withContext WordSyncProgress(WordSyncStatus.READY, 1f)
+            }
+            val gw = fetchGatewayStatus(base, audioItemId)
+                ?: return@withContext WordSyncProgress(
+                    if (audioItemId in requested) WordSyncStatus.RUNNING else WordSyncStatus.NONE,
+                )
+            if (gw.available) return@withContext WordSyncProgress(WordSyncStatus.READY, 1f)
+            if (gw.state in setOf("none", "error") && audioItemId !in requested) {
+                return@withContext WordSyncProgress(WordSyncStatus.NONE)
+            }
+            // Refine the ETA locally from the audiobook's duration when the gateway
+            // doesn't supply one (CPU ≈ 2.5x realtime, ~78% of the work is transcribing).
+            val eta = gw.eta_seconds ?: audioDurationS?.takeIf { it > 0 && gw.state == "transcribing" }
+                ?.let { ((it / 2.5) * (1.0 - (gw.progress - 0.15) / 0.78)).coerceAtLeast(0.0).toLong() }
+            return@withContext WordSyncProgress(
+                WordSyncStatus.RUNNING, gw.progress, eta,
+                gw.state.replaceFirstChar { it.uppercase() },
+            )
+        }
         val service = serviceUrl() ?: return@withContext WordSyncProgress(WordSyncStatus.NOT_CONFIGURED)
         val baseUrl = baseUrlFor(serverId)
             ?: return@withContext WordSyncProgress(WordSyncStatus.UNAVAILABLE)
@@ -215,6 +313,14 @@ class AlignmentRepositoryImpl @Inject constructor(
         }
         WordSyncProgress(WordSyncStatus.RUNNING, prog, eta, js.state.replaceFirstChar { it.uppercase() })
     }
+
+    private fun fetchGatewayStatus(base: String, audioItemId: String): WireGatewayStatus? = runCatching {
+        val request = Request.Builder().url("$base/status/$audioItemId").get().build()
+        http.newCall(request).execute().use { r ->
+            if (!r.isSuccessful) null
+            else json.decodeFromString(WireGatewayStatus.serializer(), r.body?.string().orEmpty())
+        }
+    }.getOrNull()
 
     private fun fetchJob(service: String, jobId: String): WireJobStatus? = runCatching {
         val request = Request.Builder().url("$service/jobs/$jobId").get().build()

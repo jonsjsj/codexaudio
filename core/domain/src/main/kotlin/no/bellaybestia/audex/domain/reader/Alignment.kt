@@ -149,6 +149,14 @@ interface AlignmentRepository {
     suspend fun setServiceUrl(url: String?)
 
     /**
+     * Whether audio-ebook sync is reachable at all: true when a Codex URL is set
+     * (preferred — reaches the align service by ABS item id, off-network) OR a direct
+     * alignment service URL is configured. Drives whether the work-detail row shows the
+     * "not configured" hint.
+     */
+    suspend fun isConfigured(): Boolean
+
+    /**
      * Queue alignment for a work: audio from [audioItemId]; the EPUB from
      * [ebookItemId] when the ebook is a separate ABS item on the same server.
      */

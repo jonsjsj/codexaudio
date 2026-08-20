@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.19.0
+
+- **Audio-ebook sync now works through Codex, so it works away from home.** If you've
+  set your Codex URL, Audex reaches the read-along maps through Codex by book — no
+  longer the alignment box's local address that only worked on your home network. Maps
+  you've already built in Codex are picked up automatically, and once a book has one,
+  the narrated text highlights as you read and the audio→ebook jump becomes exact.
+
 ## 0.4.18.0
 
 - **Audio and ebook now pull each other both ways.** Whichever is further ahead

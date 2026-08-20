@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.22.0
+
+- **The audiobook and ebook now stay matched as you listen.** As the audiobook plays,
+  the ebook's progress is nudged forward to keep pace, so the two percentages on the
+  book page track each other instead of drifting apart — even if you never open the
+  ebook. It only ever moves forward (listening can't rewind your reading), and opening
+  the ebook still lands you at the furthest point you reached in either format.
+
 ## 0.4.21.0
 
 - **Read-along is now a setting you can turn on and off** (Settings → Reader →

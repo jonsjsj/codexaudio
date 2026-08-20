@@ -187,6 +187,29 @@ class CatalogRepositoryImpl @Inject constructor(
         Unit
     }
 
+    override suspend fun mirrorEbookProgress(
+        serverId: String,
+        ebookItemId: String,
+        fraction: Double,
+    ) = withContext(dispatcher) {
+        val f = fraction.coerceIn(0.0, 1.0)
+        val existing = progressDao.get(serverId, ebookItemId)
+        // FORWARD-ONLY: listening must never rewind where you've read. If the ebook is
+        // already at/ahead of the audio, leave it. Bump only the fraction — the exact
+        // page locator (ebookLocation) is preserved; ReaderViewModel.resolveInitialLocator
+        // detects that the fraction ran ahead of the stored page and resumes at the
+        // furthest spot proportionally (or the live narration anchor) instead.
+        if (existing != null && (existing.ebookProgress ?: 0.0) >= f - 0.0005) return@withContext
+        val row = (existing ?: ProgressEntity(serverId = serverId, libraryItemId = ebookItemId)).copy(
+            ebookProgress = f,
+            isFinished = existing?.isFinished ?: false,
+            lastUpdate = System.currentTimeMillis(),
+            source = "LOCAL_XFORMAT",
+        )
+        progressDao.upsertAll(listOf(row))
+        Unit
+    }
+
     /** ABS descriptions are HTML-ish; strip tags, decode common entities (Codex rule). */
     private fun cleanHtml(raw: String): String = raw
         .replace(Regex("<br ?/?>", RegexOption.IGNORE_CASE), "\n")

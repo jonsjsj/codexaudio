@@ -76,6 +76,19 @@ interface CatalogRepository {
     )
 
     /**
+     * Cross-format sync, the other way: set the EBOOK edition's saved fraction to
+     * [fraction] (0..1) as you LISTEN, so the two editions' progress on the book page
+     * stays matched and switching to reading resumes at the right place. Forward-only
+     * (listening can't rewind your reading). Bumps only the fraction — the stored exact
+     * page locator is left as-is; the reader resolves the precise spot on open.
+     */
+    suspend fun mirrorEbookProgress(
+        serverId: String,
+        ebookItemId: String,
+        fraction: Double,
+    )
+
+    /**
      * Merge this work's author into an existing one (the "Fix author" picker):
      * records a durable AUTHOR_MERGE override on the two authors' immutable norm
      * keys and re-runs the graph build, so the correction survives every re-sync.

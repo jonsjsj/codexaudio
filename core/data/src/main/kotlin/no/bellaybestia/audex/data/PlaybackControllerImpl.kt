@@ -32,11 +32,13 @@ import no.bellaybestia.audex.common.DefaultDispatcher
 import no.bellaybestia.audex.database.ProgressDao
 import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.ServerDao
+import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.absCoverUrl
 import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.network.abs.AbsApi
 import no.bellaybestia.audex.network.abs.AbsClientFactory
 import no.bellaybestia.audex.network.abs.AbsSessionSyncBody
@@ -61,6 +63,7 @@ class PlaybackControllerImpl @Inject constructor(
     private val progressDao: ProgressDao,
     private val sessionRecorder: SessionRecorder,
     private val alignmentRepository: AlignmentRepository,
+    private val catalogRepository: CatalogRepository,
     private val codexSync: no.bellaybestia.audex.domain.settings.CodexSync,
     @DefaultDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackController {
@@ -87,6 +90,11 @@ class PlaybackControllerImpl @Inject constructor(
 
     // Smart-rewind bookkeeping: when playback last paused (any source).
     private var pausedAtMs: Long = 0
+
+    // Cross-format mirror: the ebook sibling of the currently-playing audio item,
+    // resolved once per item so the tick doesn't re-query the graph every 5s.
+    private var mirrorEbookFor: String? = null
+    private var mirrorEbookTarget: Pair<String, String>? = null
 
     // End-of-chapter sleep: the chapter index that was playing when armed.
     private var sleepChapterIndex: Int = -1
@@ -446,6 +454,10 @@ class PlaybackControllerImpl @Inject constructor(
                         // Book progress row (skip podcast episodes — they have none).
                         if (_state.value.episodeId == null) {
                             writeLocalProgress(_state.value.libraryItemId, posS, finished)
+                            // Cross-format: nudge the EBOOK edition forward to match, so
+                            // the two editions' progress stays in sync as you listen.
+                            val pct = if (finished) 1.0 else (posS / totalDurationS).coerceIn(0.0, 1.0)
+                            mirrorToEbookSibling(pct)
                         }
                         secondsSincePersist = 0
                     }
@@ -480,6 +492,29 @@ class PlaybackControllerImpl @Inject constructor(
                     ),
                 ),
             )
+        }
+    }
+
+    /**
+     * Push the live audio [pct] into the EBOOK edition's saved fraction (forward-only),
+     * so both editions' progress on the book page track each other as you listen. The
+     * ebook sibling is resolved once per audio item and cached. No-op for books with no
+     * ebook edition.
+     */
+    private suspend fun mirrorToEbookSibling(pct: Double) {
+        val sid = _state.value.serverId ?: return
+        val audioId = _state.value.libraryItemId ?: return
+        if (mirrorEbookFor != audioId) {
+            mirrorEbookFor = audioId
+            mirrorEbookTarget = runCatching {
+                val workId = catalogRepository.workIdForItem(sid, audioId) ?: return@runCatching null
+                catalogRepository.editionsForWork(workId).first()
+                    .firstOrNull { it.format == Format.EBOOK }
+                    ?.let { it.serverId to it.libraryItemId }
+            }.getOrNull()
+        }
+        mirrorEbookTarget?.let { (esid, eid) ->
+            runCatching { catalogRepository.mirrorEbookProgress(esid, eid, pct) }
         }
     }
 

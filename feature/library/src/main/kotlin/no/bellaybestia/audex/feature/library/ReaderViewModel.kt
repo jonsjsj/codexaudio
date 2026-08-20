@@ -309,15 +309,24 @@ class ReaderViewModel @Inject constructor(
     private suspend fun resolveInitialLocator(positions: List<Locator>): Locator? {
         val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)
         val ebookLocator = saved?.location?.let { parseSavedLocation(it) }
-        val ebookFraction = saved?.progress ?: 0.0
+        // The stored EXACT page's own fraction — the furthest you've actually READ.
+        val locatorFraction = ebookLocator?.locations?.totalProgression ?: 0.0
+        // The saved ebook fraction can be pushed PAST the stored page by the audio→ebook
+        // mirror as you listen, so it's a lower bound on "furthest", not the read page.
+        val savedFraction = saved?.progress ?: 0.0
         val audioFraction = audioFractionForWork() ?: 0.0
-        // Only jump to the audiobook when it's clearly ahead of where you last read
-        // (the margin avoids a jump on tiny rounding differences).
-        return if (audioFraction > ebookFraction + CROSS_FORMAT_MARGIN && positions.isNotEmpty()) {
-            val index = (audioFraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
-            positions[index]
-        } else {
-            ebookLocator
+        val furthest = maxOf(savedFraction, audioFraction)
+        return when {
+            // Your exact page is at (or ahead of) the furthest fraction → you read
+            // furthest; restore it precisely.
+            ebookLocator != null && locatorFraction >= furthest - CROSS_FORMAT_MARGIN -> ebookLocator
+            // The furthest came from listening (or the mirror bumped the ebook % past
+            // the stored page) → resume at that spot, proportionally.
+            furthest > 0.0 && positions.isNotEmpty() -> {
+                val index = (furthest * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+                positions[index]
+            }
+            else -> ebookLocator
         }
     }
 

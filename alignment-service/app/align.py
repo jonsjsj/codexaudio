@@ -109,10 +109,13 @@ def _split_to_wavs(path: str, workdir, chunk_s: int = 1800):
 
 
 def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str):
-    """All audio files in order → one global-timeline list of AsrWords (word-level).
+    """All audio files in order → one global-timeline list of AsrWords.
 
-    Chunks each file (bounded memory) and transcribes chunk-by-chunk with per-word
-    timestamps, freeing each chunk WAV as it goes so a long book never accumulates.
+    Chunks each file (bounded memory) and transcribes chunk-by-chunk, freeing each
+    chunk WAV as it goes. Word times are spread linearly across each SEGMENT — we
+    deliberately do NOT ask Whisper for per-word timestamps: on CPU that roughly
+    triples the run (a 21h book → ~25h), and the map's anchors are per-SENTENCE, for
+    which segment-level timing (±a second or two) is more than enough.
     """
     import os
     import shutil
@@ -128,20 +131,17 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
         try:
             file_end = 0.0
             for wav_path, chunk_off in _split_to_wavs(path, workdir):
-                segments, info = model.transcribe(
-                    wav_path, vad_filter=True, beam_size=5, word_timestamps=True
-                )
+                segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=5)
+                base = offset + chunk_off
                 for seg in segments:
-                    for w in (seg.words or []):
-                        t = (w.word or "").strip()
-                        if t:
-                            words.append(
-                                AsrWord(
-                                    offset + chunk_off + float(w.start),
-                                    offset + chunk_off + float(w.end),
-                                    t,
-                                )
-                            )
+                    toks = seg.text.split()
+                    if not toks:
+                        continue
+                    span = max(float(seg.end) - float(seg.start), 0.001)
+                    for i, tok in enumerate(toks):
+                        t0 = base + float(seg.start) + span * (i / len(toks))
+                        t1 = base + float(seg.start) + span * ((i + 1) / len(toks))
+                        words.append(AsrWord(t0, t1, tok))
                 file_end = chunk_off + float(info.duration or 0.0)
                 os.remove(wav_path)
                 log.info("chunk done at %.0fs (%d words so far)", offset + file_end, len(words))

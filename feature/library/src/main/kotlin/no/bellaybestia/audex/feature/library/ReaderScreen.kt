@@ -206,6 +206,8 @@ private fun EpubReader(
     val prefs by viewModel.readerPrefs.collectAsState()
     val highlights by viewModel.highlights.collectAsState()
     val progressUnit by viewModel.progressUnit.collectAsState()
+    val audioBookmarks by viewModel.audioBookmarks.collectAsState()
+    val audioPositionS by viewModel.audioPositionS.collectAsState()
     var showAppearance by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var showHighlights by remember { mutableStateOf(false) }
@@ -521,9 +523,24 @@ private fun EpubReader(
     // Settings → Playback unit. Percent maps through the positions list; page is
     // a direct 1-based index into it.
     if (showGoTo) {
+        // Cross-format: turn an audiobook second into the matching text position —
+        // exact via the sync map's narration anchor, else proportional.
+        val goToAudioSeconds: (Double) -> Unit = { seconds ->
+            val map = syncMap
+            val loc = if (map != null) {
+                map.anchorAt(seconds)?.let { narrationLocator(ready.publication, map, it) }
+                    ?: locatorForFraction(ready.positions, map.progressionAt(seconds) ?: 0.0)
+            } else {
+                null
+            }
+            loc?.let { navigator?.go(it) }
+            showGoTo = false
+        }
         ReaderGoToDialog(
             byPercent = progressUnit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT,
             totalPages = ready.positions.size,
+            bookmarks = audioBookmarks,
+            audioPositionS = audioPositionS,
             onDismiss = { showGoTo = false },
             onGoPercent = { pct ->
                 locatorForFraction(ready.positions, pct)?.let { navigator?.go(it) }
@@ -533,6 +550,7 @@ private fun EpubReader(
                 ready.positions.getOrNull(pageIndex)?.let { navigator?.go(it) }
                 showGoTo = false
             },
+            onGoAudioSeconds = goToAudioSeconds,
         )
     }
 
@@ -801,39 +819,69 @@ private fun flattenToc(links: List<Link>): List<Pair<Link, Int>> = buildList {
 
 /**
  * "Go to…" dialog for the reader: a percentage (0–100) or a page number
- * (1–[totalPages]), depending on the Settings unit. Reports the parsed target
- * to [onGoPercent] (fraction 0..1) or [onGoPage] (0-based index).
+ * (1–[totalPages]); plus cross-format jumps — straight to where the audiobook is,
+ * and to any [bookmarks] (including the auto "you were here" markers), converted to
+ * the matching text position via the sync map.
  */
 @Composable
 private fun ReaderGoToDialog(
     byPercent: Boolean,
     totalPages: Int,
+    bookmarks: List<no.bellaybestia.audex.domain.playback.Bookmark>,
+    audioPositionS: Double?,
     onDismiss: () -> Unit,
     onGoPercent: (Double) -> Unit,
     onGoPage: (Int) -> Unit,
+    onGoAudioSeconds: (Double) -> Unit,
 ) {
     var field by remember { mutableStateOf("") }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (byPercent) "Go to percent" else "Go to page") },
+        title = { Text("Go to") },
         text = {
-            Column {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = field,
                     onValueChange = { field = it },
                     singleLine = true,
+                    label = { Text(if (byPercent) "Percent" else "Page") },
                     placeholder = { Text(if (byPercent) "0–100" else "1–$totalPages") },
                 )
-                Text(
-                    text = if (byPercent) {
-                        "Jump to a percentage of the book."
-                    } else {
-                        "This book has $totalPages pages."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                if (audioPositionS != null) {
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    Text(
+                        text = "Jump to the audiobook (${hms(audioPositionS)})",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onGoAudioSeconds(audioPositionS) }
+                            .padding(vertical = 10.dp),
+                    )
+                }
+                if (bookmarks.isNotEmpty()) {
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    Text(
+                        text = "Bookmarks",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    bookmarks.sortedByDescending { it.createdAt }.take(12).forEach { bm ->
+                        Text(
+                            text = bm.title.ifBlank { "Bookmark" } + "  ·  ${hms(bm.timeS.toDouble())}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onGoAudioSeconds(bm.timeS.toDouble()) }
+                                .padding(vertical = 8.dp),
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -853,6 +901,15 @@ private fun ReaderGoToDialog(
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+/** Seconds → "h:mm:ss" (or "m:ss" under an hour). */
+private fun hms(seconds: Double): String {
+    val s = seconds.toLong()
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 @Composable

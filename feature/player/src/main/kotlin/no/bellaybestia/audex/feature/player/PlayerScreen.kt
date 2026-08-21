@@ -504,16 +504,18 @@ private fun BookmarkList(viewModel: PlayerViewModel) {
 private fun GoToDialog(state: PlaybackState, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
     val unit by viewModel.progressUnit.collectAsState()
     val byPercent = unit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT
+    val readingS by viewModel.readingAudioSeconds.collectAsState()
     var field by remember { mutableStateOf("") }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (byPercent) "Go to percent" else "Go to time") },
+        title = { Text("Go to") },
         text = {
             Column {
                 androidx.compose.material3.OutlinedTextField(
                     value = field,
                     onValueChange = { field = it },
                     singleLine = true,
+                    label = { Text(if (byPercent) "Percent" else "Time") },
                     placeholder = { Text(if (byPercent) "0–100" else "h:mm:ss") },
                 )
                 Text(
@@ -522,6 +524,18 @@ private fun GoToDialog(state: PlaybackState, viewModel: PlayerViewModel, onDismi
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                readingS?.let { rs ->
+                    androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    Text(
+                        text = "Jump to where you're reading (${formatTime((rs * 1000).toLong())})",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.seekTo((rs * 1000).toLong()); onDismiss() }
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {

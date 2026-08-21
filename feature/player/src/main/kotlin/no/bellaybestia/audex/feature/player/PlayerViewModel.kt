@@ -6,13 +6,18 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.playback.Bookmark
 import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.PlaybackController
+import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import no.bellaybestia.audex.domain.settings.ProgressUnit
 import no.bellaybestia.audex.domain.settings.ThemeSettings
@@ -22,6 +27,8 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val bookmarksRepository: BookmarksRepository,
+    private val alignmentRepository: AlignmentRepository,
+    private val catalogRepository: CatalogRepository,
     themeSettings: ThemeSettings,
     playbackSettings: PlaybackSettings,
 ) : ViewModel() {
@@ -49,7 +56,27 @@ class PlayerViewModel @Inject constructor(
 
     private var bookmarksLoadedFor: String? = null
 
+    /**
+     * Cross-format: the audio second matching where you're READING (the ebook
+     * edition's saved position, via the sync map). Null when there's no ebook
+     * progress or no map. Drives the player Go-to's "Jump to where you're reading".
+     */
+    private val _readingAudioSeconds = MutableStateFlow<Double?>(null)
+    val readingAudioSeconds: StateFlow<Double?> = _readingAudioSeconds.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            state.map { it.serverId to it.libraryItemId }.distinctUntilChanged().collectLatest { (sid, itemId) ->
+                _readingAudioSeconds.value = null
+                if (sid == null || itemId == null) return@collectLatest
+                val workId = catalogRepository.workIdForItem(sid, itemId) ?: return@collectLatest
+                val map = alignmentRepository.syncMap(sid, itemId) ?: return@collectLatest
+                catalogRepository.editionsForWork(workId).collect { eds ->
+                    val frac = eds.firstOrNull { it.format == Format.EBOOK }?.fraction?.takeIf { it > 0.0 }
+                    _readingAudioSeconds.value = frac?.let { map.timeAtProgression(it) }
+                }
+            }
+        }
         viewModelScope.launch {
             state.collect { playback ->
                 val key = playback.serverId?.let { s -> playback.libraryItemId?.let { "$s|$it" } }

@@ -34,6 +34,7 @@ import no.bellaybestia.audex.database.ProgressEntity
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.model.Format
 import no.bellaybestia.audex.domain.model.absCoverUrl
+import no.bellaybestia.audex.domain.playback.BookmarksRepository
 import no.bellaybestia.audex.domain.playback.Chapter
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.playback.PlaybackState
@@ -52,6 +53,8 @@ private const val SYNC_INTERVAL_MS = 15_000L
 /** How often the always-on ticker persists the live position locally (progress
  * row + session), so a kill or offline session loses at most this many seconds. */
 private const val PERSIST_EVERY_S = 5
+/** A jump of at least this many seconds auto-drops a "you were here" bookmark. */
+private const val AUTO_BOOKMARK_JUMP_S = 120.0
 private val KEY_PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 
 @Singleton
@@ -64,6 +67,7 @@ class PlaybackControllerImpl @Inject constructor(
     private val sessionRecorder: SessionRecorder,
     private val alignmentRepository: AlignmentRepository,
     private val catalogRepository: CatalogRepository,
+    private val bookmarksRepository: BookmarksRepository,
     private val codexSync: no.bellaybestia.audex.domain.settings.CodexSync,
     @DefaultDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackController {
@@ -90,6 +94,9 @@ class PlaybackControllerImpl @Inject constructor(
 
     // Smart-rewind bookkeeping: when playback last paused (any source).
     private var pausedAtMs: Long = 0
+
+    // Debounce for auto "you were here" bookmarks on big jumps.
+    private var lastAutoBookmarkAtMs: Long = 0
 
     // Cross-format mirror: the ebook sibling of the currently-playing audio item,
     // resolved once per item so the tick doesn't re-query the graph every 5s.
@@ -368,9 +375,39 @@ class PlaybackControllerImpl @Inject constructor(
     /** Seek to an overall second, mapping onto the right track. Runs on main. */
     private fun seekOverall(targetS: Double) {
         val c = controller ?: return
+        maybeAutoBookmark(_state.value.positionMs / 1000.0, targetS)
         val idx = activeOffsets.indexOfLast { it <= targetS }.coerceAtLeast(0)
         val withinMs = ((targetS - (activeOffsets.getOrNull(idx) ?: 0.0)).coerceAtLeast(0.0) * 1000).toLong()
         c.seekTo(idx, withinMs)
+    }
+
+    /**
+     * Auto-bookmark on a BIG jump so an accidental scrub/chapter-skip never loses your
+     * place (Kindle-style "you were here"). Leaves a marker at the position you jumped
+     * FROM. Small skips (the 10/30s buttons, read-along nudges) fall under the threshold;
+     * a short debounce avoids a burst of markers from a scrubber drag.
+     */
+    private fun maybeAutoBookmark(fromS: Double, targetS: Double) {
+        if (kotlin.math.abs(targetS - fromS) < AUTO_BOOKMARK_JUMP_S || fromS < 1.0) return
+        val now = System.currentTimeMillis()
+        if (now - lastAutoBookmarkAtMs < 6_000) return
+        lastAutoBookmarkAtMs = now
+        val sid = _state.value.serverId ?: return
+        val itemId = _state.value.libraryItemId ?: return
+        if (_state.value.episodeId != null) return // podcasts have no ABS bookmarks
+        scope.launch {
+            runCatching {
+                bookmarksRepository.add(sid, itemId, fromS.toLong(), "Left off · ${formatHms(fromS)}")
+            }
+        }
+    }
+
+    private fun formatHms(seconds: Double): String {
+        val s = seconds.toLong()
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
     }
 
     override fun seekToChapter(index: Int) {

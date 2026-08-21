@@ -90,6 +90,28 @@ data class SyncMap(
     }
 
     /**
+     * The audio second at which book progression [p] (0..1 of the whole text) is
+     * narrated — for jumping the AUDIOBOOK to where you're READING (cross-format).
+     * Interpolates between the surrounding anchors' (t0, p). Null with no anchors.
+     */
+    fun timeAtProgression(p: Double): Double? {
+        if (anchors.isEmpty()) return null
+        if (p <= anchors.first().p) return anchors.first().t0
+        if (p >= anchors.last().p) return anchors.last().t0
+        var lo = 0
+        var hi = anchors.size - 1
+        while (lo + 1 < hi) {
+            val mid = (lo + hi) / 2
+            if (anchors[mid].p <= p) lo = mid else hi = mid
+        }
+        val a = anchors[lo]
+        val b = anchors[hi]
+        val span = (b.p - a.p).takeIf { it > 0.0 } ?: return a.t0
+        val f = ((p - a.p) / span).coerceIn(0.0, 1.0)
+        return a.t0 + (b.t0 - a.t0) * f
+    }
+
+    /**
      * Synthesize audio chapter markers for books whose audio files carry none:
      * the EPUB's chapter boundaries mapped through the alignment onto the audio
      * timeline. Front matter (tiny spine items — cover, toc, copyright) is

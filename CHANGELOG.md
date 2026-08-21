@@ -3,6 +3,19 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.23.0
+
+- **Never lose your place on a stray skip.** Jump the audiobook a long way (a scrub, a
+  chapter skip) and Audex now auto-drops a "you were here" bookmark at the spot you left
+  — Kindle-style — so you can always get back.
+- **Cross-format Go-to.** The reader's Go-to now lists your bookmarks and a "Jump to the
+  audiobook" button — tap either and the *text* jumps there (via the sync map). In the
+  audiobook player's Go-to there's the mirror image: "Jump to where you're reading",
+  which sends the *audio* to your reading spot. Switch between listening and reading and
+  pick up exactly where the other left off.
+- Word-perfect read-along: the alignment service was rewritten to build dense, accurate
+  maps; existing books improve as they're re-aligned.
+
 ## 0.4.22.0
 
 - **The audiobook and ebook now stay matched as you listen.** As the audiobook plays,

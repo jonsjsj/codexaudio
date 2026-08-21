@@ -97,6 +97,7 @@ class ReaderViewModel @Inject constructor(
     private val ebookProgressWriter: EbookProgressWriter,
     private val catalogRepository: CatalogRepository,
     private val alignmentRepository: AlignmentRepository,
+    private val bookmarksRepository: no.bellaybestia.audex.domain.playback.BookmarksRepository,
     private val readerSettings: ReaderSettingsStore,
     private val highlightsRepository: HighlightsRepository,
     private val activityRecorder: no.bellaybestia.audex.domain.settings.ActivityRecorder,
@@ -171,6 +172,30 @@ class ReaderViewModel @Inject constructor(
             } else {
                 null
             }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Audio bookmarks (including the auto "you were here" markers dropped on a big
+     * skip) for this work's audio edition — surfaced in the reader's Go-to so you can
+     * jump the TEXT to any of them (cross-format).
+     */
+    val audioBookmarks: StateFlow<List<no.bellaybestia.audex.domain.playback.Bookmark>> =
+        _audioEdition
+            .map { ed ->
+                ed?.let {
+                    runCatching { bookmarksRepository.bookmarksFor(it.serverId, it.libraryItemId) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList()
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * The audiobook's position in seconds — live when it's playing, else its saved
+     * spot. The target for the reader Go-to's "Jump to the audiobook" (cross-format).
+     */
+    val audioPositionS: StateFlow<Double?> =
+        combine(audioCompanion, _audioEdition) { comp, ed ->
+            comp?.positionS ?: ed?.let { e -> e.durationS?.let { d -> e.fraction * d.toDouble() } }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Word-sync map for this work's audio (docs/10); null → proportional follow. */

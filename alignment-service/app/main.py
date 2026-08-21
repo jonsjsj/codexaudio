@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from .align import align_segments, build_map, transcribe
+from .align import build_map, transcribe
 from .epub_text import extract_epub_text
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -37,7 +37,11 @@ MODEL = os.environ.get("ALIGN_MODEL", "small")
 COMPUTE = os.environ.get("ALIGN_COMPUTE", "float16" if DEVICE == "cuda" else "int8")
 DATA_DIR = Path(os.environ.get("ALIGN_DATA", "/data"))
 MAPS_DIR = DATA_DIR / "maps"
+# Raw word-level transcripts, saved so a map can be REBUILT after an algorithm
+# change without re-transcribing (transcription is the multi-hour CPU cost).
+TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 MAPS_DIR.mkdir(parents=True, exist_ok=True)
+TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="audex-align", version="0.1.0")
 executor = ThreadPoolExecutor(max_workers=1)
@@ -441,14 +445,23 @@ def _run_align(job_id: str, key: str, epub_path: str, audio_paths: list[str], wo
             _set(job_id, "error", "couldn't extract meaningful text from the EPUB")
             return
         _set(job_id, "transcribing", f"{len(audio_paths)} file(s), model={MODEL}, device={DEVICE}")
-        segments, duration = transcribe(audio_paths, MODEL, DEVICE, COMPUTE)
-        _set(job_id, "aligning", f"{len(segments)} segments vs {len(book.text)} chars")
-        entries = align_segments(segments, book)
-        sync_map = build_map(entries, book, duration, MODEL, DEVICE)
+        words, duration = transcribe(audio_paths, MODEL, DEVICE, COMPUTE)
+        # Persist the raw word-level transcript so the map can be rebuilt after an
+        # algorithm change WITHOUT paying the multi-hour transcription again.
+        try:
+            (TRANSCRIPTS_DIR / f"{key}.json").write_text(json.dumps(
+                {"durationS": duration, "model": MODEL,
+                 "words": [[round(w.start, 3), round(w.end, 3), w.text] for w in words]}
+            ))
+        except Exception:  # noqa: BLE001 — a transcript-cache failure must not fail the job
+            log.exception("failed to cache transcript")
+        _set(job_id, "aligning", f"{len(words)} words vs {len(book.text)} chars")
+        sync_map = build_map(words, book, duration, MODEL, DEVICE)
         (MAPS_DIR / f"{key}.json").write_text(json.dumps(sync_map))
+        n = len(sync_map.get("entries", []))
         with jobs_lock:
-            jobs[job_id]["entries"] = len(entries)
-        _set(job_id, "done", f"{len(entries)} anchors over {duration:.0f}s")
+            jobs[job_id]["entries"] = n
+        _set(job_id, "done", f"{n} anchors over {duration:.0f}s")
     except Exception as e:  # noqa: BLE001 — job boundary
         log.exception("align job failed")
         _set(job_id, "error", str(e))

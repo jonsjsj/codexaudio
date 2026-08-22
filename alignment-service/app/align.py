@@ -184,21 +184,53 @@ def word_anchors(asr_words: list[AsrWord], book_text: str) -> tuple[list[float],
             unique[g] = book_offs[i]
 
     asr_toks = [normalize(w.text) for w in asr_words]
-    times: list[float] = []
-    chars: list[int] = []
-    last_char = -1
+    # Collect EVERY unique-n-gram hit as a candidate (time, char), in ASR-time order.
+    cand_t: list[float] = []
+    cand_c: list[int] = []
     for i in range(len(asr_toks) - _NGRAM + 1):
         g = " ".join(asr_toks[i : i + _NGRAM])
         off = unique.get(g)
-        if off is not None and off > last_char:
-            times.append(asr_words[i].start)
-            chars.append(off)
-            last_char = off
+        if off is not None:
+            cand_t.append(asr_words[i].start)
+            cand_c.append(off)
+    # Keep the longest subsequence that increases in BOTH time (already sorted) and
+    # char. A greedy char>last cursor is fooled by a single spurious match that jumps
+    # far ahead — it then blocks every real match behind it, collapsing a whole span
+    # of the book onto one instant. The LIS instead drops such outliers as short
+    # detours and keeps the dense, self-consistent run.
+    keep = _longest_nondecreasing(cand_c)
+    times = [cand_t[k] for k in keep]
+    chars = [cand_c[k] for k in keep]
     log.info(
-        "aligned %d word-anchors (%d asr words vs %d book words, %d unique %d-grams)",
-        len(times), len(asr_toks), len(book_toks), len(unique), _NGRAM,
+        "aligned %d word-anchors from %d candidates (%d asr words vs %d book words, %d unique %d-grams)",
+        len(times), len(cand_c), len(asr_toks), len(book_toks), len(unique), _NGRAM,
     )
     return times, chars
+
+
+def _longest_nondecreasing(seq: list[int]) -> list[int]:
+    """Indices of a longest non-decreasing subsequence of seq (patience sorting)."""
+    if not seq:
+        return []
+    tails_val: list[int] = []  # smallest tail value of an increasing run of each length
+    tails_idx: list[int] = []  # seq-index achieving that tail
+    prev = [-1] * len(seq)
+    for i, v in enumerate(seq):
+        j = bisect.bisect_right(tails_val, v)
+        if j == len(tails_val):
+            tails_val.append(v)
+            tails_idx.append(i)
+        else:
+            tails_val[j] = v
+            tails_idx[j] = i
+        prev[i] = tails_idx[j - 1] if j > 0 else -1
+    out: list[int] = []
+    k = tails_idx[-1]
+    while k != -1:
+        out.append(k)
+        k = prev[k]
+    out.reverse()
+    return out
 
 
 # End-of-sentence: terminal punctuation (+ optional closing quote/bracket) then
@@ -246,14 +278,25 @@ def build_map(
             return t0
         return t0 + (t1 - t0) * (char - c0) / (c1 - c0)
 
+    # Every book word's char offset — so each SENTENCE anchor can carry per-word
+    # times (interpolated from the dense word-anchors). The reader follows the page
+    # by sentence but moves the HIGHLIGHT word-by-word across the visible text.
+    _, book_offs = _book_words(book.text)
+
     first_char = chars[0] if chars else 0
     last_char = chars[-1] if chars else total
+    total_words = 0
     entries: list[dict] = []
     for (c0, c1, stext) in _sentences(book.text):
         # Only anchor sentences within the aligned span — front/back matter with no
         # spoken counterpart is left out so it can't mis-highlight.
         if c1 < first_char or c0 > last_char:
             continue
+        # Per-word [offset-within-sentence, audio-time] for the words in this sentence.
+        lo = bisect.bisect_left(book_offs, c0)
+        hi = bisect.bisect_left(book_offs, c1)
+        words = [[book_offs[i] - c0, round(time_at(book_offs[i]), 2)] for i in range(lo, hi)]
+        total_words += len(words)
         entries.append(
             {
                 "t0": round(time_at(c0), 2),
@@ -262,10 +305,11 @@ def build_map(
                 "c1": c1,
                 "p": round(c0 / total, 6),
                 "href": book.href_at(c0),
-                "text": stext[:240],
+                "text": stext[:600],
+                "words": words,
             }
         )
-    log.info("built map: %d sentence anchors over %.0fs", len(entries), duration_s)
+    log.info("built map: %d sentence anchors, %d words over %.0fs", len(entries), total_words, duration_s)
     return {
         "version": 1,
         "model": model_name,

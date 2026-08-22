@@ -13,7 +13,27 @@ data class SyncAnchor(
     val href: String?,
     val text: String? = null,
     val c0: Int = 0,
-)
+    /**
+     * Per-word timing within this sentence (map v1.2): each word's char offset
+     * RELATIVE to the sentence start ([SyncWord.c], an index into [text]) and the
+     * audio second it's narrated ([SyncWord.t]). Lets the reader move the highlight
+     * word-by-word while the page follows sentence-by-sentence. Empty on older maps.
+     */
+    val words: List<SyncWord> = emptyList(),
+) {
+    /** The word being narrated at [seconds] within this sentence, or null. */
+    fun wordAt(seconds: Double): SyncWord? {
+        if (words.isEmpty()) return null
+        var idx = 0
+        for (i in words.indices) {
+            if (words[i].t <= seconds + 0.01) idx = i else break
+        }
+        return words[idx]
+    }
+}
+
+/** One word's timing inside a [SyncAnchor]: [c] = char offset within the sentence text, [t] = audio second. */
+data class SyncWord(val c: Int, val t: Double)
 
 /** Chapter char boundaries (map v1.1) — global offset → within-chapter progression. */
 data class SyncChapter(val href: String, val c0: Int, val c1: Int)

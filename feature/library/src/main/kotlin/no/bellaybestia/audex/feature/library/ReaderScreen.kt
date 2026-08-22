@@ -607,31 +607,37 @@ private fun EpubReader(
         }
     }
 
-    // Sentence highlighting (map v1.1): tint the anchor currently being
-    // narrated while the audiobook plays, so reading alongside the narration is
-    // visibly in sync. Keyed on the anchor's char offset so a highlight is
-    // applied once per sentence, not per playback tick.
+    // Word highlighting (map v1.2): while the audiobook plays, tint the single WORD
+    // being narrated. The page follows sentence-by-sentence (above); the highlight
+    // moves word-by-word across the visible text, keyed on the word so it updates once
+    // per word, not per tick. Falls back to whole-sentence tint on older (v1.1) maps.
     val narrationAnchor = if (readAlong && audioNow?.isPlaying == true) {
         syncMap?.anchorAt(audioNow.positionS)?.takeIf { !it.text.isNullOrBlank() }
     } else {
         null
     }
-    LaunchedEffect(narrationAnchor?.c0, navigator) {
+    val narrationWord = narrationAnchor?.wordAt(audioNow?.positionS ?: 0.0)
+    LaunchedEffect(narrationAnchor?.c0, narrationWord?.c, navigator) {
         val decorable = navigator as? DecorableNavigator ?: return@LaunchedEffect
         val map = syncMap
-        val decorations = if (narrationAnchor != null && map != null) {
-            narrationLocator(ready.publication, map, narrationAnchor)?.let { locator ->
-                listOf(
-                    Decoration(
-                        id = "narration",
-                        locator = locator,
-                        style = Decoration.Style.Highlight(tint = 0x66FFC107.toInt()),
-                    ),
-                )
-            } ?: emptyList()
+        val locator = if (narrationAnchor != null && map != null) {
+            if (narrationWord != null) {
+                narrationWordLocator(ready.publication, map, narrationAnchor, narrationWord)
+            } else {
+                narrationLocator(ready.publication, map, narrationAnchor)
+            }
         } else {
-            emptyList()
+            null
         }
+        val decorations = locator?.let {
+            listOf(
+                Decoration(
+                    id = "narration",
+                    locator = it,
+                    style = Decoration.Style.Highlight(tint = 0x66FFC107.toInt()),
+                ),
+            )
+        } ?: emptyList()
         decorable.applyDecorations(decorations, group = "readalong")
     }
 
@@ -803,6 +809,41 @@ private fun narrationLocator(
     return base.copy(
         locations = base.locations.copy(progression = map.chapterProgression(anchor)),
         text = anchor.text?.let { Locator.Text(highlight = it) } ?: base.text,
+    )
+}
+
+/**
+ * Locator that highlights just the WORD being narrated inside [anchor]'s sentence:
+ * same chapter link + progression, but the text-quote is the word plus a little of the
+ * surrounding sentence (before/after) so Readium resolves the exact occurrence. The
+ * word span runs from [word] to the next word's offset (trailing whitespace trimmed).
+ */
+private fun narrationWordLocator(
+    publication: Publication,
+    map: SyncMap,
+    anchor: no.bellaybestia.audex.domain.reader.SyncAnchor,
+    word: no.bellaybestia.audex.domain.reader.SyncWord,
+): Locator? {
+    val href = anchor.href ?: return null
+    val text = anchor.text ?: return null
+    val link = Url(href)?.let { publication.linkWithHref(it) }
+        ?: publication.readingOrder.firstOrNull {
+            it.href.toString().endsWith(href) || href.endsWith(it.href.toString())
+        }
+        ?: return null
+    val base = publication.locatorFromLink(link) ?: return null
+    val start = word.c.coerceIn(0, text.length)
+    val next = anchor.words.firstOrNull { it.c > word.c }?.c
+    var end = (next ?: text.length).coerceIn(start, text.length)
+    while (end > start && text[end - 1].isWhitespace()) end--
+    if (end <= start) return null
+    return base.copy(
+        locations = base.locations.copy(progression = map.chapterProgression(anchor)),
+        text = Locator.Text(
+            before = text.substring(0, start).takeLast(40),
+            highlight = text.substring(start, end),
+            after = text.substring(end).take(40),
+        ),
     )
 }
 

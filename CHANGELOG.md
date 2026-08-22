@@ -3,6 +3,13 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.24.0
+
+- **Read-along now highlights word by word.** With a rebuilt, accurate sync map, the
+  reader follows the narration and tints the exact word being spoken as the audiobook
+  plays (the page turns sentence by sentence so it does not jitter). Requires a book
+  whose alignment map has been rebuilt.
+
 ## 0.4.23.0
 
 - **Never lose your place on a stray skip.** Jump the audiobook a long way (a scrub, a

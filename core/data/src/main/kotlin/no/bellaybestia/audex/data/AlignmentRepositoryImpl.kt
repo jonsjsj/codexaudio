@@ -21,6 +21,7 @@ import no.bellaybestia.audex.domain.reader.AlignmentRepository
 import no.bellaybestia.audex.domain.reader.SyncAnchor
 import no.bellaybestia.audex.domain.reader.SyncChapter
 import no.bellaybestia.audex.domain.reader.SyncMap
+import no.bellaybestia.audex.domain.reader.SyncWord
 import no.bellaybestia.audex.domain.reader.WordSyncProgress
 import no.bellaybestia.audex.domain.reader.WordSyncStatus
 import okhttp3.MediaType.Companion.toMediaType
@@ -38,6 +39,8 @@ private data class WireAnchor(
     val href: String? = null,
     val text: String? = null,
     val c0: Int = 0,
+    // Per-word timing: [[charOffsetInSentence, audioSecond], ...] (map v1.2).
+    val words: List<List<Double>> = emptyList(),
 )
 
 @Serializable
@@ -212,7 +215,14 @@ class AlignmentRepositoryImpl @Inject constructor(
         val wire = json.decodeFromString(WireMap.serializer(), text)
         SyncMap(
             durationS = wire.durationS,
-            anchors = wire.entries.map { SyncAnchor(it.t0, it.t1, it.p, it.href, it.text, it.c0) },
+            anchors = wire.entries.map { a ->
+                SyncAnchor(
+                    a.t0, a.t1, a.p, a.href, a.text, a.c0,
+                    words = a.words.mapNotNull { w ->
+                        if (w.size >= 2) SyncWord(w[0].toInt(), w[1]) else null
+                    },
+                )
+            },
             chapters = wire.chapters.map { SyncChapter(it.href, it.c0, it.c1) },
         )
     }.getOrNull()

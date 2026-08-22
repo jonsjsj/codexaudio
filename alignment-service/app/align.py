@@ -239,18 +239,27 @@ _SENT_END = re.compile(r"[.!?…]+[\"'”’)\]]*(?=\s)|\n{2,}")
 
 
 def _sentences(text: str) -> list[tuple[int, int, str]]:
-    """(c0, c1, sentence_text) spans over the book, skipping tiny fragments."""
+    """(c0, c1, sentence_text) spans over the book, skipping tiny fragments.
+
+    c0 is the char offset of sentence_text[0] (leading whitespace excluded) and
+    c1 = c0 + len(sentence_text), so a per-word offset RELATIVE to c0 indexes straight
+    into sentence_text — the reader can't be off by the stripped whitespace.
+    """
     out: list[tuple[int, int, str]] = []
     start = 0
+
+    def emit(raw_start: int, raw: str) -> None:
+        seg = raw.strip()
+        if len(seg) < 8:
+            return
+        c0 = raw_start + (len(raw) - len(raw.lstrip()))
+        out.append((c0, min(c0 + len(seg), len(text) - 1), seg))
+
     for m in _SENT_END.finditer(text):
         end = m.end()
-        seg = text[start:end].strip()
-        if len(seg) >= 8:
-            out.append((start, min(end, len(text) - 1), seg))
+        emit(start, text[start:end])
         start = end
-    tail = text[start:].strip()
-    if len(tail) >= 8:
-        out.append((start, len(text) - 1, tail))
+    emit(start, text[start:])
     return out
 
 

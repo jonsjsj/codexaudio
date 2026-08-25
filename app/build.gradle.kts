@@ -19,7 +19,7 @@ android {
         // per release, roll into the third for feature batches. versionCode
         // strictly +1 every build (the OTA check compares it). History: vc2=0.1,
         // vc3=0.1.1 (shipped as "1.0.0"/"1.1.0", renumbered), …, vc12=0.2.0.
-        versionCode = 76
+        versionCode = 77
         versionName = "0.4.25.0"
 
         // OTA endpoints, tried in order (see UpdateManager.bases()). Codex

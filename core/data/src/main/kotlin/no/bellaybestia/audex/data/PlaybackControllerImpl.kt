@@ -169,8 +169,10 @@ class PlaybackControllerImpl @Inject constructor(
         val progressRow = if (episodeId == null) progressDao.get(serverId, libraryItemId) else null
         val localS = progressRow?.currentTimeS?.takeIf { it > 0.0 }
         // A FINISHED book restarts from the beginning (unless an explicit resumeAtS/bookmark
-        // says otherwise) — a completed book must never sit stuck at 100%.
-        val resumeAt = resumeAtS ?: if (progressRow?.isFinished == true) 0.0 else (localS ?: session.currentTime)
+        // says otherwise) — a completed book must never sit stuck at 100%. Check the
+        // fraction too: the isFinished flag doesn't always survive the sync from the server.
+        val bookFinished = progressRow?.isFinished == true || (progressRow?.pct ?: 0.0) >= 0.999
+        val resumeAt = resumeAtS ?: if (bookFinished) 0.0 else (localS ?: session.currentTime)
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }
@@ -201,7 +203,8 @@ class PlaybackControllerImpl @Inject constructor(
             mediaItem(Uri.fromFile(track.file).toString(), serverId, libraryItemId, title, author)
         }
         val localRow = progressDao.get(serverId, libraryItemId)
-        val resumeAt = resumeAtS ?: if (localRow?.isFinished == true) 0.0 else (localRow?.currentTimeS ?: 0.0)
+        val finished = localRow?.isFinished == true || (localRow?.pct ?: 0.0) >= 0.999
+        val resumeAt = resumeAtS ?: if (finished) 0.0 else (localRow?.currentTimeS ?: 0.0)
         // No server session while offline — the local SessionRecorder row drains
         // later via /api/session/local-all.
         activeApi = null

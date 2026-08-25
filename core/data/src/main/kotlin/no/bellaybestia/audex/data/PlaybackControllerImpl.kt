@@ -166,8 +166,11 @@ class PlaybackControllerImpl @Inject constructor(
         // recent listening. An explicit resumeAtS (e.g. cross-format furthest)
         // still wins over both.
         // Episodes have no book progress row; resume from the server's session time.
-        val localS = if (episodeId == null) progressDao.get(serverId, libraryItemId)?.currentTimeS?.takeIf { it > 0.0 } else null
-        val resumeAt = resumeAtS ?: localS ?: session.currentTime
+        val progressRow = if (episodeId == null) progressDao.get(serverId, libraryItemId) else null
+        val localS = progressRow?.currentTimeS?.takeIf { it > 0.0 }
+        // A FINISHED book restarts from the beginning (unless an explicit resumeAtS/bookmark
+        // says otherwise) — a completed book must never sit stuck at 100%.
+        val resumeAt = resumeAtS ?: if (progressRow?.isFinished == true) 0.0 else (localS ?: session.currentTime)
         activeApi = api
         activeSessionId = session.id
         activeOffsets = tracks.map { it.startOffset }
@@ -197,7 +200,8 @@ class PlaybackControllerImpl @Inject constructor(
         val items = tracks.map { track ->
             mediaItem(Uri.fromFile(track.file).toString(), serverId, libraryItemId, title, author)
         }
-        val resumeAt = resumeAtS ?: progressDao.get(serverId, libraryItemId)?.currentTimeS ?: 0.0
+        val localRow = progressDao.get(serverId, libraryItemId)
+        val resumeAt = resumeAtS ?: if (localRow?.isFinished == true) 0.0 else (localRow?.currentTimeS ?: 0.0)
         // No server session while offline — the local SessionRecorder row drains
         // later via /api/session/local-all.
         activeApi = null

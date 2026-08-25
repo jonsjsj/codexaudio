@@ -58,6 +58,11 @@ class EbookProgressWriterImpl @Inject constructor(
 
     override suspend fun lastPosition(serverId: String, libraryItemId: String): SavedEbookPosition? =
         progressDao.get(serverId, libraryItemId)?.let {
-            SavedEbookPosition(location = it.ebookLocation, progress = it.ebookProgress)
+            SavedEbookPosition(
+                location = it.ebookLocation,
+                progress = it.ebookProgress,
+                source = it.source,
+                isFinished = it.isFinished,
+            )
         }
 }

@@ -52,6 +52,13 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
  */
 private const val CROSS_FORMAT_MARGIN = 0.005
 
+/**
+ * At/after this fraction the book counts as finished (the tail covers end credits/outro),
+ * so cross-format sync stops being enforced — a completed book never reopens trapped at
+ * the end; re-reading starts free.
+ */
+private const val BOOK_DONE_THRESHOLD = 0.97
+
 /** What the reader screen should show. */
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
@@ -334,21 +341,28 @@ class ReaderViewModel @Inject constructor(
     private suspend fun resolveInitialLocator(positions: List<Locator>): Locator? {
         val saved = ebookProgressWriter.lastPosition(serverId, libraryItemId)
         val ebookLocator = saved?.location?.let { parseSavedLocation(it) }
-        // The stored EXACT page's own fraction — the furthest you've actually READ.
-        val locatorFraction = ebookLocator?.locations?.totalProgression ?: 0.0
-        // The saved ebook fraction can be pushed PAST the stored page by the audio→ebook
-        // mirror as you listen, so it's a lower bound on "furthest", not the read page.
         val savedFraction = saved?.progress ?: 0.0
         val audioFraction = audioFractionForWork() ?: 0.0
-        val furthest = maxOf(savedFraction, audioFraction)
+        // A genuine READ position (not the audio→ebook mirror or a playback write).
+        val genuineRead = saved?.source != "LOCAL_XFORMAT" && saved?.source != "LOCAL_PLAYBACK"
+        // DONE: once the book is finished (or into the end credits), cross-format sync is
+        // no longer enforced — "the sync is no longer important." So a finished book never
+        // traps you at 100%: re-reading is free.
+        val bookDone = saved?.isFinished == true ||
+            savedFraction >= BOOK_DONE_THRESHOLD || audioFraction >= BOOK_DONE_THRESHOLD
         return when {
-            // Your exact page is at (or ahead of) the furthest fraction → you read
-            // furthest; restore it precisely.
-            ebookLocator != null && locatorFraction >= furthest - CROSS_FORMAT_MARGIN -> ebookLocator
-            // The furthest came from listening (or the mirror bumped the ebook % past
-            // the stored page) → resume at that spot, proportionally.
-            furthest > 0.0 && positions.isNotEmpty() -> {
-                val index = (furthest * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
+            bookDone -> {
+                // Restore only a real, in-progress re-read; otherwise start free at the
+                // beginning so a completed book doesn't reopen at the credits.
+                val readFrac = ebookLocator?.locations?.totalProgression ?: 1.0
+                if (genuineRead && readFrac < BOOK_DONE_THRESHOLD) ebookLocator else null
+            }
+            // Your CURRENT ebook page is authoritative — freely movable, never snapped
+            // forward to a "furthest reached". Restore exactly where you last were.
+            ebookLocator != null -> ebookLocator
+            // Never opened the ebook but the audiobook has progress → start where you listened.
+            audioFraction > 0.0 && positions.isNotEmpty() -> {
+                val index = (audioFraction * (positions.size - 1)).roundToInt().coerceIn(0, positions.size - 1)
                 positions[index]
             }
             else -> ebookLocator

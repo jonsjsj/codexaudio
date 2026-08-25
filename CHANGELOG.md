@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.25.0
+
+- **Your place is no longer stuck at the furthest point.** Reading/listening position is now wherever you actually are — you can go back, re-read, and it stays put instead of snapping forward. And once a book is finished, sync stops being enforced: a completed book reopens free (from the start), and pressing play on a finished audiobook restarts it instead of sitting at 100%.
+
 ## 0.4.24.0
 
 - **Read-along now highlights word by word.** With a rebuilt, accurate sync map, the

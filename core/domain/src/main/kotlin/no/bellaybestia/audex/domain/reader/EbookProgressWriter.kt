@@ -6,8 +6,18 @@ package no.bellaybestia.audex.domain.reader
  * (`ebookLocation`/`ebookProgress`) — the ONLY legitimate use of that PATCH.
  * Audio never touches it. Used by the Readium reader (Phase 2).
  */
-/** Last known reading position from the local progress mirror. */
-data class SavedEbookPosition(val location: String?, val progress: Double?)
+/**
+ * Last known reading position from the local progress mirror. [source] distinguishes a
+ * genuine read position ("LOCAL_READER") from a cross-format mirror ("LOCAL_XFORMAT",
+ * bumped forward as you listen) so the reader can decide whether to restore it or start
+ * free. [isFinished] marks a completed book (sync enforcement is dropped once done).
+ */
+data class SavedEbookPosition(
+    val location: String?,
+    val progress: Double?,
+    val source: String? = null,
+    val isFinished: Boolean = false,
+)
 
 interface EbookProgressWriter {
     /**

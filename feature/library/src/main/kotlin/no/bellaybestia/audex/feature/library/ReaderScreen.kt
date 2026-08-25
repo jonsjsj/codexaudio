@@ -17,6 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -208,6 +216,9 @@ private fun EpubReader(
     val progressUnit by viewModel.progressUnit.collectAsState()
     val audioBookmarks by viewModel.audioBookmarks.collectAsState()
     val audioPositionS by viewModel.audioPositionS.collectAsState()
+    val bookmarkTicks by viewModel.bookmarkTicks.collectAsState()
+    val furthestFraction by viewModel.furthestFraction.collectAsState()
+    val readProgress by viewModel.currentProgression.collectAsState()
     var showAppearance by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var showHighlights by remember { mutableStateOf(false) }
@@ -229,6 +240,14 @@ private fun EpubReader(
             prefs = prefs,
             expanded = showAppearance,
             syncedWithAudio = syncedWithAudio,
+            readProgress = readProgress?.toFloat() ?: 0f,
+            bookmarks = bookmarkTicks,
+            furthestFraction = furthestFraction,
+            onSeek = { frac ->
+                locatorForFraction(ready.positions, frac.toDouble())?.let { navigator?.go(it) }
+                viewModel.onReaderJump(frac.toDouble())
+            },
+            onAddBookmark = { viewModel.addReadingBookmark() },
             onToggle = { showAppearance = !showAppearance },
             onFontDelta = viewModel::adjustFontSize,
             onCycleTheme = viewModel::cycleTheme,
@@ -672,6 +691,81 @@ private fun EpubReader(
 }
 
 /**
+ * Reading scrubber: a draggable progress track with bookmark ticks (tap to jump), a
+ * "furthest reached" marker, and an add-bookmark button. Replaces the old plain
+ * progress line — this is where you move around the book and drop/return to bookmarks.
+ */
+@Composable
+private fun ReaderScrubber(
+    progress: Float,
+    bookmarks: List<ReaderViewModel.BookmarkTick>,
+    furthestFraction: Float?,
+    onSeek: (Float) -> Unit,
+    onAddBookmark: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BoxWithConstraints(Modifier.weight(1f).height(28.dp)) {
+            val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+            fun toFrac(x: Float) = (x / widthPx).coerceIn(0f, 1f)
+            // Track + fill (drag/tap to seek).
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .pointerInput(widthPx) { detectTapGestures { onSeek(toFrac(it.x)) } }
+                    .pointerInput(widthPx) {
+                        detectHorizontalDragGestures { change, _ -> onSeek(toFrac(change.position.x)) }
+                    },
+            ) {
+                Box(
+                    Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            // Furthest-reached marker (hidden once the book is done).
+            furthestFraction?.let { f ->
+                Box(
+                    Modifier.align(Alignment.CenterStart)
+                        .offset { IntOffset(((f * widthPx).roundToInt() - 1), 0) }
+                        .width(2.dp).height(16.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                )
+            }
+            // Bookmark ticks — tap to jump there.
+            bookmarks.forEach { bm ->
+                Box(
+                    Modifier.align(Alignment.CenterStart)
+                        .offset { IntOffset(((bm.fraction * widthPx).roundToInt() - 5), 0) }
+                        .size(10.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.tertiary)
+                        .pointerInput(bm.fraction) { detectTapGestures { onSeek(bm.fraction) } },
+                )
+            }
+            // Position thumb.
+            Box(
+                Modifier.align(Alignment.CenterStart)
+                    .offset { IntOffset(((progress.coerceIn(0f, 1f) * widthPx).roundToInt() - 7), 0) }
+                    .size(14.dp).clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+        }
+        Text(
+            text = "＋",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(onClick = onAddBookmark).padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+/**
  * Flat appearance strip: a collapsed "Aa" affordance expanding to font-size
  * steppers and a theme cycler. Values persist app-wide (ReaderSettingsStore).
  */
@@ -680,6 +774,11 @@ private fun AppearanceBar(
     prefs: ReaderPrefs,
     expanded: Boolean,
     syncedWithAudio: Boolean,
+    readProgress: Float,
+    bookmarks: List<ReaderViewModel.BookmarkTick>,
+    furthestFraction: Float?,
+    onSeek: (Float) -> Unit,
+    onAddBookmark: () -> Unit,
     onToggle: () -> Unit,
     onFontDelta: (Int) -> Unit,
     onCycleTheme: () -> Unit,
@@ -698,6 +797,15 @@ private fun AppearanceBar(
                 modifier = Modifier.padding(start = 16.dp, top = 6.dp),
             )
         }
+        // Reading scrubber: draggable position, bookmark ticks (tap to jump), and a
+        // "furthest reached" marker (gone once the book is done).
+        ReaderScrubber(
+            progress = readProgress,
+            bookmarks = bookmarks,
+            furthestFraction = furthestFraction,
+            onSeek = onSeek,
+            onAddBookmark = onAddBookmark,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -89,6 +89,19 @@ interface CatalogRepository {
     )
 
     /**
+     * Set the audio edition's saved position to [fraction] UNCONDITIONALLY (both
+     * directions) — for an EXPLICIT jump (scrubber drag, bookmark tap). Unlike
+     * [mirrorAudioProgress] this may move the audiobook BACKWARD, because a deliberate
+     * jump is the new authoritative "here", overriding the forward-only listen mirror.
+     */
+    suspend fun setAudioFraction(
+        serverId: String,
+        libraryItemId: String,
+        fraction: Double,
+        durationS: Long?,
+    )
+
+    /**
      * Merge this work's author into an existing one (the "Fix author" picker):
      * records a durable AUTHOR_MERGE override on the two authors' immutable norm
      * keys and re-runs the graph build, so the correction survives every re-sync.

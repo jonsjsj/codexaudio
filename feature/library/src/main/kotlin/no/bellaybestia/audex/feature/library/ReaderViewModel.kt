@@ -181,20 +181,71 @@ class ReaderViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Bumped whenever bookmarks change (add/remove) so the flows below re-fetch. */
+    private val _bookmarksRefresh = MutableStateFlow(0)
+
     /**
      * Audio bookmarks (including the auto "you were here" markers dropped on a big
      * skip) for this work's audio edition — surfaced in the reader's Go-to so you can
      * jump the TEXT to any of them (cross-format).
      */
     val audioBookmarks: StateFlow<List<no.bellaybestia.audex.domain.playback.Bookmark>> =
-        _audioEdition
-            .map { ed ->
-                ed?.let {
-                    runCatching { bookmarksRepository.bookmarksFor(it.serverId, it.libraryItemId) }
-                        .getOrDefault(emptyList())
-                } ?: emptyList()
+        combine(_audioEdition, _bookmarksRefresh) { ed, _ ->
+            ed?.let {
+                runCatching { bookmarksRepository.bookmarksFor(it.serverId, it.libraryItemId) }
+                    .getOrDefault(emptyList())
+            } ?: emptyList()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** A bookmark as a fraction (0..1) of the book, for scrubber ticks. */
+    data class BookmarkTick(val fraction: Float, val label: String, val timeS: Long)
+
+    /** Bookmarks positioned on the reading scrubber (time → fraction via audio duration). */
+    val bookmarkTicks: StateFlow<List<BookmarkTick>> =
+        combine(audioBookmarks, _audioEdition) { bms, ed ->
+            val dur = ed?.durationS?.toDouble()?.takeIf { it > 0.0 } ?: return@combine emptyList()
+            bms.map { BookmarkTick((it.timeS / dur).toFloat().coerceIn(0f, 1f), it.title, it.timeS) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Furthest point reached in EITHER format (0..1) — a marker on the scrubber to jump
+     * back to the tip. Null once the book is done: past the end, the furthest is
+     * irrelevant and re-reading is free.
+     */
+    val furthestFraction: StateFlow<Float?> =
+        combine(_currentProgression, _audioEdition) { read, ed ->
+            val audio = ed?.fraction ?: 0.0
+            val furthest = maxOf(read ?: 0.0, audio)
+            if (furthest <= 0.0 || furthest >= BOOK_DONE_THRESHOLD) null else furthest.toFloat()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Drop a bookmark at the current reading spot (kept on the server → Codex sees it). */
+    fun addReadingBookmark() {
+        val frac = _currentProgression.value ?: return
+        val ed = _audioEdition.value ?: return
+        val dur = ed.durationS ?: return
+        viewModelScope.launch {
+            runCatching {
+                bookmarksRepository.add(
+                    ed.serverId, ed.libraryItemId, (frac * dur).toLong(),
+                    "Bookmark · ${(frac * 100).roundToInt()}%",
+                )
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            _bookmarksRefresh.value++
+        }
+    }
+
+    /**
+     * Re-sync after an explicit jump in the reader (drag/tap/bookmark): the current
+     * position is now authoritative in BOTH directions — set the audiobook to match even
+     * if that moves it BACKWARD (an explicit jump overrides the forward-only listen mirror).
+     */
+    fun onReaderJump(fraction: Double) {
+        val ed = _audioEdition.value ?: return
+        viewModelScope.launch {
+            runCatching { catalogRepository.setAudioFraction(ed.serverId, ed.libraryItemId, fraction, ed.durationS) }
+        }
+    }
 
     /**
      * The audiobook's position in seconds — live when it's playing, else its saved

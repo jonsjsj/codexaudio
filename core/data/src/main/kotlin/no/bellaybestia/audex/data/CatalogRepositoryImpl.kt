@@ -187,6 +187,27 @@ class CatalogRepositoryImpl @Inject constructor(
         Unit
     }
 
+    override suspend fun setAudioFraction(
+        serverId: String,
+        libraryItemId: String,
+        fraction: Double,
+        durationS: Long?,
+    ) = withContext(dispatcher) {
+        val f = fraction.coerceIn(0.0, 1.0)
+        val existing = progressDao.get(serverId, libraryItemId)
+        val row = (existing ?: ProgressEntity(serverId = serverId, libraryItemId = libraryItemId)).copy(
+            pct = f,
+            currentTimeS = durationS?.let { f * it } ?: existing?.currentTimeS,
+            // A deliberate jump below the end un-finishes the book so it isn't treated
+            // as done; a real re-listen writes its own progress from here.
+            isFinished = f >= 0.999,
+            lastUpdate = System.currentTimeMillis(),
+            source = "LOCAL_XFORMAT",
+        )
+        progressDao.upsertAll(listOf(row))
+        Unit
+    }
+
     override suspend fun mirrorEbookProgress(
         serverId: String,
         ebookItemId: String,

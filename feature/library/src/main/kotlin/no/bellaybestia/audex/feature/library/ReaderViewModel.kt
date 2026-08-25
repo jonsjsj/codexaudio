@@ -59,6 +59,11 @@ private const val CROSS_FORMAT_MARGIN = 0.005
  */
 private const val BOOK_DONE_THRESHOLD = 0.97
 
+/** A jump larger than this fraction of the book auto-drops a "you were here" bookmark. */
+private const val JUMP_BOOKMARK_THRESHOLD = 0.015
+private const val AUTO_BOOKMARK_PREFIX = "Left off · "
+private const val MAX_AUTO_BOOKMARKS = 5
+
 /** What the reader screen should show. */
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
@@ -255,14 +260,39 @@ class ReaderViewModel @Inject constructor(
     }
 
     /**
-     * Re-sync after an explicit jump in the reader (drag/tap/bookmark): the current
-     * position is now authoritative in BOTH directions — set the audiobook to match even
-     * if that moves it BACKWARD (an explicit jump overrides the forward-only listen mirror).
+     * Commit an explicit jump in the reader (scrubber release / tap / bookmark). Re-syncs
+     * the audiobook to [toFraction] in BOTH directions (an explicit jump overrides the
+     * forward-only listen mirror), and — if you moved more than ~a page — auto-drops a
+     * "Left off" bookmark at [fromFraction] so an accidental jump never loses your place.
      */
-    fun onReaderJump(fraction: Double) {
+    fun onReaderSeekEnd(fromFraction: Double, toFraction: Double) {
         val ed = _audioEdition.value ?: return
+        val dur = ed.durationS
         viewModelScope.launch {
-            runCatching { catalogRepository.setAudioFraction(ed.serverId, ed.libraryItemId, fraction, ed.durationS) }
+            runCatching { catalogRepository.setAudioFraction(ed.serverId, ed.libraryItemId, toFraction, dur) }
+            if (dur != null && kotlin.math.abs(toFraction - fromFraction) > JUMP_BOOKMARK_THRESHOLD) {
+                runCatching { autoBookmark(ed.serverId, ed.libraryItemId, dur, fromFraction) }
+                _bookmarksRefresh.value++
+            }
+        }
+    }
+
+    /** Drop a "Left off" bookmark at [fraction] unless one is already near it, and keep
+     *  the auto-bookmarks pruned to the most recent few (dedupe by closeness). */
+    private suspend fun autoBookmark(serverId: String, itemId: String, durationS: Long, fraction: Double) {
+        val marks = bookmarksRepository.bookmarksFor(serverId, itemId)
+        val autos = marks.filter { it.title.startsWith(AUTO_BOOKMARK_PREFIX) }
+        val near = autos.any { kotlin.math.abs(it.timeS / durationS.toDouble() - fraction) < JUMP_BOOKMARK_THRESHOLD }
+        if (near) return
+        bookmarksRepository.add(
+            serverId, itemId, (fraction * durationS).toLong(),
+            "$AUTO_BOOKMARK_PREFIX${(fraction * 100).roundToInt()}%",
+        )
+        val after = bookmarksRepository.bookmarksFor(serverId, itemId)
+            .filter { it.title.startsWith(AUTO_BOOKMARK_PREFIX) }
+        if (after.size > MAX_AUTO_BOOKMARKS) {
+            after.sortedBy { it.createdAt }.take(after.size - MAX_AUTO_BOOKMARKS)
+                .forEach { runCatching { bookmarksRepository.remove(it) } }
         }
     }
 

@@ -249,9 +249,9 @@ private fun EpubReader(
             readProgress = readProgress?.toFloat() ?: 0f,
             bookmarks = bookmarkTicks,
             furthestFraction = furthestFraction,
-            onSeek = { frac ->
-                locatorForFraction(ready.positions, frac.toDouble())?.let { navigator?.go(it) }
-                viewModel.onReaderJump(frac.toDouble())
+            onSeek = { from, to ->
+                locatorForFraction(ready.positions, to.toDouble())?.let { navigator?.go(it) }
+                viewModel.onReaderSeekEnd(from.toDouble(), to.toDouble())
             },
             onAddBookmark = { viewModel.addReadingBookmark() },
             onToggle = { showAppearance = !showAppearance },
@@ -706,9 +706,13 @@ private fun ReaderScrubber(
     progress: Float,
     bookmarks: List<ReaderViewModel.BookmarkTick>,
     furthestFraction: Float?,
-    onSeek: (Float) -> Unit,
+    onSeek: (Float, Float) -> Unit,
     onAddBookmark: () -> Unit,
 ) {
+    // Preview thumb while dragging; commit (navigate + re-sync + auto-bookmark the FROM)
+    // only on release, so a drag doesn't thrash the reader or spam the progress writes.
+    var dragFrac by remember { mutableStateOf<Float?>(null) }
+    val shown = (dragFrac ?: progress).coerceIn(0f, 1f)
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -717,7 +721,6 @@ private fun ReaderScrubber(
         BoxWithConstraints(Modifier.weight(1f).height(28.dp)) {
             val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
             fun toFrac(x: Float) = (x / widthPx).coerceIn(0f, 1f)
-            // Track + fill (drag/tap to seek).
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -725,13 +728,18 @@ private fun ReaderScrubber(
                     .align(Alignment.Center)
                     .clip(RoundedCornerShape(3.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .pointerInput(widthPx) { detectTapGestures { onSeek(toFrac(it.x)) } }
+                    .pointerInput(widthPx) { detectTapGestures { onSeek(progress, toFrac(it.x)) } }
                     .pointerInput(widthPx) {
-                        detectHorizontalDragGestures { change, _ -> onSeek(toFrac(change.position.x)) }
+                        var start = progress
+                        detectHorizontalDragGestures(
+                            onDragStart = { start = progress; dragFrac = toFrac(it.x) },
+                            onDragEnd = { val to = dragFrac ?: start; dragFrac = null; onSeek(start, to) },
+                            onDragCancel = { dragFrac = null },
+                        ) { change, _ -> dragFrac = toFrac(change.position.x) }
                     },
             ) {
                 Box(
-                    Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f))
+                    Modifier.fillMaxHeight().fillMaxWidth(shown)
                         .background(MaterialTheme.colorScheme.primary),
                 )
             }
@@ -751,13 +759,13 @@ private fun ReaderScrubber(
                         .offset { IntOffset(((bm.fraction * widthPx).roundToInt() - 5), 0) }
                         .size(10.dp).clip(CircleShape)
                         .background(MaterialTheme.colorScheme.tertiary)
-                        .pointerInput(bm.fraction) { detectTapGestures { onSeek(bm.fraction) } },
+                        .pointerInput(bm.fraction) { detectTapGestures { onSeek(progress, bm.fraction) } },
                 )
             }
-            // Position thumb.
+            // Position thumb (follows the preview while dragging).
             Box(
                 Modifier.align(Alignment.CenterStart)
-                    .offset { IntOffset(((progress.coerceIn(0f, 1f) * widthPx).roundToInt() - 7), 0) }
+                    .offset { IntOffset(((shown * widthPx).roundToInt() - 7), 0) }
                     .size(14.dp).clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary),
             )
@@ -788,7 +796,7 @@ private fun AppearanceBar(
     readProgress: Float,
     bookmarks: List<ReaderViewModel.BookmarkTick>,
     furthestFraction: Float?,
-    onSeek: (Float) -> Unit,
+    onSeek: (Float, Float) -> Unit,
     onAddBookmark: () -> Unit,
     onToggle: () -> Unit,
     onFontDelta: (Int) -> Unit,

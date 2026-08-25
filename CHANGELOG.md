@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.28.0
+
+- **A stray drag never loses your place.** When you jump more than about a page in the
+  reader (dragging the scrubber, tapping a bookmark), Audex now auto-drops a "Left off"
+  bookmark where you were, so you can always get back — keeping the few most recent ones
+  and not stacking duplicates. Dragging the scrubber now only moves the page on release,
+  so it no longer jitters mid-drag.
+
 ## 0.4.27.0
 
 - **Audio controls inside the reader.** When a book has an audiobook, the reader's

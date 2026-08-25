@@ -3,6 +3,14 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.26.0
+
+- **A reading scrubber with bookmarks.** The reader controls now have a draggable
+  progress bar: drag to move anywhere in the book, tap a bookmark dot to jump straight
+  there, and hit ＋ to drop a bookmark at your spot. A faint marker shows the furthest
+  point you have reached (it disappears once the book is done), and jumping re-syncs the
+  audiobook to match.
+
 ## 0.4.25.1
 
 - Finished-book restart now also triggers on 100% progress, not just the finished flag (which does not always survive syncing) — pressing play on a completed audiobook reliably restarts from the beginning.

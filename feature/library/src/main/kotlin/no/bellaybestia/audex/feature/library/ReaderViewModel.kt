@@ -109,7 +109,7 @@ class ReaderViewModel @Inject constructor(
     private val highlightsRepository: HighlightsRepository,
     private val activityRecorder: no.bellaybestia.audex.domain.settings.ActivityRecorder,
     themeSettings: no.bellaybestia.audex.domain.settings.ThemeSettings,
-    playbackController: PlaybackController,
+    private val playbackController: PlaybackController,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -218,6 +218,25 @@ class ReaderViewModel @Inject constructor(
             val furthest = maxOf(read ?: 0.0, audio)
             if (furthest <= 0.0 || furthest >= BOOK_DONE_THRESHOLD) null else furthest.toFloat()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether this work has an audiobook edition — drives the in-reader mini-player. */
+    val hasAudio: StateFlow<Boolean> =
+        _audioEdition.map { it != null }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Play/pause the audiobook from the reader; starts it if it isn't loaded yet. */
+    fun toggleAudio() {
+        if (audioCompanion.value != null) {
+            playbackController.togglePlayPause()
+            return
+        }
+        val ed = _audioEdition.value ?: return
+        viewModelScope.launch { runCatching { playbackController.play(ed.serverId, ed.libraryItemId, title, null) } }
+    }
+
+    fun audioSkipBack() = playbackController.skipBackward()
+
+    fun audioSkipForward() = playbackController.skipForward()
 
     /** Drop a bookmark at the current reading spot (kept on the server → Codex sees it). */
     fun addReadingBookmark() {

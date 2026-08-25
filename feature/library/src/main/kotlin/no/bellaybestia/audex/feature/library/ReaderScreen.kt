@@ -219,6 +219,7 @@ private fun EpubReader(
     val bookmarkTicks by viewModel.bookmarkTicks.collectAsState()
     val furthestFraction by viewModel.furthestFraction.collectAsState()
     val readProgress by viewModel.currentProgression.collectAsState()
+    val hasAudio by viewModel.hasAudio.collectAsState()
     var showAppearance by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var showHighlights by remember { mutableStateOf(false) }
@@ -240,6 +241,11 @@ private fun EpubReader(
             prefs = prefs,
             expanded = showAppearance,
             syncedWithAudio = syncedWithAudio,
+            hasAudio = hasAudio,
+            audioPlaying = companion?.isPlaying == true,
+            onAudioToggle = { viewModel.toggleAudio() },
+            onAudioSkipBack = { viewModel.audioSkipBack() },
+            onAudioSkipForward = { viewModel.audioSkipForward() },
             readProgress = readProgress?.toFloat() ?: 0f,
             bookmarks = bookmarkTicks,
             furthestFraction = furthestFraction,
@@ -774,6 +780,11 @@ private fun AppearanceBar(
     prefs: ReaderPrefs,
     expanded: Boolean,
     syncedWithAudio: Boolean,
+    hasAudio: Boolean,
+    audioPlaying: Boolean,
+    onAudioToggle: () -> Unit,
+    onAudioSkipBack: () -> Unit,
+    onAudioSkipForward: () -> Unit,
     readProgress: Float,
     bookmarks: List<ReaderViewModel.BookmarkTick>,
     furthestFraction: Float?,
@@ -789,7 +800,40 @@ private fun AppearanceBar(
     onGoTo: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-        if (syncedWithAudio) {
+        // In-reader audio mini-player: play/pause + skip the narration while you read.
+        if (hasAudio) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = if (syncedWithAudio) "Synced with audio" else "Audiobook",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (syncedWithAudio) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "⏮",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.clickable(onClick = onAudioSkipBack).padding(8.dp),
+                )
+                Text(
+                    text = if (audioPlaying) "⏸" else "▶",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable(onClick = onAudioToggle).padding(8.dp),
+                )
+                Text(
+                    text = "⏭",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.clickable(onClick = onAudioSkipForward).padding(8.dp),
+                )
+            }
+        } else if (syncedWithAudio) {
             Text(
                 text = "Synced with audio",
                 style = MaterialTheme.typography.labelSmall,

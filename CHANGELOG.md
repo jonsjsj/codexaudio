@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.27.0
+
+- **Audio controls inside the reader.** When a book has an audiobook, the reader's
+  controls now include a mini-player — play/pause and skip the narration without leaving
+  the page. It's part of the controls that fold away, so tap the centre to hide it.
+
 ## 0.4.26.0
 
 - **A reading scrubber with bookmarks.** The reader controls now have a draggable

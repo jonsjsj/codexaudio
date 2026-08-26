@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.31.0
+
+- **Audiobook and e-book of the same book now pair up automatically.** When an audiobook's title bakes in the series ("Captive's War, Book 1 - The Mercy of Gods") but the e-book has a clean title ("The Mercy of Gods"), Audex used to treat them as two separate books — so cross-format progress and read-along never linked. It now recognizes the "Series, Book N - Title" pattern, matches the two editions, and files the book under its series for browsing.
+
 ## 0.4.30.0
 
 - **Less clutter, explanations on tap.** Wordy helper text is being replaced with a small ⓘ you tap to read the explanation — starting with the Audio-ebook sync row on the book page. More screens to follow.

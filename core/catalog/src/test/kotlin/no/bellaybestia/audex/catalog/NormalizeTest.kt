@@ -122,6 +122,41 @@ class NormalizeTest {
         assertFalse(Normalize.isDramatized("The Way of Kings"))
     }
 
+    @Test
+    fun `audible series prefix baked into a title collapses to the clean title`() {
+        // The exact Codex case: audio "Captive's War, Book 1 - The Mercy of Gods" must key
+        // the same as the e-book "The Mercy of Gods", even with no known series metadata.
+        assertEquals(
+            Normalize.normTitle("The Mercy of Gods"),
+            Normalize.normTitle("Captive's War, Book 1 - The Mercy of Gods"),
+        )
+        assertEquals(
+            Normalize.normTitle("The Final Empire"),
+            Normalize.normTitle("Mistborn, Book 1: The Final Empire"),
+        )
+        assertEquals(
+            Normalize.normTitle("Unsouled"),
+            Normalize.normTitle("Cradle #1 - Unsouled"),
+        )
+    }
+
+    @Test
+    fun `splitEmbeddedSeries extracts series, position and clean title`() {
+        val p = Normalize.splitEmbeddedSeries("Captive's War, Book 1 - The Mercy of Gods")
+        assertNotNull(p)
+        assertEquals("Captive's War", p!!.seriesRaw)
+        assertEquals(1.0, p.position)
+        assertEquals("The Mercy of Gods", p.cleanTitle)
+    }
+
+    @Test
+    fun `splitEmbeddedSeries ignores ordinary titles`() {
+        // No book/volume number + separator → not an embedded-series prefix.
+        assertNull(Normalize.splitEmbeddedSeries("1984: A Novel"))
+        assertNull(Normalize.splitEmbeddedSeries("Star Wars: The Old Republic"))
+        assertNull(Normalize.splitEmbeddedSeries("The Mercy of Gods"))
+    }
+
     // --- ISBN ---------------------------------------------------------------
 
     @Test

@@ -106,6 +106,25 @@ class GraphBuilderTest {
     }
 
     @Test
+    fun `audio with series baked into title pairs with the clean-titled ebook`() {
+        // Codex report: audio "Captive's War, Book 1 - The Mercy of Gods" (ASIN, no series
+        // field) and ebook "The Mercy of Gods" (ISBN, no series field) showed as two works,
+        // so audio ⇄ text progress and read-along never linked. They must be one work.
+        val g = builder.build(
+            listOf(
+                audio("a", "Captive's War, Book 1 - The Mercy of Gods",
+                    author = "James S. A. Corey", asin = "B0CW3RXP1Q"),
+                ebook("b", "The Mercy of Gods",
+                    author = "James S. A. Corey", isbn = "9780316592697"),
+            )
+        )
+        assertEquals(1, g.works.size)
+        assertEquals("The Mercy of Gods", g.works.single().title)
+        assertTrue(g.editions.any { it.format == EditionFormat.AUDIO })
+        assertTrue(g.editions.any { it.format == EditionFormat.EBOOK })
+    }
+
+    @Test
     fun `subtitle variants of one work join fuzzily`() {
         val g = builder.build(
             listOf(

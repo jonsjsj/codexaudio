@@ -169,7 +169,20 @@ class GraphBuilder(
 
         for (n in nodes) {
             val refs = n.book.series.filter { it.name.isNotBlank() }
-            if (refs.isEmpty()) continue
+            if (refs.isEmpty()) {
+                // No structured series field — recover it from an Audible-style
+                // "<Series>, Book N - <Title>" prefix baked into the title, so the item still
+                // clusters with its siblings and lands under the series for browsing.
+                val emb = Normalize.splitEmbeddedSeries(n.book.title) ?: continue
+                val norm = Normalize.normSeries(emb.seriesRaw)
+                if (norm.isBlank()) continue
+                n.seriesNorm = norm
+                n.seriesRaw = emb.seriesRaw
+                if (!n.omnibus) n.position = emb.position
+                variants.getOrPut(norm) { mutableMapOf() }.merge(emb.seriesRaw, 1, Int::plus)
+                authorsPerNorm.getOrPut(norm) { sortedSetOf() }.add(n.authorKey)
+                continue
+            }
             var primary = refs.first()
             // Umbrella + sub-series: "Discworld" + "Discworld - The City Watch"
             if (refs.size >= 2) {

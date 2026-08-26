@@ -26,6 +26,19 @@ object Normalize {
         "^(?<stem>.+?)[,:]?\\s+(book|vol\\.?|volume)\\s+(?<num>\\d+(\\.\\d+)?)$"
     )
     private val TITLE_HASH_SUFFIX = Regex("^(?<stem>.+?)\\s*#(?<num>\\d+(\\.\\d+)?)$")
+    // Audible-style "<Series>, Book N - <Title>" / "<Series> Vol. 2: <Title>" prefix baked
+    // into an audiobook's title. Requires an explicit book/volume number AND a separator
+    // before the real title, so it never fires on an ordinary title that happens to contain
+    // a colon. The e-book edition usually carries a clean title, so lifting this prefix lets
+    // the two editions normalize to the same key and pair up.
+    private val EMBEDDED_SERIES_PREFIX = Regex(
+        "^(?<series>.+?)[,:]?\\s+(?:book|bk\\.?|vol\\.?|volume)\\s+(?<num>\\d+(\\.\\d+)?)\\s*[:\\-–—]\\s+(?<rest>.+)$",
+        RegexOption.IGNORE_CASE
+    )
+    private val EMBEDDED_SERIES_HASH_PREFIX = Regex(
+        "^(?<series>.+?)\\s*#(?<num>\\d+(\\.\\d+)?)\\s*[:\\-–—]\\s+(?<rest>.+)$",
+        RegexOption.IGNORE_CASE
+    )
     private val SUBTITLE_DROPPABLE = Regex(
         "^(a novel( of .*)?|book (one|two|three|four|five|six|seven|eight|nine|ten|\\d+)( of .*)?|" +
             "the (first|second|third|fourth|fifth|final) (book|novel|volume)( of .*)?)$"
@@ -99,7 +112,11 @@ object Normalize {
      * position marker, and the leading article.
      */
     fun normTitle(title: String, knownSeriesNorms: Collection<String> = emptySet()): String {
-        var s = basic(PARENTHETICAL.replace(title, " "))
+        // Lift an Audible-style "<Series>, Book N - " prefix first, so an audiobook whose
+        // series is baked into the title collapses to the same key as its clean-titled e-book
+        // even when no structured series metadata exists (Codex issue: audio ⇄ text unpaired).
+        val work = splitEmbeddedSeries(title)?.cleanTitle ?: title
+        var s = basic(PARENTHETICAL.replace(work, " "))
         // Strip "<series>: " prefix
         for (sep in listOf(":", " - ", " – ", "—")) {
             val idx = s.indexOf(sep)
@@ -126,6 +143,31 @@ object Normalize {
         s = LEADING_ARTICLE.replace(s.trim(), "")
         s = NON_ALNUM.replace(s, " ").replace("#", " ")
         return WHITESPACE.replace(s, " ").trim()
+    }
+
+    data class SeriesPrefix(val seriesRaw: String, val position: Double, val cleanTitle: String)
+
+    /**
+     * Split an Audible-style "<Series>, Book N - <Title>" (or "<Series> Vol. 2: <Title>",
+     * "<Series> #3 - <Title>") leading prefix off a title. High-confidence: it only fires
+     * when an explicit book/volume number sits between a series name and a separator before
+     * the real title — the exact shape audiobook publishers bake into titles when there is no
+     * structured series field. Returns null for ordinary titles (no false positives on
+     * "1984: A Novel", "Star Wars: The Old Republic", etc.).
+     *
+     * Used to (a) collapse such a title to the same identity key as a clean-titled sibling
+     * edition, and (b) recover series membership + position for browsing when metadata omits it.
+     */
+    fun splitEmbeddedSeries(title: String): SeriesPrefix? {
+        val t = title.trim()
+        val m = EMBEDDED_SERIES_PREFIX.matchEntire(t)
+            ?: EMBEDDED_SERIES_HASH_PREFIX.matchEntire(t)
+            ?: return null
+        val series = m.groups["series"]!!.value.trim().trimEnd(',', ':', '-', '–', '—', ' ').trim()
+        val rest = m.groups["rest"]!!.value.trim()
+        // A real series name has at least one letter; guard against "1 - Foo" style noise.
+        if (series.isBlank() || rest.isBlank() || series.none { it.isLetter() }) return null
+        return SeriesPrefix(series, m.groups["num"]!!.value.toDouble(), rest)
     }
 
     data class RecoveredPosition(val seriesNorm: String, val position: Double)

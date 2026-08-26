@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.30.0
+
+- **Less clutter, explanations on tap.** Wordy helper text is being replaced with a small ⓘ you tap to read the explanation — starting with the Audio-ebook sync row on the book page. More screens to follow.
+
 ## 0.4.29.0
 
 - **Bookmarks show on the audiobook scrubber too.** The player's progress bar now has the same bookmark dots as the reader — tap one to jump straight to that moment.

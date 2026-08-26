@@ -58,6 +58,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
 import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.designsystem.FlatTabRow
+import no.bellaybestia.audex.designsystem.InfoDot
 import no.bellaybestia.audex.designsystem.TintFromCover
 import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Edition
@@ -832,22 +833,38 @@ private fun WordSyncRow(status: WordSyncStatus, progress: WordSyncProgress, onPr
             )
             androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(text = "Audio-ebook sync", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = when (status) {
-                        WordSyncStatus.READY ->
-                            "Synced — open the ebook while the audiobook plays and the narrated text highlights as you read."
-                        WordSyncStatus.RUNNING -> buildString {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = when (status) {
+                            WordSyncStatus.READY -> "Synced"
+                            WordSyncStatus.NOT_CONFIGURED -> "Audio-ebook sync"
+                            else -> "Audio-ebook sync"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    InfoDot(
+                        text = when (status) {
+                            WordSyncStatus.READY ->
+                                "Open the ebook while the audiobook plays and the narrated text highlights as you read."
+                            WordSyncStatus.RUNNING ->
+                                "Building the audio↔text alignment map on the server. It'll highlight the narration once it's ready."
+                            WordSyncStatus.NOT_CONFIGURED ->
+                                "Set the alignment service URL in Settings → Audio-ebook sync to enable it."
+                            else -> "Align the narration with the ebook text so the two stay in sync."
+                        },
+                    )
+                }
+                // Live build progress stays visible (it's status, not an explanation).
+                if (status == WordSyncStatus.RUNNING) {
+                    Text(
+                        text = buildString {
                             append(progress.phase ?: "Preparing on the server")
                             progress.etaSeconds?.let { append(" · ~${formatEta(it)} left") }
-                        }
-                        WordSyncStatus.NOT_CONFIGURED ->
-                            "Set the alignment service URL in Settings → Audio-ebook sync to enable."
-                        else -> "Align the narration with the ebook text so the two stay in sync."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             when (status) {
                 WordSyncStatus.READY -> Icon(

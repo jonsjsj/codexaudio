@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.29.0
+
+- **Bookmarks show on the audiobook scrubber too.** The player's progress bar now has the same bookmark dots as the reader — tap one to jump straight to that moment.
+
 ## 0.4.28.0
 
 - **A stray drag never loses your place.** When you jump more than about a page in the

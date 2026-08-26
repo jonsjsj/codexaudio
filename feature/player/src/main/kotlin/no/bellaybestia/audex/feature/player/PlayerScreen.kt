@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.offset
+import kotlin.math.roundToInt
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -93,7 +95,14 @@ fun PlayerScreen(
         PlayerHero(state = state)
 
         Column(Modifier.padding(horizontal = 20.dp)) {
-            ProgressSection(state = state, onSeek = viewModel::seekTo)
+            val playerBookmarks by viewModel.bookmarks.collectAsState()
+            ProgressSection(
+                state = state,
+                onSeek = viewModel::seekTo,
+                bookmarkFractions = playerBookmarks.map {
+                    (it.timeS * 1000f / state.durationMs.coerceAtLeast(1)).coerceIn(0f, 1f)
+                },
+            )
             Spacer(Modifier.height(8.dp))
             TransportRow(state = state, viewModel = viewModel)
             Spacer(Modifier.height(20.dp))
@@ -201,7 +210,11 @@ private fun PlayerHero(state: PlaybackState) {
  * mockup's progress block. The waveform lights up to the play head.
  */
 @Composable
-private fun ProgressSection(state: PlaybackState, onSeek: (Long) -> Unit) {
+private fun ProgressSection(
+    state: PlaybackState,
+    onSeek: (Long) -> Unit,
+    bookmarkFractions: List<Float> = emptyList(),
+) {
     var dragFraction by remember { mutableStateOf<Float?>(null) }
     val duration = state.durationMs.coerceAtLeast(1)
     val liveFraction = (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
@@ -218,19 +231,36 @@ private fun ProgressSection(state: PlaybackState, onSeek: (Long) -> Unit) {
                 modifier = Modifier.padding(bottom = 4.dp),
             )
         }
-        Slider(
-            value = fraction,
-            onValueChange = { dragFraction = it },
-            onValueChangeFinished = {
-                dragFraction?.let { onSeek((it * duration).toLong()) }
-                dragFraction = null
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.outline,
-            ),
-        )
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+            // Material sliders inset the track by ~the thumb radius (10dp) each side.
+            val inset = with(androidx.compose.ui.platform.LocalDensity.current) { 10.dp.toPx() }
+            Slider(
+                value = fraction,
+                onValueChange = { dragFraction = it },
+                onValueChangeFinished = {
+                    dragFraction?.let { onSeek((it * duration).toLong()) }
+                    dragFraction = null
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.outline,
+                ),
+            )
+            // Bookmark ticks over the track — tap to jump there.
+            bookmarkFractions.forEach { f ->
+                val x = inset + f.coerceIn(0f, 1f) * (widthPx - 2 * inset)
+                Box(
+                    Modifier.align(androidx.compose.ui.Alignment.CenterStart)
+                        .offset { androidx.compose.ui.unit.IntOffset((x - 5f).roundToInt(), 0) }
+                        .size(10.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.tertiary)
+                        .clickable { onSeek((f * duration).toLong()) },
+                )
+            }
+        }
         Waveform(fraction = fraction)
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

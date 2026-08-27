@@ -247,7 +247,9 @@ def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
     """Transcribe one chunk WAV, appending global-timeline AsrWords. Word times are
     spread linearly across each SEGMENT (no per-word timestamps — those ~triple the
     run and sentence anchors don't need them). Returns the chunk's end offset."""
-    segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=5)
+    # beam_size=1 (greedy): alignment only needs the recognized WORDS to n-gram-match the
+    # book, not best-quality prose — greedy is ~5x cheaper than beam=5 and just as matchable.
+    segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=1)
     base = offset + chunk_off
     for seg in segments:
         toks = seg.text.split()
@@ -282,10 +284,11 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
 
     from faster_whisper import WhisperModel
 
-    # GPU-first with a graceful ladder: the box shares its GPU with another resident
-    # Whisper service, so free VRAM fluctuates. Try the requested (fast) compute, then a
-    # smaller GPU compute (int8, ~1GB less), then CPU — so a build still uses the GPU
-    # whenever any room exists, and only falls to slow CPU when the card is truly full.
+    # GPU-first, else CPU. The box shares its GPU with another resident Whisper service,
+    # so a load can OOM when free VRAM is tight — fall back to CPU rather than fail the
+    # build. (NOTE: pure `int8` on this GPU/ctranslate2/WSL combo HANGS — GPU and CPU both
+    # idle, no output — so we do NOT try it as a middle rung; int8_float16 works, int8
+    # doesn't. If the card is too full for int8_float16, CPU is the reliable choice.)
     def _load(dev, comp):
         log.info("loading %s on %s/%s", model_name, dev, comp)
         return WhisperModel(model_name, device=dev, compute_type=comp)
@@ -295,12 +298,8 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
     except Exception as exc:
         if device == "cpu":
             raise
-        log.warning("GPU load %s failed (%s) — retrying int8 on GPU", compute_type, exc)
-        try:
-            model = _load(device, "int8")
-        except Exception as exc2:
-            log.warning("int8 on GPU also failed (%s) — falling back to CPU/int8", exc2)
-            model = _load("cpu", "int8")
+        log.warning("GPU load %s failed (%s) — falling back to CPU/int8", compute_type, exc)
+        model = _load("cpu", "int8")
     words: list[AsrWord] = []
     offset = 0.0
     # Total chunks up front → a real 0..1 progress fraction as chunks are transcribed.
@@ -328,27 +327,19 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
                     _os.remove(wav_path)
                     log.info("chunk done at %.0fs (%d words so far)", offset + file_end, len(words))
             else:
+                # Sequential decode→transcribe. ffmpeg decodes a chunk in ~1s (~250x
+                # realtime), so it's a negligible fraction of the per-chunk GPU cost — no
+                # need for the parallel-decode machinery (which also risked a threads↔CUDA
+                # stall). One chunk WAV on disk at a time; removed right after transcribing.
                 n = max(1, int((dur + chunk_s - 1) // chunk_s))
-                # Cap decode lookahead so at most a few chunk WAVs sit on disk at once.
-                gate = threading.Semaphore(_DECODE_WORKERS + 2)
-
-                def _decode_gated(i):
-                    gate.acquire()
-                    return _decode_chunk(path, workdir, i, i * chunk_s, chunk_s)
-
-                with ThreadPoolExecutor(max_workers=_DECODE_WORKERS) as ex:
-                    futures = {i: ex.submit(_decode_gated, i) for i in range(n)}
-                    for i in range(n):
-                        wav_path, chunk_off, cdur = futures[i].result()
-                        try:
-                            if wav_path:
-                                file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
-                                _os.remove(wav_path)
-                                log.info("chunk %d/%d done at %.0fs (%d words so far)",
-                                         i + 1, n, offset + file_end, len(words))
-                        finally:
-                            gate.release()  # let the next decode start
-                        _tick()
+                for i in range(n):
+                    wav_path, chunk_off, cdur = _decode_chunk(path, workdir, i, i * chunk_s, chunk_s)
+                    if wav_path:
+                        file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
+                        _os.remove(wav_path)
+                        log.info("chunk %d/%d done at %.0fs (%d words so far)",
+                                 i + 1, n, offset + file_end, len(words))
+                    _tick()
             offset += file_end if dur <= 0 else max(file_end, dur)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)

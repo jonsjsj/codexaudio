@@ -40,6 +40,14 @@ if DEVICE == "auto":
     except Exception:
         DEVICE = "cpu"
 MODEL = os.environ.get("ALIGN_MODEL", "small")
+# This GPU is shared with another resident Whisper model (subtitles), leaving only ~2GB
+# free — enough to LOAD large-v3 but not to run its inference (it OOMs after the first
+# chunk). Cap the GPU model at 'medium', which fits with headroom and is more than
+# accurate enough for word-anchoring (we only need enough correct words to n-gram match
+# the book). On CPU, or with ALIGN_MODEL forced, honor the request.
+if DEVICE == "cuda" and MODEL in ("large-v3", "large-v2", "large-v1", "large") \
+        and not os.environ.get("ALIGN_MODEL_FORCE"):
+    MODEL = "medium"
 COMPUTE = os.environ.get("ALIGN_COMPUTE", "int8_float16" if DEVICE == "cuda" else "int8")
 DATA_DIR = Path(os.environ.get("ALIGN_DATA", "/data"))
 MAPS_DIR = DATA_DIR / "maps"

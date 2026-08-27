@@ -49,6 +49,11 @@ if DEVICE == "cuda" and MODEL in ("large-v3", "large-v2", "large-v1", "large") \
         and not os.environ.get("ALIGN_MODEL_FORCE"):
     MODEL = "medium"
 COMPUTE = os.environ.get("ALIGN_COMPUTE", "int8_float16" if DEVICE == "cuda" else "int8")
+# Reuse the box's existing whisper-asr web service (one resident large-v3 model) instead
+# of loading a SECOND Whisper model onto the shared GPU — that second model OOMs/contends.
+# Set to "" to force a locally-loaded model instead. Reachable from this container at the
+# docker-bridge gateway; override if whisper-asr moves.
+ASR_URL = os.environ.get("ALIGN_ASR_URL", "http://172.17.0.1:9100").strip()
 DATA_DIR = Path(os.environ.get("ALIGN_DATA", "/data"))
 MAPS_DIR = DATA_DIR / "maps"
 # Raw word-level transcripts, saved so a map can be REBUILT after an algorithm
@@ -295,6 +300,7 @@ def health():
         "device": DEVICE,
         "model": MODEL,
         "compute": COMPUTE,
+        "asr": ASR_URL or "local",
         "maps": len(list(MAPS_DIR.glob("*.json"))),
         "jobs": {k: v["state"] for k, v in jobs.items()},
     }
@@ -469,7 +475,8 @@ def _run_align(job_id: str, key: str, epub_path: str, audio_paths: list[str], wo
         _set(job_id, "transcribing", f"{len(audio_paths)} file(s), model={MODEL}, device={DEVICE}")
         _set_progress(job_id, 0.0)
         words, duration = transcribe(audio_paths, MODEL, DEVICE, COMPUTE,
-                                     on_progress=lambda p: _set_progress(job_id, p))
+                                     on_progress=lambda p: _set_progress(job_id, p),
+                                     asr_url=ASR_URL or None)
         # Persist the raw word-level transcript so the map can be rebuilt after an
         # algorithm change WITHOUT paying the multi-hour transcription again.
         try:

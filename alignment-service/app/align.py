@@ -242,29 +242,58 @@ def _decode_chunk_av(path: str, workdir: str, idx: int, start_s: float, chunk_s:
     return (str(p), start_s, written / 16000.0)
 
 
-def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
-                    words: list) -> float:
-    """Transcribe one chunk WAV, appending global-timeline AsrWords. Word times are
-    spread linearly across each SEGMENT (no per-word timestamps — those ~triple the
-    run and sentence anchors don't need them). Returns the chunk's end offset."""
-    # beam_size=1 (greedy): alignment only needs the recognized WORDS to n-gram-match the
-    # book, not best-quality prose — greedy is ~5x cheaper than beam=5 and just as matchable.
+def _remote_asr(asr_url: str, wav_path: str) -> list[tuple[float, float, str]]:
+    """Transcribe one WAV via the shared whisper-asr web service → [(start, end, text)].
+    Lets align reuse the ONE resident large-v3 model on the box instead of loading a
+    second Whisper model onto the same GPU (which OOMs). onerahmet output=json returns
+    faster-whisper segments with start/end."""
+    import httpx
+
+    with open(wav_path, "rb") as f:
+        r = httpx.post(
+            f"{asr_url}/asr",
+            params={"output": "json", "encode": "false", "word_timestamps": "false"},
+            files={"audio_file": ("chunk.wav", f, "audio/wav")},
+            timeout=1800,
+        )
+    r.raise_for_status()
+    j = r.json()
+    return [(float(s.get("start") or 0.0), float(s.get("end") or 0.0), s.get("text") or "")
+            for s in (j.get("segments") or [])]
+
+
+def _segments(model, wav_path: str, asr_url):
+    """(segments, duration) for a chunk — segments as (start, end, text) tuples — from the
+    remote ASR service when configured, else a local model. beam_size=1 (greedy) locally:
+    alignment only needs the recognized WORDS to n-gram-match the book, not best prose."""
+    if asr_url:
+        segs = _remote_asr(asr_url, wav_path)
+        return segs, max((e for _, e, _ in segs), default=0.0)
     segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=1)
+    return [(float(s.start), float(s.end), s.text) for s in segments], float(info.duration or 0.0)
+
+
+def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
+                    words: list, asr_url=None) -> float:
+    """Transcribe one chunk WAV, appending global-timeline AsrWords. Word times are spread
+    linearly across each SEGMENT (sentence anchors don't need per-word times). Returns the
+    chunk's end offset."""
+    segs, dur = _segments(model, wav_path, asr_url)
     base = offset + chunk_off
-    for seg in segments:
-        toks = seg.text.split()
+    for s_start, s_end, s_text in segs:
+        toks = s_text.split()
         if not toks:
             continue
-        span = max(float(seg.end) - float(seg.start), 0.001)
+        span = max(s_end - s_start, 0.001)
         for i, tok in enumerate(toks):
-            t0 = base + float(seg.start) + span * (i / len(toks))
-            t1 = base + float(seg.start) + span * ((i + 1) / len(toks))
+            t0 = base + s_start + span * (i / len(toks))
+            t1 = base + s_start + span * ((i + 1) / len(toks))
             words.append(AsrWord(t0, t1, tok))
-    return chunk_off + float(info.duration or 0.0)
+    return chunk_off + dur
 
 
 def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str,
-               chunk_s: int = 300, on_progress=None):
+               chunk_s: int = 300, on_progress=None, asr_url=None):
     """All audio files in order → one global-timeline list of AsrWords.
 
     Decodes each file into fixed chunks IN PARALLEL (bounded memory + bounded disk via
@@ -282,24 +311,35 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
     import threading
     from concurrent.futures import ThreadPoolExecutor
 
-    from faster_whisper import WhisperModel
+    # Preferred: transcribe through the shared whisper-asr service (one resident large-v3
+    # model on the box, no second model on the GPU → no VRAM contention/OOM). Fall back to
+    # a locally-loaded model only if that service is unreachable.
+    model = None
+    if asr_url:
+        try:
+            import httpx
+            httpx.get(f"{asr_url}/docs", timeout=8)  # any response = reachable
+            log.info("transcribing via remote ASR %s (no local model loaded)", asr_url)
+        except Exception as exc:
+            log.warning("remote ASR %s unreachable (%s) — loading a local model", asr_url, exc)
+            asr_url = None
 
-    # GPU-first, else CPU. The box shares its GPU with another resident Whisper service,
-    # so a load can OOM when free VRAM is tight — fall back to CPU rather than fail the
-    # build. (NOTE: pure `int8` on this GPU/ctranslate2/WSL combo HANGS — GPU and CPU both
-    # idle, no output — so we do NOT try it as a middle rung; int8_float16 works, int8
-    # doesn't. If the card is too full for int8_float16, CPU is the reliable choice.)
-    def _load(dev, comp):
-        log.info("loading %s on %s/%s", model_name, dev, comp)
-        return WhisperModel(model_name, device=dev, compute_type=comp)
+    if not asr_url:
+        from faster_whisper import WhisperModel
 
-    try:
-        model = _load(device, compute_type)
-    except Exception as exc:
-        if device == "cpu":
-            raise
-        log.warning("GPU load %s failed (%s) — falling back to CPU/int8", compute_type, exc)
-        model = _load("cpu", "int8")
+        # GPU-first, else CPU. (NOTE: pure `int8` on this GPU/ctranslate2/WSL combo HANGS;
+        # int8_float16 works. If the card is too full for it, CPU is the reliable choice.)
+        def _load(dev, comp):
+            log.info("loading %s on %s/%s", model_name, dev, comp)
+            return WhisperModel(model_name, device=dev, compute_type=comp)
+
+        try:
+            model = _load(device, compute_type)
+        except Exception as exc:
+            if device == "cpu":
+                raise
+            log.warning("GPU load %s failed (%s) — falling back to CPU/int8", compute_type, exc)
+            model = _load("cpu", "int8")
     words: list[AsrWord] = []
     offset = 0.0
     # Total chunks up front → a real 0..1 progress fraction as chunks are transcribed.
@@ -323,7 +363,7 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
             if dur <= 0:
                 # Unknown duration: keep the safe single-pass path.
                 for wav_path, chunk_off in _split_to_wavs(path, workdir, chunk_s):
-                    file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
+                    file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words, asr_url)
                     _os.remove(wav_path)
                     log.info("chunk done at %.0fs (%d words so far)", offset + file_end, len(words))
             else:
@@ -335,7 +375,7 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
                 for i in range(n):
                     wav_path, chunk_off, cdur = _decode_chunk(path, workdir, i, i * chunk_s, chunk_s)
                     if wav_path:
-                        file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
+                        file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words, asr_url)
                         _os.remove(wav_path)
                         log.info("chunk %d/%d done at %.0fs (%d words so far)",
                                  i + 1, n, offset + file_end, len(words))

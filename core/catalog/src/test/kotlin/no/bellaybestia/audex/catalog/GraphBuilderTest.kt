@@ -110,12 +110,14 @@ class GraphBuilderTest {
         // Codex report: audio "Captive's War, Book 1 - The Mercy of Gods" (ASIN, no series
         // field) and ebook "The Mercy of Gods" (ISBN, no series field) showed as two works,
         // so audio ⇄ text progress and read-along never linked. They must be one work.
+        // Exact live ABS metadata: no ASIN/ISBN, no series field, and the author is even
+        // spelled differently ("James S. A. Corey" vs "James S.A. Corey").
         val g = builder.build(
             listOf(
                 audio("a", "Captive's War, Book 1 - The Mercy of Gods",
-                    author = "James S. A. Corey", asin = "B0CW3RXP1Q"),
+                    author = "James S. A. Corey"),
                 ebook("b", "The Mercy of Gods",
-                    author = "James S. A. Corey", isbn = "9780316592697"),
+                    author = "James S.A. Corey"),
             )
         )
         assertEquals(1, g.works.size)

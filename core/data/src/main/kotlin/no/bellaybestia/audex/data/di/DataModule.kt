@@ -15,6 +15,7 @@ import no.bellaybestia.audex.data.CodexSyncImpl
 import no.bellaybestia.audex.data.DownloadsImpl
 import no.bellaybestia.audex.data.EbookProgressWriterImpl
 import no.bellaybestia.audex.data.HighlightsRepositoryImpl
+import no.bellaybestia.audex.data.NotificationSettingsImpl
 import no.bellaybestia.audex.data.ReaderSettingsStoreImpl
 import no.bellaybestia.audex.data.PlaybackControllerImpl
 import no.bellaybestia.audex.data.PodcastRepositoryImpl
@@ -39,6 +40,7 @@ import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.PodcastRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.CodexSync
+import no.bellaybestia.audex.domain.settings.NotificationSettings
 import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import no.bellaybestia.audex.domain.settings.ActivityRecorder
 import no.bellaybestia.audex.domain.settings.ActivityStatsRepository
@@ -88,6 +90,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun readerSettingsStore(impl: ReaderSettingsStoreImpl): ReaderSettingsStore
+
+    @Binds
+    abstract fun notificationSettings(impl: NotificationSettingsImpl): NotificationSettings
 
     @Binds
     abstract fun themeSettings(impl: ThemeSettingsImpl): ThemeSettings

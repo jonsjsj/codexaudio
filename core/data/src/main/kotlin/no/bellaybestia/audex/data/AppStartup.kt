@@ -51,6 +51,9 @@ class AppStartup @Inject constructor(
         // rows the UI can never act on. FAILED shows "Retry".
         downloadDao.adoptOrphanedActive()
         workScheduler.get().uploadSessionsNow()
+        // Resume watching any read-along build that was pending when the app was last
+        // closed, so its done/failure notification still fires. No-ops when none pending.
+        workScheduler.get().watchAlignmentNow()
         // Populate podcasts promptly on launch (the periodic worker's first run
         // can be deferred a while by WorkManager).
         workScheduler.get().syncPodcastsNow()

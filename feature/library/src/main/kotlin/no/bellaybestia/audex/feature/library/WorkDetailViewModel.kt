@@ -238,7 +238,7 @@ class WorkDetailViewModel @Inject constructor(
             val ebookItem = ebook.libraryItemId
                 .takeIf { ebook.serverId == audio.serverId && it != audio.libraryItemId }
             alignmentRepository
-                .requestAlignment(audio.serverId, audio.libraryItemId, ebookItem)
+                .requestAlignment(audio.serverId, audio.libraryItemId, ebookItem, title)
                 .onFailure { _wordSync.value = WordSyncStatus.NONE }
         }
     }

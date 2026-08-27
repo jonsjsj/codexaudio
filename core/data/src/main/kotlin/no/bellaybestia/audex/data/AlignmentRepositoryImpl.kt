@@ -13,11 +13,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import no.bellaybestia.audex.auth.ServerTokenStore
 import no.bellaybestia.audex.database.ServerDao
 import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.reader.AlignmentWatch
 import no.bellaybestia.audex.domain.reader.SyncAnchor
 import no.bellaybestia.audex.domain.reader.SyncChapter
 import no.bellaybestia.audex.domain.reader.SyncMap
@@ -30,6 +32,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 private val KEY_ALIGN_URL = stringPreferencesKey("align_service_url")
+private val KEY_WATCHES = stringPreferencesKey("pending_alignments")
+
+/** Persisted watch entry (short field names keep the JSON small). */
+@Serializable
+private data class WireWatch(val s: String, val i: String, val t: String, val at: Long)
 
 @Serializable
 private data class WireAnchor(
@@ -93,6 +100,9 @@ class AlignmentRepositoryImpl @Inject constructor(
     private val serverDao: ServerDao,
     private val tokenStore: ServerTokenStore,
     private val codexSync: CodexSync,
+    // Lazy: WorkScheduler eagerly inits WorkManager; defer so it isn't built before
+    // the app's worker factory (same hazard AppStartup guards against).
+    private val workScheduler: dagger.Lazy<WorkScheduler>,
 ) : AlignmentRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -139,6 +149,7 @@ class AlignmentRepositoryImpl @Inject constructor(
         serverId: String,
         audioItemId: String,
         ebookItemId: String?,
+        title: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         codexAlignBase()?.let { base ->
             return@withContext runCatching {
@@ -153,6 +164,7 @@ class AlignmentRepositoryImpl @Inject constructor(
                     check(response.isSuccessful) { "Codex align build said HTTP ${response.code}" }
                 }
                 requested.add(audioItemId)
+                registerWatch(serverId, audioItemId, title)
                 Unit
             }
         }
@@ -176,9 +188,45 @@ class AlignmentRepositoryImpl @Inject constructor(
                 }
             }
             requested.add(key)
+            registerWatch(serverId, audioItemId, title)
             Unit
         }
     }
+
+    /** Persist a watch for [audioItemId] + kick the background watcher. Never throws into
+     *  the build result — a notification is best-effort. */
+    private suspend fun registerWatch(serverId: String, audioItemId: String, title: String) {
+        runCatching {
+            watchAlignment(serverId, audioItemId, title)
+            workScheduler.get().watchAlignmentNow()
+        }
+    }
+
+    override suspend fun watchAlignment(serverId: String, audioItemId: String, title: String) {
+        context.appSettingsDataStore.edit { p ->
+            val cur = decodeWatches(p[KEY_WATCHES])
+            val next = cur.filterNot { it.i == audioItemId } +
+                WireWatch(serverId, audioItemId, title, System.currentTimeMillis())
+            p[KEY_WATCHES] = json.encodeToString(ListSerializer(WireWatch.serializer()), next)
+        }
+    }
+
+    override suspend fun pendingAlignments(): List<AlignmentWatch> =
+        decodeWatches(context.appSettingsDataStore.data.first()[KEY_WATCHES])
+            .map { AlignmentWatch(it.s, it.i, it.t, it.at) }
+
+    override suspend fun clearAlignmentWatch(audioItemId: String) {
+        context.appSettingsDataStore.edit { p ->
+            val cur = decodeWatches(p[KEY_WATCHES])
+            p[KEY_WATCHES] = json.encodeToString(
+                ListSerializer(WireWatch.serializer()), cur.filterNot { it.i == audioItemId },
+            )
+        }
+    }
+
+    private fun decodeWatches(raw: String?): List<WireWatch> =
+        raw?.let { runCatching { json.decodeFromString(ListSerializer(WireWatch.serializer()), it) }.getOrNull() }
+            ?: emptyList()
 
     override suspend fun syncMap(serverId: String, audioItemId: String): SyncMap? =
         withContext(Dispatchers.IO) {

@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.qualifiers.ApplicationContext
+import no.bellaybestia.audex.data.workers.AlignmentWatchWorker
 import no.bellaybestia.audex.data.workers.DownloadWorker
 import no.bellaybestia.audex.data.workers.EbookProgressUploadWorker
 import no.bellaybestia.audex.data.workers.LibrarySyncWorker
@@ -84,6 +85,20 @@ class WorkScheduler @Inject constructor(
             "${LibrarySyncWorker.UNIQUE_NAME}-now",
             ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<LibrarySyncWorker>().setConstraints(connected).build(),
+        )
+    }
+
+    /** Poll the read-along builds we're watching and notify on completion/failure.
+     *  Self-reschedules (from the worker) while any build is still pending, with a short
+     *  delay so a running build is re-polled without hammering the service. */
+    fun watchAlignmentNow() {
+        workManager.enqueueUniqueWork(
+            AlignmentWatchWorker.UNIQUE_NAME,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<AlignmentWatchWorker>()
+                .setConstraints(connected)
+                .setInitialDelay(90, TimeUnit.SECONDS)
+                .build(),
         )
     }
 

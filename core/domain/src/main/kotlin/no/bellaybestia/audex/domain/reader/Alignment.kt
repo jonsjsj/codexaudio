@@ -186,6 +186,15 @@ data class WordSyncProgress(
  * repo). The service URL is user configuration — the feature is hidden until
  * it's set. Maps are cached on disk so the reader works offline once fetched.
  */
+/** A requested alignment build we're watching so a background worker can post a
+ *  "done"/"failed" notification even after the app is closed. */
+data class AlignmentWatch(
+    val serverId: String,
+    val audioItemId: String,
+    val title: String,
+    val startedAtMs: Long,
+)
+
 interface AlignmentRepository {
     suspend fun serviceUrl(): String?
     suspend fun setServiceUrl(url: String?)
@@ -206,6 +215,7 @@ interface AlignmentRepository {
         serverId: String,
         audioItemId: String,
         ebookItemId: String?,
+        title: String = "",
     ): Result<Unit>
 
     /** Fetch (or load cached) sync map for a work's audio item; null if none. */
@@ -213,6 +223,16 @@ interface AlignmentRepository {
 
     /** Coarse status for the work-detail row. */
     suspend fun status(serverId: String, audioItemId: String): WordSyncStatus
+
+    /** Persistently track a requested build so the background watcher can notify on
+     *  completion/failure. Registered automatically by [requestAlignment]. */
+    suspend fun watchAlignment(serverId: String, audioItemId: String, title: String)
+
+    /** Builds currently being watched for a completion/failure notification. */
+    suspend fun pendingAlignments(): List<AlignmentWatch>
+
+    /** Stop watching a build (once it's resolved or timed out). */
+    suspend fun clearAlignmentWatch(audioItemId: String)
 
     /**
      * Live status + progress + ETA for a work's alignment. [audioDurationS] lets the

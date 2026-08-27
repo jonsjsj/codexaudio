@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -69,6 +70,7 @@ fun SettingsScreen(
     val skipSilence by viewModel.skipSilence.collectAsState()
     val themePrefs by viewModel.themePrefs.collectAsState()
     val readerPrefs by viewModel.readerPrefs.collectAsState()
+    val notifPrefs by viewModel.notificationPrefs.collectAsState()
     val updateChannel by viewModel.updateChannel.collectAsState()
     val listState = rememberLazyListState()
 
@@ -461,6 +463,24 @@ fun SettingsScreen(
                 )
             }
         }
+        item(key = "notif-header") { SectionHeader("Notifications") }
+        item(key = "notif-readalong") {
+            ToggleRow(
+                title = "Read-along maps",
+                description = "Get a notification when a read-along (audio-ebook sync) map " +
+                    "finishes building — or if it fails.",
+                on = notifPrefs.readAlong,
+                onToggle = { viewModel.setNotifyReadAlong(it) },
+            )
+        }
+        item(key = "notif-updates") {
+            ToggleRow(
+                title = "App updates",
+                description = "Get a notification when a new version of Audex is available.",
+                on = notifPrefs.appUpdates,
+                onToggle = { viewModel.setNotifyAppUpdates(it) },
+            )
+        }
         item(key = "about-header") { SectionHeader("About") }
         item(key = "about-version") {
             Row(
@@ -585,6 +605,30 @@ private fun ChoiceRow(
                     .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(
+    title: String,
+    description: String,
+    on: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = on, onCheckedChange = onToggle)
+        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

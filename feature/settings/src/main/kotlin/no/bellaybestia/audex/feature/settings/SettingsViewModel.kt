@@ -20,6 +20,8 @@ import no.bellaybestia.audex.domain.repository.ServerRepository
 import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.settings.HomeLook
+import no.bellaybestia.audex.domain.settings.NotificationPrefs
+import no.bellaybestia.audex.domain.settings.NotificationSettings
 import no.bellaybestia.audex.domain.settings.ProgressUnit
 import no.bellaybestia.audex.domain.settings.PlaybackSettings
 import no.bellaybestia.audex.domain.settings.ThemeMode
@@ -37,7 +39,19 @@ class SettingsViewModel @Inject constructor(
     private val codexSync: CodexSync,
     private val playbackSettings: PlaybackSettings,
     private val readerSettings: ReaderSettingsStore,
+    private val notificationSettings: NotificationSettings,
 ) : ViewModel() {
+
+    val notificationPrefs: StateFlow<NotificationPrefs> = notificationSettings.prefs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NotificationPrefs())
+
+    fun setNotifyAppUpdates(enabled: Boolean) {
+        viewModelScope.launch { notificationSettings.set(notificationPrefs.value.copy(appUpdates = enabled)) }
+    }
+
+    fun setNotifyReadAlong(enabled: Boolean) {
+        viewModelScope.launch { notificationSettings.set(notificationPrefs.value.copy(readAlong = enabled)) }
+    }
 
     val readerPrefs: StateFlow<ReaderPrefs> = readerSettings.prefs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReaderPrefs())

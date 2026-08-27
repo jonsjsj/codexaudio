@@ -13,7 +13,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.flow.first
 import no.bellaybestia.audex.MainActivity
+import no.bellaybestia.audex.domain.settings.NotificationSettings
 
 /**
  * Background "new version is ready" notifier (the Codex Companion pattern):
@@ -26,9 +28,12 @@ class UpdateCheckWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted params: WorkerParameters,
     private val updateManager: UpdateManager,
+    private val notificationSettings: NotificationSettings,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // Respect the "App updates" notification toggle (Settings → Notifications).
+        if (!notificationSettings.prefs.first().appUpdates) return Result.success()
         val info = updateManager.check() ?: return Result.success()
         // Notify once per version — re-checking must not re-nag.
         val prefs = appContext.getSharedPreferences("update_notify", Context.MODE_PRIVATE)

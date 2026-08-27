@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.31.1
+
+- **Library grouping fixes now take effect right after an update.** Previously, an update that changed how books are grouped (like the audio+e-book pairing in 0.4.31.0) didn't visibly change your library until the next full sync — up to 6 hours, or a re-login — so it looked like nothing happened. Audex now recomputes the library the first time you open it after updating, instantly and offline. If your audiobook and e-book of the same book were still showing separately, opening this build fixes them.
+
 ## 0.4.31.0
 
 - **Audiobook and e-book of the same book now pair up automatically.** When an audiobook's title bakes in the series ("Captive's War, Book 1 - The Mercy of Gods") but the e-book has a clean title ("The Mercy of Gods"), Audex used to treat them as two separate books — so cross-format progress and read-along never linked. It now recognizes the "Series, Book N - Title" pattern, matches the two editions, and files the book under its series for browsing.

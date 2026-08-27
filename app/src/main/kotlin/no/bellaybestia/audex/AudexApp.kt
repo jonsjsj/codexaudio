@@ -48,7 +48,9 @@ class AudexApp : Application(), Configuration.Provider, ImageLoaderFactory {
             WebView.setWebContentsDebuggingEnabled(true)
         }
         appScope.launch {
-            appStartup.initialize()   // hydrate tokens + wire the refresher
+            // Pass the build's versionCode so startup can recompute the catalog graph
+            // once after an update whose matching logic changed (see AppStartup).
+            appStartup.initialize(BuildConfig.VERSION_CODE)   // hydrate tokens + wire the refresher
             workScheduler.scheduleAll() // periodic library sync + session drain
         }
         // Socket.io connects per server while the app is foregrounded.

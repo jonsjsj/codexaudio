@@ -108,47 +108,177 @@ def _split_to_wavs(path: str, workdir, chunk_s: int = 1800):
     return chunks
 
 
-def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str):
+# Decode chunks in parallel: PyAV/libav releases the GIL during decode+resample, so
+# worker threads scale across cores. Frame-by-frame decode in ONE Python thread was
+# the pipeline's bottleneck (~10x realtime) and, worse, it ran to completion BEFORE
+# any GPU transcription — leaving the GPU idle for ~an hour on a long book. Now decode
+# runs ahead on several cores while the GPU transcribes the chunks already decoded.
+import os as _os
+
+_DECODE_WORKERS = min(6, max(1, (_os.cpu_count() or 2) - 1))
+
+
+def _audio_duration(path: str) -> float:
+    """Total seconds of [path], or 0.0 if the container doesn't report it."""
+    import av
+
+    c = av.open(path)
+    try:
+        if c.duration:
+            return float(c.duration) / av.time_base
+        s = c.streams.audio[0]
+        if s.duration and s.time_base:
+            return float(s.duration) * float(s.time_base)
+    except Exception:
+        pass
+    finally:
+        c.close()
+    return 0.0
+
+
+def _decode_chunk(path: str, workdir: str, idx: int, start_s: float, chunk_s: int):
+    """Decode [start_s, start_s+chunk_s) of [path] into a 16kHz mono s16 WAV.
+
+    Its own container+resampler, so calls are thread-safe and run in parallel. Returns
+    (wav_path, start_s, decoded_seconds), or (None, start_s, 0.0) if the window is empty.
+    A keyframe seek can land slightly before start_s; frames wholly before the window are
+    dropped, and a few seconds of boundary overlap is harmless — the n-gram/LIS matcher is
+    monotonic and tolerates duplicate words.
+    """
+    import av
+    import wave
+    from pathlib import Path
+
+    container = av.open(path)
+    stream = container.streams.audio[0]
+    tb = float(stream.time_base) if stream.time_base else 0.0
+    try:
+        container.seek(max(0, int(start_s / tb)) if tb else 0, stream=stream,
+                       backward=True, any_frame=False)
+    except Exception:
+        pass
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+    p = Path(workdir) / f"chunk_{idx:04d}.wav"
+    w = wave.open(str(p), "wb")
+    w.setnchannels(1)
+    w.setsampwidth(2)
+    w.setframerate(16000)
+    end_s = start_s + chunk_s
+    written = 0
+    reached_eof = True
+    for frame in container.decode(stream):
+        if frame.pts is not None and tb:
+            ft = float(frame.pts) * tb
+            dur = (frame.samples / float(frame.sample_rate)) if frame.sample_rate else 0.0
+            if ft + dur <= start_s:
+                continue  # entirely before our window
+            if ft >= end_s:
+                reached_eof = False
+                break
+        for rf in resampler.resample(frame):
+            w.writeframes(rf.to_ndarray().tobytes())
+            written += rf.samples
+        if written >= chunk_s * 16000:
+            reached_eof = False
+            break
+    if reached_eof:
+        for rf in resampler.resample(None):  # flush the resampler at EOF
+            w.writeframes(rf.to_ndarray().tobytes())
+            written += rf.samples
+    w.close()
+    container.close()
+    if written == 0:
+        try:
+            _os.remove(p)
+        except OSError:
+            pass
+        return (None, start_s, 0.0)
+    return (str(p), start_s, written / 16000.0)
+
+
+def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
+                    words: list) -> float:
+    """Transcribe one chunk WAV, appending global-timeline AsrWords. Word times are
+    spread linearly across each SEGMENT (no per-word timestamps — those ~triple the
+    run and sentence anchors don't need them). Returns the chunk's end offset."""
+    segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=5)
+    base = offset + chunk_off
+    for seg in segments:
+        toks = seg.text.split()
+        if not toks:
+            continue
+        span = max(float(seg.end) - float(seg.start), 0.001)
+        for i, tok in enumerate(toks):
+            t0 = base + float(seg.start) + span * (i / len(toks))
+            t1 = base + float(seg.start) + span * ((i + 1) / len(toks))
+            words.append(AsrWord(t0, t1, tok))
+    return chunk_off + float(info.duration or 0.0)
+
+
+def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str,
+               chunk_s: int = 1800):
     """All audio files in order → one global-timeline list of AsrWords.
 
-    Chunks each file (bounded memory) and transcribes chunk-by-chunk, freeing each
-    chunk WAV as it goes. Word times are spread linearly across each SEGMENT — we
-    deliberately do NOT ask Whisper for per-word timestamps: on CPU that roughly
-    triples the run (a 21h book → ~25h), and the map's anchors are per-SENTENCE, for
-    which segment-level timing (±a second or two) is more than enough.
+    Decodes each file into fixed chunks IN PARALLEL (bounded memory + bounded disk via
+    a lookahead semaphore) and transcribes them in timeline order, so the GPU stays fed
+    while later chunks decode on other cores. A book with no reported duration falls back
+    to the old single-pass streaming decode.
     """
-    import os
     import shutil
     import tempfile
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
 
     from faster_whisper import WhisperModel
 
-    model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    # GPU-first, but degrade to CPU rather than failing the whole build when the card is
+    # out of memory (e.g. WSL not reclaiming VRAM across restarts). A slow map beats none.
+    try:
+        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    except Exception as exc:
+        if device == "cpu":
+            raise
+        log.warning("model load on %s/%s failed (%s) — falling back to CPU/int8",
+                    device, compute_type, exc)
+        model = WhisperModel(model_name, device="cpu", compute_type="int8")
     words: list[AsrWord] = []
     offset = 0.0
     for path in audio_paths:
-        workdir = tempfile.mkdtemp(prefix="chunks_", dir=os.environ.get("TMPDIR"))
+        workdir = tempfile.mkdtemp(prefix="chunks_", dir=_os.environ.get("TMPDIR"))
         try:
+            dur = _audio_duration(path)
             file_end = 0.0
-            for wav_path, chunk_off in _split_to_wavs(path, workdir):
-                segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=5)
-                base = offset + chunk_off
-                for seg in segments:
-                    toks = seg.text.split()
-                    if not toks:
-                        continue
-                    span = max(float(seg.end) - float(seg.start), 0.001)
-                    for i, tok in enumerate(toks):
-                        t0 = base + float(seg.start) + span * (i / len(toks))
-                        t1 = base + float(seg.start) + span * ((i + 1) / len(toks))
-                        words.append(AsrWord(t0, t1, tok))
-                file_end = chunk_off + float(info.duration or 0.0)
-                os.remove(wav_path)
-                log.info("chunk done at %.0fs (%d words so far)", offset + file_end, len(words))
+            if dur <= 0:
+                # Unknown duration: keep the safe single-pass path.
+                for wav_path, chunk_off in _split_to_wavs(path, workdir, chunk_s):
+                    file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
+                    _os.remove(wav_path)
+                    log.info("chunk done at %.0fs (%d words so far)", offset + file_end, len(words))
+            else:
+                n = max(1, int((dur + chunk_s - 1) // chunk_s))
+                # Cap decode lookahead so at most a few chunk WAVs sit on disk at once.
+                gate = threading.Semaphore(_DECODE_WORKERS + 2)
+
+                def _decode_gated(i):
+                    gate.acquire()
+                    return _decode_chunk(path, workdir, i, i * chunk_s, chunk_s)
+
+                with ThreadPoolExecutor(max_workers=_DECODE_WORKERS) as ex:
+                    futures = {i: ex.submit(_decode_gated, i) for i in range(n)}
+                    for i in range(n):
+                        wav_path, chunk_off, cdur = futures[i].result()
+                        try:
+                            if wav_path:
+                                file_end = _transcribe_wav(model, wav_path, offset, chunk_off, words)
+                                _os.remove(wav_path)
+                                log.info("chunk %d/%d done at %.0fs (%d words so far)",
+                                         i + 1, n, offset + file_end, len(words))
+                        finally:
+                            gate.release()  # let the next decode start
+            offset += file_end if dur <= 0 else max(file_end, dur)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
-        offset += file_end
-        log.info("transcribed %s (+%.0fs, total %.0fs, %d words)", path, file_end, offset, len(words))
+        log.info("transcribed %s (total %.0fs, %d words)", path, offset, len(words))
     return words, offset
 
 
@@ -239,27 +369,18 @@ _SENT_END = re.compile(r"[.!?…]+[\"'”’)\]]*(?=\s)|\n{2,}")
 
 
 def _sentences(text: str) -> list[tuple[int, int, str]]:
-    """(c0, c1, sentence_text) spans over the book, skipping tiny fragments.
-
-    c0 is the char offset of sentence_text[0] (leading whitespace excluded) and
-    c1 = c0 + len(sentence_text), so a per-word offset RELATIVE to c0 indexes straight
-    into sentence_text — the reader can't be off by the stripped whitespace.
-    """
+    """(c0, c1, sentence_text) spans over the book, skipping tiny fragments."""
     out: list[tuple[int, int, str]] = []
     start = 0
-
-    def emit(raw_start: int, raw: str) -> None:
-        seg = raw.strip()
-        if len(seg) < 8:
-            return
-        c0 = raw_start + (len(raw) - len(raw.lstrip()))
-        out.append((c0, min(c0 + len(seg), len(text) - 1), seg))
-
     for m in _SENT_END.finditer(text):
         end = m.end()
-        emit(start, text[start:end])
+        seg = text[start:end].strip()
+        if len(seg) >= 8:
+            out.append((start, min(end, len(text) - 1), seg))
         start = end
-    emit(start, text[start:])
+    tail = text[start:].strip()
+    if len(tail) >= 8:
+        out.append((start, len(text) - 1, tail))
     return out
 
 

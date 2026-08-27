@@ -117,6 +117,52 @@ import os as _os
 
 _DECODE_WORKERS = min(6, max(1, (_os.cpu_count() or 2) - 1))
 
+import shutil as _shutil
+import subprocess as _subprocess
+
+# Prefer the ffmpeg CLI: it decodes at C speed (~250x realtime here) vs PyAV's Python
+# frame loop (~12x), so decode stops being the bottleneck entirely. Falls back to PyAV
+# when ffmpeg isn't installed.
+_HAS_FFMPEG = _shutil.which("ffmpeg") is not None
+
+
+def _decode_chunk_ffmpeg(path: str, workdir: str, idx: int, start_s: float, chunk_s: int):
+    """Decode [start_s, start_s+chunk_s) to a 16kHz mono s16 WAV via ffmpeg. Input-seek
+    (`-ss` before `-i`) is fast; a few frames of boundary slack are harmless for sentence
+    anchors. Falls back to PyAV on an ffmpeg failure."""
+    from pathlib import Path
+
+    out = str(Path(workdir) / f"chunk_{idx:04d}.wav")
+    cmd = ["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{start_s:.3f}", "-t", str(chunk_s),
+           "-i", path, "-ar", "16000", "-ac", "1", "-f", "wav", "-y", out]
+    try:
+        r = _subprocess.run(cmd, stdout=_subprocess.DEVNULL,
+                            stderr=_subprocess.PIPE, timeout=600)
+    except Exception as exc:
+        log.warning("ffmpeg chunk %d failed to run (%s) — PyAV fallback", idx, exc)
+        return _decode_chunk_av(path, workdir, idx, start_s, chunk_s)
+    size = _os.path.getsize(out) if _os.path.exists(out) else 0
+    if r.returncode != 0:
+        try:
+            _os.remove(out)
+        except OSError:
+            pass
+        log.warning("ffmpeg chunk %d rc=%s — PyAV fallback", idx, r.returncode)
+        return _decode_chunk_av(path, workdir, idx, start_s, chunk_s)
+    if size <= 44:  # empty tail window (past EOF): a valid "no audio" result
+        try:
+            _os.remove(out)
+        except OSError:
+            pass
+        return (None, start_s, 0.0)
+    return (out, start_s, (size - 44) / 32000.0)
+
+
+def _decode_chunk(path: str, workdir: str, idx: int, start_s: float, chunk_s: int):
+    if _HAS_FFMPEG:
+        return _decode_chunk_ffmpeg(path, workdir, idx, start_s, chunk_s)
+    return _decode_chunk_av(path, workdir, idx, start_s, chunk_s)
+
 
 def _audio_duration(path: str) -> float:
     """Total seconds of [path], or 0.0 if the container doesn't report it."""
@@ -136,8 +182,8 @@ def _audio_duration(path: str) -> float:
     return 0.0
 
 
-def _decode_chunk(path: str, workdir: str, idx: int, start_s: float, chunk_s: int):
-    """Decode [start_s, start_s+chunk_s) of [path] into a 16kHz mono s16 WAV.
+def _decode_chunk_av(path: str, workdir: str, idx: int, start_s: float, chunk_s: int):
+    """PyAV fallback decoder for [start_s, start_s+chunk_s) → 16kHz mono s16 WAV.
 
     Its own container+resampler, so calls are thread-safe and run in parallel. Returns
     (wav_path, start_s, decoded_seconds), or (None, start_s, 0.0) if the window is empty.
@@ -216,13 +262,18 @@ def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
 
 
 def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str,
-               chunk_s: int = 1800):
+               chunk_s: int = 300, on_progress=None):
     """All audio files in order → one global-timeline list of AsrWords.
 
     Decodes each file into fixed chunks IN PARALLEL (bounded memory + bounded disk via
     a lookahead semaphore) and transcribes them in timeline order, so the GPU stays fed
     while later chunks decode on other cores. A book with no reported duration falls back
     to the old single-pass streaming decode.
+
+    chunk_s is deliberately SMALL (5 min): parallel workers share the CPU, so a big chunk
+    takes minutes to finish and the GPU would idle until the first one lands. Small chunks
+    make the first land in ~a minute and keep the decode↔transcribe overlap fine-grained;
+    aggregate decode throughput is unchanged.
     """
     import shutil
     import tempfile
@@ -231,22 +282,44 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
 
     from faster_whisper import WhisperModel
 
-    # GPU-first, but degrade to CPU rather than failing the whole build when the card is
-    # out of memory (e.g. WSL not reclaiming VRAM across restarts). A slow map beats none.
+    # GPU-first with a graceful ladder: the box shares its GPU with another resident
+    # Whisper service, so free VRAM fluctuates. Try the requested (fast) compute, then a
+    # smaller GPU compute (int8, ~1GB less), then CPU — so a build still uses the GPU
+    # whenever any room exists, and only falls to slow CPU when the card is truly full.
+    def _load(dev, comp):
+        log.info("loading %s on %s/%s", model_name, dev, comp)
+        return WhisperModel(model_name, device=dev, compute_type=comp)
+
     try:
-        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        model = _load(device, compute_type)
     except Exception as exc:
         if device == "cpu":
             raise
-        log.warning("model load on %s/%s failed (%s) — falling back to CPU/int8",
-                    device, compute_type, exc)
-        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+        log.warning("GPU load %s failed (%s) — retrying int8 on GPU", compute_type, exc)
+        try:
+            model = _load(device, "int8")
+        except Exception as exc2:
+            log.warning("int8 on GPU also failed (%s) — falling back to CPU/int8", exc2)
+            model = _load("cpu", "int8")
     words: list[AsrWord] = []
     offset = 0.0
-    for path in audio_paths:
+    # Total chunks up front → a real 0..1 progress fraction as chunks are transcribed.
+    durs = [_audio_duration(p) for p in audio_paths]
+    total_chunks = sum(max(1, int((d + chunk_s - 1) // chunk_s)) for d in durs if d > 0)
+    done_chunks = 0
+
+    def _tick():
+        nonlocal done_chunks
+        done_chunks += 1
+        if on_progress and total_chunks:
+            try:
+                on_progress(min(done_chunks / total_chunks, 0.999))
+            except Exception:
+                pass
+
+    for path, dur in zip(audio_paths, durs):
         workdir = tempfile.mkdtemp(prefix="chunks_", dir=_os.environ.get("TMPDIR"))
         try:
-            dur = _audio_duration(path)
             file_end = 0.0
             if dur <= 0:
                 # Unknown duration: keep the safe single-pass path.
@@ -275,6 +348,7 @@ def transcribe(audio_paths: list[str], model_name: str, device: str, compute_typ
                                          i + 1, n, offset + file_end, len(words))
                         finally:
                             gate.release()  # let the next decode start
+                        _tick()
             offset += file_end if dur <= 0 else max(file_end, dur)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)

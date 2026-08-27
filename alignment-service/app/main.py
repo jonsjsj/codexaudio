@@ -33,9 +33,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("audex-align")
 
 DEVICE = os.environ.get("ALIGN_DEVICE", "cpu")
-# "auto": use the GPU when the CUDA backend actually sees one, else CPU. faster-whisper's
-# own "auto" was resolving to CPU/int8 on this box even with a usable GPU (the model had
-# loaded while the GPU was unavailable), so resolve it explicitly against ctranslate2.
 if DEVICE == "auto":
     try:
         import ctranslate2 as _ct
@@ -43,7 +40,7 @@ if DEVICE == "auto":
     except Exception:
         DEVICE = "cpu"
 MODEL = os.environ.get("ALIGN_MODEL", "small")
-COMPUTE = os.environ.get("ALIGN_COMPUTE", "float16" if DEVICE == "cuda" else "int8")
+COMPUTE = os.environ.get("ALIGN_COMPUTE", "int8_float16" if DEVICE == "cuda" else "int8")
 DATA_DIR = Path(os.environ.get("ALIGN_DATA", "/data"))
 MAPS_DIR = DATA_DIR / "maps"
 # Raw word-level transcripts, saved so a map can be REBUILT after an algorithm
@@ -398,6 +395,14 @@ def _set(job_id: str, state: str, detail: str = ""):
     log.info("job %s → %s %s", job_id, state, detail)
 
 
+def _set_progress(job_id: str, p: float):
+    """Fine-grained transcription progress (0..1 over the transcribe phase), updated per
+    chunk so clients show a real advancing bar instead of a static placeholder."""
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id]["progress"] = round(float(p), 4)
+
+
 def _run_abs_job(job_id: str, req: AbsJobRequest):
     # Idempotent: a book already aligned (e.g. after a restart mid-batch) is a
     # no-op, so re-enqueueing the whole manifest is cheap.
@@ -454,7 +459,9 @@ def _run_align(job_id: str, key: str, epub_path: str, audio_paths: list[str], wo
             _set(job_id, "error", "couldn't extract meaningful text from the EPUB")
             return
         _set(job_id, "transcribing", f"{len(audio_paths)} file(s), model={MODEL}, device={DEVICE}")
-        words, duration = transcribe(audio_paths, MODEL, DEVICE, COMPUTE)
+        _set_progress(job_id, 0.0)
+        words, duration = transcribe(audio_paths, MODEL, DEVICE, COMPUTE,
+                                     on_progress=lambda p: _set_progress(job_id, p))
         # Persist the raw word-level transcript so the map can be rebuilt after an
         # algorithm change WITHOUT paying the multi-hour transcription again.
         try:

@@ -4,6 +4,12 @@
 # with the nvidia runtime + ALIGN_DEVICE=cuda (see README).
 FROM python:3.12-slim
 
+# ffmpeg: the decode path shells out to it (C-speed, ~250x realtime) to split the
+# audiobook into WAV chunks — far faster than the PyAV Python fallback.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

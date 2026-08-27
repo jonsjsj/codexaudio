@@ -33,6 +33,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("audex-align")
 
 DEVICE = os.environ.get("ALIGN_DEVICE", "cpu")
+# "auto": use the GPU when the CUDA backend actually sees one, else CPU. faster-whisper's
+# own "auto" was resolving to CPU/int8 on this box even with a usable GPU (the model had
+# loaded while the GPU was unavailable), so resolve it explicitly against ctranslate2.
+if DEVICE == "auto":
+    try:
+        import ctranslate2 as _ct
+        DEVICE = "cuda" if _ct.get_cuda_device_count() > 0 else "cpu"
+    except Exception:
+        DEVICE = "cpu"
 MODEL = os.environ.get("ALIGN_MODEL", "small")
 COMPUTE = os.environ.get("ALIGN_COMPUTE", "float16" if DEVICE == "cuda" else "int8")
 DATA_DIR = Path(os.environ.get("ALIGN_DATA", "/data"))

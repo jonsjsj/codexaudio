@@ -69,6 +69,7 @@ class PlaybackControllerImpl @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val bookmarksRepository: BookmarksRepository,
     private val codexSync: no.bellaybestia.audex.domain.settings.CodexSync,
+    private val localLibrary: no.bellaybestia.audex.domain.local.LocalLibrary,
     @DefaultDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackController {
 
@@ -116,6 +117,11 @@ class PlaybackControllerImpl @Inject constructor(
     ) {
         _state.update {
             it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, episodeId = episodeId, title = title, author = author)
+        }
+        // Device-local audiobook: play the referenced file directly, no ABS server/sync.
+        if (serverId == no.bellaybestia.audex.domain.local.LOCAL_SERVER_ID) {
+            playLocalItem(serverId, libraryItemId, title, author, resumeAtS)
+            return
         }
         val server = serverDao.enabled().firstOrNull { it.serverId == serverId }
         if (server == null) {
@@ -188,6 +194,36 @@ class PlaybackControllerImpl @Inject constructor(
         startPlayback(items, resumeAt)
         _state.update { it.copy(isLoading = false, chapters = activeChapters) }
         startSyncLoop()
+        startTicker()
+    }
+
+    /** Play a device-local audiobook (single referenced file). No ABS server, no sync
+     *  loop; position is tracked locally so resume works. */
+    private suspend fun playLocalItem(
+        serverId: String,
+        libraryItemId: String,
+        title: String,
+        author: String?,
+        resumeAtS: Double?,
+    ) {
+        val item = localLibrary.get(libraryItemId)
+        if (item == null || item.kind != no.bellaybestia.audex.domain.local.LocalKind.AUDIO) {
+            _state.update { it.copy(isLoading = false, error = "This local file isn't playable audio.") }
+            return
+        }
+        _state.update { it.copy(coverUrl = item.coverUri) }
+        val items = listOf(mediaItem(item.uri, serverId, libraryItemId, title, author))
+        val localRow = progressDao.get(serverId, libraryItemId)
+        val finished = localRow?.isFinished == true || (localRow?.pct ?: 0.0) >= 0.999
+        val resumeAt = resumeAtS ?: if (finished) 0.0 else (localRow?.currentTimeS ?: 0.0)
+        activeApi = null
+        activeSessionId = null
+        activeOffsets = listOf(0.0)
+        activeChapters = emptyList()
+        totalDurationS = item.durationS ?: 0.0
+        sessionRecorder.start(serverId, libraryItemId, resumeAt)
+        startPlayback(items, resumeAt)
+        _state.update { it.copy(isLoading = false, chapters = emptyList()) }
         startTicker()
     }
 

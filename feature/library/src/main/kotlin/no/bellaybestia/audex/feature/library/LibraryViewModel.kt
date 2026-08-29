@@ -1,14 +1,19 @@
 package no.bellaybestia.audex.feature.library
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import no.bellaybestia.audex.domain.local.LocalLibrary
 import no.bellaybestia.audex.domain.model.Author
 import no.bellaybestia.audex.domain.model.Series
 import no.bellaybestia.audex.domain.model.Work
@@ -23,8 +28,31 @@ enum class WorkFilter { ALL, AUDIO, EBOOK, IN_PROGRESS }
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     catalogRepository: CatalogRepository,
+    private val localLibrary: LocalLibrary,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /** True while local files are being imported (drives a small progress hint). */
+    private val _importing = MutableStateFlow(false)
+    val importing: StateFlow<Boolean> = _importing.asStateFlow()
+
+    /** Last import result: how many files were added (null until an import runs). */
+    private val _lastImportCount = MutableStateFlow<Int?>(null)
+    val lastImportCount: StateFlow<Int?> = _lastImportCount.asStateFlow()
+
+    /** Add files picked from device storage. They're referenced in place and appear in
+     *  the library once the graph rebuilds. */
+    fun importLocal(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            _importing.value = true
+            val n = runCatching { localLibrary.import(uris.map { it.toString() }) }.getOrDefault(0)
+            _lastImportCount.value = n
+            _importing.value = false
+        }
+    }
+
+    fun clearImportResult() { _lastImportCount.value = null }
 
     /** Selected tab index (0 = Authors, 1 = Series, 2 = All), process-death safe. */
     val selectedTab: StateFlow<Int> = savedStateHandle.getStateFlow(KEY_SELECTED_TAB, 0)

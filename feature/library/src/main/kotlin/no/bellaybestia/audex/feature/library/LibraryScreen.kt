@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,6 +77,11 @@ fun LibraryScreen(
     val authors by viewModel.authors.collectAsState()
     val series by viewModel.series.collectAsState()
     val works by viewModel.works.collectAsState()
+    val importing by viewModel.importing.collectAsState()
+    val lastImport by viewModel.lastImportCount.collectAsState()
+    val pickFiles = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> viewModel.importLocal(uris) }
 
     // Hoisted above the tab switch so every tab keeps its scroll position
     // while another tab is showing (rememberLazyListState is rememberSaveable
@@ -93,6 +101,21 @@ fun LibraryScreen(
                 else -> "${works.size} works"
             },
         )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                onClick = { pickFiles.launch(arrayOf("*/*")) },
+                enabled = !importing,
+            ) { Text(if (importing) "Adding files…" else "＋ Add local files") }
+            lastImport?.let { n ->
+                Text(
+                    text = if (n > 0) "Added $n" else "Nothing added",
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+        }
         FlatSearchField(query = query, onQueryChange = viewModel::setQuery)
         FlatTabRow(
             tabs = listOf("Authors", "Series", "All"),

@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.33.0
+
+- **Add your own local files.** Tap **＋ Add local files** in the Library to bring in audiobooks and ebooks from your device — they show up next to your server books. Files are referenced where they live (nothing is copied). Supported: audiobooks (mp3, m4a/m4b, aac, flac, ogg/opus, wav) and ebooks (EPUB, **PDF**, CBZ). Reading position and playback resume are remembered per book.
+
 ## 0.4.32.0
 
 - **Get notified when a read-along map is ready.** After you tap "Build read-along map," Audex now watches the build in the background and sends a notification when it finishes — or if it fails — so you don't have to sit on the book page waiting. It keeps watching even if you close the app.

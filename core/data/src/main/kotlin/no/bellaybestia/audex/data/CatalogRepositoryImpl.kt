@@ -52,6 +52,7 @@ import javax.inject.Singleton
 class CatalogRepositoryImpl @Inject constructor(
     private val catalogDao: CatalogDao,
     private val remoteItemDao: RemoteItemDao,
+    private val localItemDao: no.bellaybestia.audex.database.LocalItemDao,
     private val overrideDao: OverrideDao,
     private val serverDao: ServerDao,
     private val progressDao: ProgressDao,
@@ -69,6 +70,10 @@ class CatalogRepositoryImpl @Inject constructor(
     private val baseUrls: Flow<Map<String, String>> =
         serverDao.observeAll().map { rows -> rows.associate { it.serverId to it.baseUrl } }
 
+    // Local (device) items expose their own cover URI (per item, not base+id like ABS).
+    private val localCovers: Flow<Map<String, String>> =
+        localItemDao.flow().map { rows -> rows.mapNotNull { r -> r.coverUri?.let { r.id to it } }.toMap() }
+
     override fun authors(): Flow<List<Author>> =
         catalogDao.observeAuthors().map { rows -> rows.map { Author(it.id, it.name, it.workCount) } }
 
@@ -76,7 +81,9 @@ class CatalogRepositoryImpl @Inject constructor(
         catalogDao.observeSeries().map { rows -> rows.map { Series(it.id, it.name, workCount = it.workCount) } }
 
     override fun works(): Flow<List<Work>> =
-        combine(catalogDao.observeWorks(), baseUrls) { rows, urls -> rows.map { it.toDomain(urls) } }
+        combine(catalogDao.observeWorks(), baseUrls, localCovers) { rows, urls, covers ->
+            rows.map { it.toDomain(urls, covers) }
+        }
 
     override fun work(workId: String): Flow<Work?> =
         works().map { list -> list.firstOrNull { it.id == workId } }
@@ -246,13 +253,13 @@ class CatalogRepositoryImpl @Inject constructor(
         .trim()
 
     override fun worksForAuthor(authorId: String): Flow<List<Work>> =
-        combine(catalogDao.observeWorksForAuthor(authorId), baseUrls) { rows, urls ->
-            rows.map { it.toDomain(urls) }
+        combine(catalogDao.observeWorksForAuthor(authorId), baseUrls, localCovers) { rows, urls, covers ->
+            rows.map { it.toDomain(urls, covers) }
         }
 
     override fun worksForSeries(seriesId: String): Flow<List<Work>> =
-        combine(catalogDao.observeWorksForSeries(seriesId), baseUrls) { rows, urls ->
-            rows.map { it.toDomain(urls) }
+        combine(catalogDao.observeWorksForSeries(seriesId), baseUrls, localCovers) { rows, urls, covers ->
+            rows.map { it.toDomain(urls, covers) }
         }
 
     override fun editionsForWork(workId: String): Flow<List<Edition>> =
@@ -334,7 +341,8 @@ class CatalogRepositoryImpl @Inject constructor(
     }
 
     override suspend fun rebuildGraph() = withContext(dispatcher) {
-        val items = remoteItemDao.all().map { it.toRemoteBook(json) }
+        val items = remoteItemDao.all().map { it.toRemoteBook(json) } +
+            localItemDao.all().map { it.toRemoteBook() }
         val overrides = overrideDao.all().mapNotNull { row ->
             runCatching {
                 CatalogOverride(OverrideKind.valueOf(row.kind), row.subjectKey, row.targetKey)
@@ -365,7 +373,10 @@ class CatalogRepositoryImpl @Inject constructor(
     }
 }
 
-private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
+private fun WorkRow.toDomain(
+    baseUrls: Map<String, String>,
+    localCovers: Map<String, String> = emptyMap(),
+) = Work(
     id = workId,
     title = title,
     authorId = authorId,
@@ -381,7 +392,10 @@ private fun WorkRow.toDomain(baseUrls: Map<String, String>) = Work(
     readFraction = readPct ?: 0.0,
     coverUrl = coverKey?.split('|', limit = 2)
         ?.takeIf { it.size == 2 }
-        ?.let { (serverId, itemId) -> baseUrls[serverId]?.let { absCoverUrl(it, itemId) } },
+        ?.let { (serverId, itemId) ->
+            if (serverId == no.bellaybestia.audex.domain.local.LOCAL_SERVER_ID) localCovers[itemId]
+            else baseUrls[serverId]?.let { absCoverUrl(it, itemId) }
+        },
     updatedAt = updatedAtRemote,
     listenedAt = progressUpdatedAt,
 )
@@ -407,6 +421,18 @@ internal fun RemoteItemEntity.toRemoteBook(json: Json): RemoteBook {
         abridged = abridged,
     )
 }
+
+/** A device-local book joins the same graph as a single-edition "work" on the synthetic
+ *  local server, so it lists/opens/plays through the normal Work/Edition UI. */
+internal fun no.bellaybestia.audex.database.LocalItemEntity.toRemoteBook(): RemoteBook = RemoteBook(
+    serverId = no.bellaybestia.audex.domain.local.LOCAL_SERVER_ID,
+    libraryItemId = id,
+    title = title,
+    authors = listOfNotNull(author),
+    hasAudio = kind == no.bellaybestia.audex.domain.local.LocalKind.AUDIO.name,
+    hasEbook = kind == no.bellaybestia.audex.domain.local.LocalKind.EBOOK.name,
+    durationS = durationS?.toLong(),
+)
 
 @kotlinx.serialization.Serializable
 internal data class StoredSeriesRef(val name: String, val sequence: Double? = null)

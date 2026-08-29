@@ -32,8 +32,9 @@ import javax.inject.Singleton
         PodcastEntity::class,
         EpisodeEntity::class,
         EpisodeProgressEntity::class,
+        LocalItemEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AudexDatabase : RoomDatabase() {
@@ -51,6 +52,7 @@ abstract class AudexDatabase : RoomDatabase() {
     abstract fun podcastDao(): PodcastDao
     abstract fun episodeDao(): EpisodeDao
     abstract fun episodeProgressDao(): EpisodeProgressDao
+    abstract fun localItemDao(): LocalItemDao
 }
 
 /**
@@ -126,6 +128,20 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/** v4→v5 adds `local_items` (device-local books referenced in place). SQL matches
+ *  Room's generated schema for [LocalItemEntity] exactly. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `local_items` (" +
+                "`id` TEXT NOT NULL, `uri` TEXT NOT NULL, `mime` TEXT NOT NULL, " +
+                "`kind` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, " +
+                "`coverUri` TEXT, `durationS` REAL, `addedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))",
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -134,7 +150,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AudexDatabase =
         Room.databaseBuilder(context, AudexDatabase::class.java, "audex.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
 
@@ -153,4 +169,5 @@ object DatabaseModule {
     @Provides fun sessionDao(db: AudexDatabase) = db.sessionDao()
     @Provides fun ebookProgressQueueDao(db: AudexDatabase) = db.ebookProgressQueueDao()
     @Provides fun downloadDao(db: AudexDatabase) = db.downloadDao()
+    @Provides fun localItemDao(db: AudexDatabase) = db.localItemDao()
 }

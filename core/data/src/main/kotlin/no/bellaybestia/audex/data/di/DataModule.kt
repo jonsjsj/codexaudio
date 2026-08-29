@@ -95,6 +95,9 @@ abstract class DataModule {
     abstract fun notificationSettings(impl: NotificationSettingsImpl): NotificationSettings
 
     @Binds
+    abstract fun localLibrary(impl: no.bellaybestia.audex.data.LocalLibraryImpl): no.bellaybestia.audex.domain.local.LocalLibrary
+
+    @Binds
     abstract fun themeSettings(impl: ThemeSettingsImpl): ThemeSettings
 
     @Binds

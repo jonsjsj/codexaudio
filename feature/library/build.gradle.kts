@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.compose.material.icons)
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
@@ -47,6 +48,8 @@ dependencies {
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
+    // PDF reading (also enables the reader's word-sync/highlight UI over PDFs).
+    implementation(libs.readium.adapter.pdfium)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.core.ktx)
     coreLibraryDesugaring(libs.desugar.jdk.libs)

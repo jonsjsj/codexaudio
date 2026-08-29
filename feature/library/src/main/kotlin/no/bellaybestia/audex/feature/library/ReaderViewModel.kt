@@ -39,6 +39,8 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.positions
+import org.readium.adapter.pdfium.document.PdfiumDocumentFactory
+import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.http.DefaultHttpClient
@@ -106,6 +108,7 @@ data class AudioCompanion(
 class ReaderViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloads: Downloads,
+    private val localLibrary: no.bellaybestia.audex.domain.local.LocalLibrary,
     private val ebookProgressWriter: EbookProgressWriter,
     private val catalogRepository: CatalogRepository,
     private val alignmentRepository: AlignmentRepository,
@@ -392,11 +395,6 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun openBook() {
-        val path = downloads.localEbookPath(serverId, libraryItemId)
-        if (path == null) {
-            _state.value = ReaderUiState.NoEbook
-            return
-        }
         val httpClient = DefaultHttpClient()
         val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
         val opener = PublicationOpener(
@@ -404,12 +402,35 @@ class ReaderViewModel @Inject constructor(
                 context,
                 httpClient = httpClient,
                 assetRetriever = assetRetriever,
-                pdfFactory = null,
+                pdfFactory = PdfiumDocumentFactory(context),
             ),
         )
-        val asset = assetRetriever.retrieve(File(path)).getOrElse {
-            _state.value = ReaderUiState.Error("Couldn't open the downloaded file (${it.message}).")
-            return
+        val asset = if (serverId == no.bellaybestia.audex.domain.local.LOCAL_SERVER_ID) {
+            // Device-local ebook/PDF: open the referenced content:// URI directly.
+            val item = localLibrary.get(libraryItemId)
+            if (item == null || item.kind != no.bellaybestia.audex.domain.local.LocalKind.EBOOK) {
+                _state.value = ReaderUiState.NoEbook
+                return
+            }
+            val url = AbsoluteUrl(item.uri)
+            if (url == null) {
+                _state.value = ReaderUiState.Error("This local file's location is invalid.")
+                return
+            }
+            assetRetriever.retrieve(url).getOrElse {
+                _state.value = ReaderUiState.Error("Couldn't open the local file (${it.message}).")
+                return
+            }
+        } else {
+            val path = downloads.localEbookPath(serverId, libraryItemId)
+            if (path == null) {
+                _state.value = ReaderUiState.NoEbook
+                return
+            }
+            assetRetriever.retrieve(File(path)).getOrElse {
+                _state.value = ReaderUiState.Error("Couldn't open the downloaded file (${it.message}).")
+                return
+            }
         }
         val publication = opener.open(asset, allowUserInteraction = false).getOrElse {
             _state.value = ReaderUiState.Error("Couldn't parse this ebook (${it.message}).")

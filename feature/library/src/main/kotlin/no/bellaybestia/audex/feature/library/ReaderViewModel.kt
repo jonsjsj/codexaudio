@@ -441,7 +441,7 @@ class ReaderViewModel @Inject constructor(
         android.util.Log.i(
             "AudexReader",
             "openBook ready: readingOrder=${publication.readingOrder.size} positions=${positions.size} " +
-                "file=${File(path).name} (${File(path).length()} bytes)",
+                "title=${publication.metadata.title}",
         )
         _state.value = ReaderUiState.Ready(
             publication = publication,

@@ -242,54 +242,64 @@ def _decode_chunk_av(path: str, workdir: str, idx: int, start_s: float, chunk_s:
     return (str(p), start_s, written / 16000.0)
 
 
-def _remote_asr(asr_url: str, wav_path: str) -> list[tuple[float, float, str]]:
-    """Transcribe one WAV via the shared whisper-asr web service → [(start, end, text)].
-    Lets align reuse the ONE resident large-v3 model on the box instead of loading a
-    second Whisper model onto the same GPU (which OOMs). onerahmet output=json returns
-    faster-whisper segments with start/end."""
+def _remote_asr(asr_url: str, wav_path: str) -> tuple[list[tuple[float, float, str]], float]:
+    """Transcribe one WAV via the shared whisper-asr service → (per-WORD [(start, end, word)],
+    duration). Requests `word_timestamps=true` so the read-along highlight tracks the EXACT
+    spoken word instead of a per-segment linear estimate. Falls back to spreading a segment's
+    tokens linearly only when the service returns no word-level data for that segment."""
     import httpx
 
     with open(wav_path, "rb") as f:
         r = httpx.post(
             f"{asr_url}/asr",
-            params={"output": "json", "encode": "false", "word_timestamps": "false"},
+            params={"output": "json", "encode": "false", "word_timestamps": "true"},
             files={"audio_file": ("chunk.wav", f, "audio/wav")},
             timeout=1800,
         )
     r.raise_for_status()
     j = r.json()
-    return [(float(s.get("start") or 0.0), float(s.get("end") or 0.0), s.get("text") or "")
-            for s in (j.get("segments") or [])]
-
-
-def _segments(model, wav_path: str, asr_url):
-    """(segments, duration) for a chunk — segments as (start, end, text) tuples — from the
-    remote ASR service when configured, else a local model. beam_size=1 (greedy) locally:
-    alignment only needs the recognized WORDS to n-gram-match the book, not best prose."""
-    if asr_url:
-        segs = _remote_asr(asr_url, wav_path)
-        return segs, max((e for _, e, _ in segs), default=0.0)
-    segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=1)
-    return [(float(s.start), float(s.end), s.text) for s in segments], float(info.duration or 0.0)
+    out: list[tuple[float, float, str]] = []
+    dur = 0.0
+    for s in (j.get("segments") or []):
+        s_start = float(s.get("start") or 0.0)
+        s_end = float(s.get("end") or 0.0)
+        dur = max(dur, s_end)
+        ws = s.get("words") or []
+        if ws:
+            for w in ws:
+                wt = (w.get("word") or w.get("text") or "").strip()
+                if wt:
+                    out.append((float(w.get("start") or 0.0), float(w.get("end") or 0.0), wt))
+        else:
+            toks = (s.get("text") or "").split()
+            span = max(s_end - s_start, 0.001)
+            for i, tok in enumerate(toks):
+                out.append((s_start + span * (i / len(toks)),
+                            s_start + span * ((i + 1) / len(toks)), tok))
+    return out, dur
 
 
 def _transcribe_wav(model, wav_path: str, offset: float, chunk_off: float,
                     words: list, asr_url=None) -> float:
-    """Transcribe one chunk WAV, appending global-timeline AsrWords. Word times are spread
-    linearly across each SEGMENT (sentence anchors don't need per-word times). Returns the
-    chunk's end offset."""
-    segs, dur = _segments(model, wav_path, asr_url)
+    """Transcribe one chunk WAV, appending global-timeline AsrWords. Returns the chunk's
+    end offset. Remote ASR gives real per-word timestamps; the local-model fallback spreads
+    a segment's tokens linearly (good enough for n-gram anchoring, coarser for highlighting)."""
     base = offset + chunk_off
-    for s_start, s_end, s_text in segs:
-        toks = s_text.split()
+    if asr_url:
+        word_tuples, dur = _remote_asr(asr_url, wav_path)
+        for ws, we, wtext in word_tuples:
+            words.append(AsrWord(base + ws, base + we, wtext))
+        return chunk_off + dur
+    segments, info = model.transcribe(wav_path, vad_filter=True, beam_size=1)
+    for seg in segments:
+        toks = seg.text.split()
         if not toks:
             continue
-        span = max(s_end - s_start, 0.001)
+        span = max(float(seg.end) - float(seg.start), 0.001)
         for i, tok in enumerate(toks):
-            t0 = base + s_start + span * (i / len(toks))
-            t1 = base + s_start + span * ((i + 1) / len(toks))
-            words.append(AsrWord(t0, t1, tok))
-    return chunk_off + dur
+            words.append(AsrWord(base + float(seg.start) + span * (i / len(toks)),
+                                 base + float(seg.start) + span * ((i + 1) / len(toks)), tok))
+    return chunk_off + float(info.duration or 0.0)
 
 
 def transcribe(audio_paths: list[str], model_name: str, device: str, compute_type: str,

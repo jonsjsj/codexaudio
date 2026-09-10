@@ -234,10 +234,17 @@ private fun ProgressSection(
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
             val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
             // Material sliders inset the track by ~the thumb radius (10dp) each side.
-            val inset = with(androidx.compose.ui.platform.LocalDensity.current) { 10.dp.toPx() }
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val inset = with(density) { 10.dp.toPx() }
+            // Magnetic snap (matches the reader's scrubber): dragging within ~16dp of a
+            // bookmark tick locks exactly onto it.
+            val snapFrac = with(density) { 16.dp.toPx() } / (widthPx - 2 * inset).coerceAtLeast(1f)
             Slider(
                 value = fraction,
-                onValueChange = { dragFraction = it },
+                onValueChange = { raw ->
+                    val nearest = bookmarkFractions.minByOrNull { kotlin.math.abs(it - raw) }
+                    dragFraction = if (nearest != null && kotlin.math.abs(nearest - raw) <= snapFrac) nearest else raw
+                },
                 onValueChangeFinished = {
                     dragFraction?.let { onSeek((it * duration).toLong()) }
                     dragFraction = null

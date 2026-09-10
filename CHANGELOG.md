@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.34.0
+
+- **Fixed: closing the app while listening could reset your position to the start.** If playback had paused (or the app was swiped away) and the player service shut down, a background timer kept polling it anyway — and, reading a dead connection as "position 0," quietly saved that over your real progress. It now stops the moment the connection drops instead of trusting it.
+- **The "Go to" sheet is bigger and shows why each jump target is there.** Every row is now labeled — the audiobook's current spot, "you left off further" if you've since dragged back to relisten, your own bookmarks, and the auto "left off before a jump" markers are all distinguished instead of one flat list. A **%/time** switch at the top changes how every position on the sheet is shown.
+- **The reading scrubber (and the player's) now snap to bookmarks.** Drag or tap near a bookmark tick and it locks on, so landing exactly on one doesn't need a pixel-perfect touch.
+
 ## 0.4.33.0
 
 - **Add your own local files.** Tap **＋ Add local files** in the Library to bring in audiobooks and ebooks from your device — they show up next to your server books. Files are referenced where they live (nothing is copied). Supported: audiobooks (mp3, m4a/m4b, aac, flac, ogg/opus, wav) and ebooks (EPUB, **PDF**, CBZ). Reading position and playback resume are remembered per book.

@@ -497,6 +497,12 @@ class PlaybackControllerImpl @Inject constructor(
         tickJob = scope.launch {
             var secondsSincePersist = 0
             while (true) {
+                // A disconnected controller (session/service torn down) reads back as
+                // position 0 / not playing rather than failing — never trust it. The
+                // MediaController.Listener in connect() should already have cancelled
+                // this job by the time that happens; this is the belt-and-suspenders
+                // check for the race where a tick is already in flight.
+                if (withContext(main) { controller?.isConnected() != true }) break
                 val (posMs, playing) = withContext(main) {
                     (overallPositionS() * 1000).toLong() to (controller?.isPlaying == true)
                 }
@@ -605,6 +611,7 @@ class PlaybackControllerImpl @Inject constructor(
                 delay(SYNC_INTERVAL_MS)
                 val api = activeApi ?: break
                 val sessionId = activeSessionId ?: break
+                if (withContext(main) { controller?.isConnected() != true }) break
                 val (position, playing) = withContext(main) {
                     overallPositionS() to (controller?.isPlaying == true)
                 }
@@ -644,7 +651,21 @@ class PlaybackControllerImpl @Inject constructor(
 
     private suspend fun connect(): MediaController = suspendCancellableCoroutine { cont ->
         val token = SessionToken(context, ComponentName(context, no.bellaybestia.audex.player.PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
+        // A disconnected MediaController (the session/service torn down — e.g. paused
+        // then the app swiped away, which stops the service by design) reports
+        // currentPosition/currentMediaItemIndex as 0 rather than throwing. Without this
+        // listener the ticker/sync loop kept polling that dead controller and, within
+        // PERSIST_EVERY_S, happily persisted "position 0" over the real saved progress —
+        // the "closed the app and it reset to the start" bug. Cancel our own loops the
+        // instant the session actually dies instead of reading garbage from it.
+        val listener = object : MediaController.Listener {
+            override fun onDisconnected(controller: MediaController) {
+                syncJob?.cancel(); syncJob = null
+                tickJob?.cancel(); tickJob = null
+                if (this@PlaybackControllerImpl.controller === controller) this@PlaybackControllerImpl.controller = null
+            }
+        }
+        val future = MediaController.Builder(context, token).setListener(listener).buildAsync()
         future.addListener(
             {
                 runCatching { future.get() }

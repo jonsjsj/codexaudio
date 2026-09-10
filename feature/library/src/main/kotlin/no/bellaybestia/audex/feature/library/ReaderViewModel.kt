@@ -227,6 +227,12 @@ class ReaderViewModel @Inject constructor(
             if (furthest <= 0.0 || furthest >= BOOK_DONE_THRESHOLD) null else furthest.toFloat()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** The audio edition's total length — lets the Go-to sheet convert bookmark/furthest
+     *  seconds to a percentage when the %/time toggle is set to percent. */
+    val audioDurationS: StateFlow<Long?> =
+        _audioEdition.map { it?.durationS }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Whether this work has an audiobook edition — drives the in-reader mini-player. */
     val hasAudio: StateFlow<Boolean> =
         _audioEdition.map { it != null }
@@ -306,6 +312,23 @@ class ReaderViewModel @Inject constructor(
     val audioPositionS: StateFlow<Double?> =
         combine(audioCompanion, _audioEdition) { comp, ed ->
             comp?.positionS ?: ed?.let { e -> e.durationS?.let { d -> e.fraction * d.toDouble() } }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * The deepest point ever reached in the audiobook (ABS listening-session history),
+     * surfaced in the Go-to sheet's "Audiobook" section as a distinct jump target from
+     * the CURRENT audio position — useful after you've dragged the scrubber back to
+     * relisten and want to return to where you actually left off. Only ever meaningful
+     * for audio: an ebook has no equivalent "you dragged past it" history to recover, so
+     * there's no matching "ebook furthest" — its own live reading position already is one.
+     */
+    val audioFurthestS: StateFlow<Double?> =
+        combine(_audioEdition, audioPositionS) { ed, current ->
+            if (ed == null) return@combine null
+            val furthest = runCatching { catalogRepository.furthestPositionS(ed.serverId, ed.libraryItemId) }
+                .getOrNull() ?: return@combine null
+            // Only worth its own row if it's genuinely ahead of where you are now.
+            furthest.takeIf { current == null || it > current + 5.0 }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Word-sync map for this work's audio (docs/10); null → proportional follow. */

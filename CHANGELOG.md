@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.40.0
+
+- **Found the real cause of "updating the app resets my position."** Every time the app comes to the foreground — which an update always forces, since it restarts the process — it reconciles progress from the server. That reconcile trusted the server's row whenever its timestamp looked newer, but a newer timestamp isn't proof of newer data: a stale server-side value (clock drift between phone and server, or any other client touching the same record) could still carry a fresher-looking timestamp while being well behind where you actually were. It could silently roll both the audiobook and the ebook back on every single update. The reconcile now also checks the actual position, not just the timestamp, and refuses to move it backward.
+
 ## 0.4.39.0
 
 - **A direct way to go from listening to reading.** The Listen/Read switch used to live only inside the "Jump" panel — easy to miss. The player now shows a "Read" pill in the top corner of the cover whenever the book has an ebook edition; the reader's in-line audio row is tappable the same way to jump straight to the player.

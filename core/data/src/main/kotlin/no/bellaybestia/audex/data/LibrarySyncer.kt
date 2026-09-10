@@ -16,6 +16,12 @@ import no.bellaybestia.audex.network.abs.AbsMediaProgress
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** How far behind (seconds) the server's audio position may be before it's
+ *  treated as a real regression rather than routine sync lag. */
+private const val AUDIO_REGRESSION_GUARD_S = 60.0
+/** Same idea for the ebook fraction (0..1). */
+private const val EBOOK_REGRESSION_GUARD_FRAC = 0.01
+
 /**
  * Pulls every enabled server's book libraries into `remote_items` and refreshes
  * the local progress mirror from GET /api/me, then rebuilds the canonical
@@ -129,7 +135,7 @@ class LibrarySyncer @Inject constructor(
     private suspend fun upsertProgressKeepingLocalReader(serverId: String, incoming: List<ProgressEntity>) {
         val merged = incoming.map { srv ->
             val local = progressDao.get(serverId, srv.libraryItemId)
-            if (local != null && local.source.startsWith("LOCAL") && local.lastUpdate >= srv.lastUpdate) local else srv
+            pickProgress(local, srv)
         }
         progressDao.upsertAll(merged)
         // Reconcile deletions: anything the server no longer has progress for was
@@ -138,6 +144,32 @@ class LibrarySyncer @Inject constructor(
         val keep = incoming.map { it.libraryItemId }
         if (keep.isEmpty()) progressDao.deleteAllServerRows(serverId)
         else progressDao.deleteStaleServerRows(serverId, keep)
+    }
+
+    /**
+     * Pick which row survives the reconcile. `lastUpdate` alone is NOT proof the
+     * server's DATA is fresher — only that the server record was touched more
+     * recently, by whatever wrote it. A stale server-side value can still carry a
+     * newer timestamp (clock skew between device and server, or another client —
+     * e.g. Codex — re-pushing an old position with a fresh write time), and
+     * blindly trusting the timestamp let that roll a further-along local position
+     * backward. This traced back a real report: every app UPDATE forces a cold
+     * start, which reconnects the socket, which runs this same reconcile — so a
+     * stale server row could silently overwrite correct local progress on every
+     * single update. Trusting `lastUpdate` for the ORDINARY case (real progress
+     * from another device/client) still stands; this only refuses a server value
+     * that's actually BEHIND local by more than routine sync lag.
+     */
+    private fun pickProgress(local: ProgressEntity?, srv: ProgressEntity): ProgressEntity {
+        if (local == null || !local.source.startsWith("LOCAL")) return srv
+        if (local.lastUpdate >= srv.lastUpdate) return local
+        val localTimeS = local.currentTimeS
+        val srvTimeS = srv.currentTimeS
+        if (localTimeS != null && srvTimeS != null && localTimeS > srvTimeS + AUDIO_REGRESSION_GUARD_S) return local
+        val localEbook = local.ebookProgress
+        val srvEbook = srv.ebookProgress
+        if (localEbook != null && srvEbook != null && localEbook > srvEbook + EBOOK_REGRESSION_GUARD_FRAC) return local
+        return srv
     }
 }
 

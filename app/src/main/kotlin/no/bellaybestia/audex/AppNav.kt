@@ -123,7 +123,7 @@ fun AppNav() {
                 // 0 when not edge-to-edge, so this is safe on every device).
                 Column(Modifier.navigationBarsPadding()) {
                     if (currentRoute != Routes.PLAYER) {
-                        MiniPlayer(onExpand = { navController.navigate(Routes.PLAYER) })
+                        MiniPlayer(onExpand = { navController.navigateToPlayer() })
                     }
                     FlatTabRow(
                         tabs = bottomTabs,
@@ -148,7 +148,7 @@ fun AppNav() {
                 HomeScreen(
                     onWorkClick = { work -> navController.navigateToWork(work) },
                     onOpenReader = { serverId, itemId, title ->
-                        navController.navigate(Routes.reader(serverId, itemId, title))
+                        navController.navigateToReader(serverId, itemId, title)
                     },
                 )
             }
@@ -270,7 +270,7 @@ fun AppNav() {
             ) {
                 WorkDetailScreen(
                     onOpenReader = { serverId, itemId, title ->
-                        navController.navigate(Routes.reader(serverId, itemId, title))
+                        navController.navigateToReader(serverId, itemId, title)
                     },
                     onAuthorClick = { id, name ->
                         navController.navigate(Routes.author(id, name))
@@ -293,12 +293,14 @@ fun AppNav() {
                     },
                 ),
             ) {
-                ReaderScreen()
+                ReaderScreen(
+                    onListen = { navController.navigateToPlayer() },
+                )
             }
             composable(Routes.PLAYER) {
                 PlayerScreen(
                     onRead = { serverId, itemId, title ->
-                        navController.navigate(Routes.reader(serverId, itemId, title))
+                        navController.navigateToReader(serverId, itemId, title)
                     },
                 )
             }
@@ -349,6 +351,37 @@ private fun UpdateGate(vm: UpdateViewModel = hiltViewModel()) {
  */
 private fun NavHostController.navigateToWork(work: Work) {
     navigate(Routes.work(work.id, work.title, work.authorName))
+}
+
+/**
+ * Open a book's reader, replacing any existing back-stack entry for the SAME book
+ * instead of stacking a duplicate. This isn't just tidy navigation: ReaderViewModel
+ * owns its own debounced progress-write pipeline (unlike the player, whose writes
+ * live in the app-wide PlaybackController singleton), so a stale duplicate instance
+ * left alive further down the back stack could fire its own pending write — with an
+ * OLDER position — after a fresher instance already advanced further, silently
+ * regressing (or, caught before any real page turn, zeroing) the saved position. The
+ * Listen/Read handoff makes bouncing between the two screens for the same book the
+ * normal way to use the app, so this reuse is what keeps that safe.
+ * `popUpTo(route) { inclusive = true }` clears any matching entry BEFORE pushing the
+ * new one — tearing the old ViewModel down (cancelling its writer's coroutine scope)
+ * rather than leaving it running in the background. A no-op pop when none exists yet.
+ */
+private fun NavHostController.navigateToReader(serverId: String, itemId: String, title: String) {
+    val route = Routes.reader(serverId, itemId, title)
+    navigate(route) {
+        popUpTo(route) { inclusive = true }
+        launchSingleTop = true
+    }
+}
+
+/** Open the full player, reusing its back-stack entry rather than stacking a new one
+ *  each time — the Listen/Read handoff bounces here often. */
+private fun NavHostController.navigateToPlayer() {
+    navigate(Routes.PLAYER) {
+        popUpTo(Routes.PLAYER) { inclusive = true }
+        launchSingleTop = true
+    }
 }
 
 /** Map the app-module update state onto the feature-local UI type. */

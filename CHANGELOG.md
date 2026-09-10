@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.36.0
+
+- **Fixed: both the audiobook and the e-book could reset to the start.** Three separate bugs stacked up here. The reader's own progress-save could silently overwrite other fields on your saved position (including quietly un-marking a finished book as unfinished on its very next page turn). Opening the reader could also fire an extra "save" for the position it had *just restored*, which raced the real one. And jumping back and forth between the player and the reader (via the new Listen/Read switches) could leave a stale, duplicate copy of one screen running in the background, still writing its old position over your new one after you'd moved on. All three are fixed — the last one also hardens the position-tracking loop from 0.4.34.0 against a similar timing gap.
+- **The reader now has a Listen switch too.** Open **Go to** while reading and, if the book has an audiobook edition, a **Read/Listen** switch sits at the top — tap **Listen** to jump into the player right where you are. Pairs with the player's Read switch from 0.4.35.0 for a two-way handoff.
+
 ## 0.4.35.0
 
 - **The player's "Jump" no longer covers the screen.** It now takes over the cover art's own spot instead of a popup — the rest of the player (transport, chapters, bookmarks) stays visible and usable while it's open. Tap **Jump** again (now labeled **Close**) to bring the cover back.

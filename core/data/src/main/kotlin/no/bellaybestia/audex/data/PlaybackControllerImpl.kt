@@ -501,11 +501,17 @@ class PlaybackControllerImpl @Inject constructor(
                 // position 0 / not playing rather than failing — never trust it. The
                 // MediaController.Listener in connect() should already have cancelled
                 // this job by the time that happens; this is the belt-and-suspenders
-                // check for the race where a tick is already in flight.
-                if (withContext(main) { controller?.isConnected() != true }) break
-                val (posMs, playing) = withContext(main) {
-                    (overallPositionS() * 1000).toLong() to (controller?.isPlaying == true)
-                }
+                // check for the race where a tick is already in flight. The check and
+                // the read happen in ONE main-thread hop (not two) so a disconnect
+                // landing between them can't slip an unguarded position-0 read through —
+                // onDisconnected() is itself a main-thread callback, so it can only run
+                // before or after this whole block, never inside it.
+                val connectedRead = withContext(main) {
+                    val c = controller
+                    if (c == null || !c.isConnected()) null
+                    else (overallPositionS() * 1000).toLong() to c.isPlaying
+                } ?: break
+                val (posMs, playing) = connectedRead
                 val chapterIdx = activeChapters.indexOfLast { it.startMs <= posMs }
                 // End-of-chapter sleep: the armed chapter finished → pause.
                 if (sleepChapterIndex >= 0 && playing && chapterIdx != sleepChapterIndex) {
@@ -611,10 +617,14 @@ class PlaybackControllerImpl @Inject constructor(
                 delay(SYNC_INTERVAL_MS)
                 val api = activeApi ?: break
                 val sessionId = activeSessionId ?: break
-                if (withContext(main) { controller?.isConnected() != true }) break
-                val (position, playing) = withContext(main) {
-                    overallPositionS() to (controller?.isPlaying == true)
-                }
+                // Same atomic check-then-read as the ticker (see its comment) — one
+                // main-thread hop, so a disconnect can't land between the check and read.
+                val connectedRead = withContext(main) {
+                    val c = controller
+                    if (c == null || !c.isConnected()) null
+                    else overallPositionS() to c.isPlaying
+                } ?: break
+                val (position, playing) = connectedRead
                 if (!playing) continue
                 runCatching {
                     api.syncSession(

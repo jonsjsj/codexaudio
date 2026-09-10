@@ -120,6 +120,7 @@ private fun lookUp(context: android.content.Context, word: String) {
 @Composable
 fun ReaderScreen(
     modifier: Modifier = Modifier,
+    onListen: () -> Unit = {},
     viewModel: ReaderViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -132,7 +133,7 @@ fun ReaderScreen(
             modifier,
         )
         is ReaderUiState.Error -> ReaderMessage(viewModel.title, s.message, modifier)
-        is ReaderUiState.Ready -> EpubReader(s, viewModel, modifier)
+        is ReaderUiState.Ready -> EpubReader(s, viewModel, modifier, onListen)
     }
 }
 
@@ -142,6 +143,7 @@ private fun EpubReader(
     ready: ReaderUiState.Ready,
     viewModel: ReaderViewModel,
     modifier: Modifier = Modifier,
+    onListen: () -> Unit = {},
 ) {
     val activity = LocalContext.current.findFragmentActivity() ?: return
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
@@ -576,6 +578,11 @@ private fun EpubReader(
             audioPositionS = audioPositionS,
             audioFurthestS = audioFurthestS,
             audioDurationS = audioDurationS,
+            hasAudio = hasAudio,
+            onListen = {
+                viewModel.ensureAudioForHandoff()
+                onListen()
+            },
             onDismiss = { showGoTo = false },
             onGoPercent = { pct ->
                 locatorForFraction(ready.positions, pct)?.let { navigator?.go(it) }
@@ -1078,6 +1085,8 @@ private fun ReaderGoToDialog(
     audioPositionS: Double?,
     audioFurthestS: Double?,
     audioDurationS: Long?,
+    hasAudio: Boolean,
+    onListen: () -> Unit,
     onDismiss: () -> Unit,
     onGoPercent: (Double) -> Unit,
     onGoPage: (Int) -> Unit,
@@ -1105,6 +1114,16 @@ private fun ReaderGoToDialog(
                     modifier = Modifier.padding(horizontal = 22.dp),
                 )
                 Spacer(Modifier.height(14.dp))
+                if (hasAudio) {
+                    Box(Modifier.padding(horizontal = 22.dp)) {
+                        FlatTabRow(
+                            tabs = listOf("Read", "Listen"),
+                            selectedIndex = 0,
+                            onSelect = { if (it == 1) onListen() },
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
                 Box(Modifier.padding(horizontal = 22.dp)) {
                     FlatTabRow(
                         tabs = listOf("%", "Time"),

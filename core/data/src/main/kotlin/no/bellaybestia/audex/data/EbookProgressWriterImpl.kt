@@ -39,15 +39,21 @@ class EbookProgressWriterImpl @Inject constructor(
                 updatedAt = now,
             )
         )
+        // Merge onto the existing row (never build a bare replacement): the row is
+        // shared with fields this call doesn't own — currentTimeS has no meaning for an
+        // ebook edition's own row today, but the pattern of constructing a fresh entity
+        // here previously discarded it by accident whenever something DID rely on it, and
+        // silently reset isFinished back to false on every single page turn (this function
+        // is never called with isFinished=true, so a book someone else had marked done
+        // would un-finish itself the next time it was merely opened and read one page).
+        val existing = progressDao.get(serverId, libraryItemId)
         progressDao.upsertAll(
             listOf(
-                ProgressEntity(
-                    serverId = serverId,
-                    libraryItemId = libraryItemId,
+                (existing ?: ProgressEntity(serverId = serverId, libraryItemId = libraryItemId)).copy(
                     pct = if (isFinished) 1.0 else progress,
                     ebookLocation = location,
                     ebookProgress = progress,
-                    isFinished = isFinished,
+                    isFinished = isFinished || existing?.isFinished == true,
                     lastUpdate = now,
                     source = "LOCAL_READER",
                 )

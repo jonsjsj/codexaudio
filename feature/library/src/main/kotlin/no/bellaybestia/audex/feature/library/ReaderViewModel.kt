@@ -248,6 +248,20 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch { runCatching { playbackController.play(ed.serverId, ed.libraryItemId, title, null) } }
     }
 
+    /**
+     * "Listen" handoff (the Read/Listen switch's other half — see PlayerViewModel's
+     * readEbookTarget for the reverse direction): makes sure THIS work's audio is what's
+     * loaded before the screen navigates to the full player, starting it if nothing (or a
+     * different book) is currently loaded. A no-op when this work's audio is already
+     * loaded — playing or paused — so opening the reader alongside an ongoing listen never
+     * restarts or resumes it.
+     */
+    fun ensureAudioForHandoff() {
+        if (audioCompanion.value != null) return
+        val ed = _audioEdition.value ?: return
+        viewModelScope.launch { runCatching { playbackController.play(ed.serverId, ed.libraryItemId, title, null) } }
+    }
+
     fun audioSkipBack() = playbackController.skipBackward()
 
     fun audioSkipForward() = playbackController.skipForward()
@@ -371,8 +385,20 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch { resolveAudioSiblings() }
         // Debounced position sync: each page turn resets the timer, so a burst
         // of flips writes once. collectLatest keeps this free of @FlowPreview.
+        var sawFirstLocator = false
         viewModelScope.launch {
             latestLocator.filterNotNull().collectLatest { locator ->
+                if (!sawFirstLocator) {
+                    // The FIRST locator-changed event after opening is the navigator
+                    // reporting where it just landed — the position we already restored
+                    // FROM (nothing new to save) or, if the fragment hasn't fully settled
+                    // onto initialLocator yet, an untrustworthy transient one. Either way
+                    // it must never be the thing that gets persisted: a book closed before
+                    // any real page turn used to have this debounced write fire on a stray
+                    // early locator and stomp the real saved position with it.
+                    sawFirstLocator = true
+                    return@collectLatest
+                }
                 delay(1_200)
                 val progress = locator.locations.totalProgression ?: return@collectLatest
                 ebookProgressWriter.record(

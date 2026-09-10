@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
@@ -62,6 +63,7 @@ private val WAVE = listOf(0.30f, 0.62f, 0.44f, 0.82f, 0.55f, 1.0f, 0.70f, 0.90f,
 @Composable
 fun PlayerScreen(
     modifier: Modifier = Modifier,
+    onRead: (serverId: String, itemId: String, title: String) -> Unit = { _, _, _ -> },
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -92,7 +94,22 @@ fun PlayerScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        PlayerHero(state = state)
+        // The jump panel takes over the cover's own slot instead of a modal dialog —
+        // the rest of the player (transport, chapters/bookmarks below) stays visible
+        // and usable while it's open. Tapping "Jump" again (or the panel's own close)
+        // swaps the cover back.
+        if (goToOpen) {
+            val readTarget by viewModel.readEbookTarget.collectAsState()
+            PlayerJumpPanel(
+                state = state,
+                viewModel = viewModel,
+                readTarget = readTarget,
+                onRead = onRead,
+                onClose = { goToOpen = false },
+            )
+        } else {
+            PlayerHero(state = state)
+        }
 
         Column(Modifier.padding(horizontal = 20.dp)) {
             val playerBookmarks by viewModel.bookmarks.collectAsState()
@@ -119,7 +136,8 @@ fun PlayerScreen(
                     }
                 },
                 onBookmark = { addBookmark = true },
-                onGoTo = { goToOpen = true },
+                goToActive = goToOpen,
+                onGoTo = { goToOpen = !goToOpen },
             )
             Spacer(Modifier.height(16.dp))
             PlayerTabs(tab = tab, onTab = { tab = it })
@@ -134,7 +152,6 @@ fun PlayerScreen(
         Spacer(Modifier.height(24.dp))
     }
 
-    if (goToOpen) GoToDialog(state = state, viewModel = viewModel, onDismiss = { goToOpen = false })
     if (addBookmark) AddBookmarkDialog(viewModel = viewModel, onDismiss = { addBookmark = false })
 }
 
@@ -360,6 +377,7 @@ private fun UtilityStrip(
     onSpeed: () -> Unit,
     onSleep: () -> Unit,
     onBookmark: () -> Unit,
+    goToActive: Boolean,
     onGoTo: () -> Unit,
 ) {
     val line = MaterialTheme.colorScheme.outline
@@ -382,7 +400,7 @@ private fun UtilityStrip(
         Box(Modifier.width(1.dp).height(38.dp).background(line))
         UtilityCell("Add", "BOOKMARK", active = false, onClick = onBookmark, modifier = Modifier.weight(1f))
         Box(Modifier.width(1.dp).height(38.dp).background(line))
-        UtilityCell("Jump", "GO TO", active = false, onClick = onGoTo, modifier = Modifier.weight(1f))
+        UtilityCell(if (goToActive) "Close" else "Jump", "GO TO", active = goToActive, onClick = onGoTo, modifier = Modifier.weight(1f))
     }
 }
 
@@ -534,63 +552,128 @@ private fun BookmarkList(viewModel: PlayerViewModel) {
 }
 
 /**
- * "Go to…" jump dialog. Unit follows Settings → Playback → "Go to uses":
- * a percentage, or an exact timestamp (h:mm:ss / m:ss).
+ * The jump panel, filling the cover's own slot (same [aspectRatio] as [PlayerHero]) so
+ * swapping between them never reflows the rest of the screen. Unlike the old modal
+ * dialog it replaced, everything below — transport, chapters/bookmarks — stays visible
+ * and usable while this is open; "Jump"/"Close" on the utility strip toggles it.
+ *
+ * Unit follows Settings → Playback → "Go to uses" by default (a percentage or an exact
+ * timestamp) but the %/time switch here is a local, in-context override, matching the
+ * reader's Go-to sheet. When the book also has an ebook edition, a Listen/Read switch
+ * lets you jump straight into reading it — the seamless audio↔reading handoff.
  */
 @Composable
-private fun GoToDialog(state: PlaybackState, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
-    val unit by viewModel.progressUnit.collectAsState()
-    val byPercent = unit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT
+private fun PlayerJumpPanel(
+    state: PlaybackState,
+    viewModel: PlayerViewModel,
+    readTarget: Pair<String, String>?,
+    onRead: (serverId: String, itemId: String, title: String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val unitPref by viewModel.progressUnit.collectAsState()
+    var byPercent by remember { mutableStateOf(unitPref == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT) }
     val readingS by viewModel.readingAudioSeconds.collectAsState()
     var field by remember { mutableStateOf("") }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Go to") },
-        text = {
-            Column {
-                androidx.compose.material3.OutlinedTextField(
-                    value = field,
-                    onValueChange = { field = it },
-                    singleLine = true,
-                    label = { Text(if (byPercent) "Percent" else "Time") },
-                    placeholder = { Text(if (byPercent) "0–100" else "h:mm:ss") },
-                )
+    val duration = state.durationMs.coerceAtLeast(1)
+
+    fun display(ms: Long): String =
+        if (byPercent) "${(ms * 100 / duration).coerceIn(0, 100)}%" else formatTime(ms)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.92f)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = if (byPercent) "Jump to a percentage of the book." else "Total length ${formatTime(state.durationMs)}.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    text = "Go to",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
-                readingS?.let { rs ->
-                    androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose)
+                        .padding(6.dp),
+                )
+            }
+            readTarget?.let { (sid, itemId) ->
+                Spacer(Modifier.height(14.dp))
+                no.bellaybestia.audex.designsystem.FlatTabRow(
+                    tabs = listOf("Listen", "Read"),
+                    selectedIndex = 0,
+                    onSelect = { if (it == 1) onRead(sid, itemId, state.title.orEmpty()) },
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            no.bellaybestia.audex.designsystem.FlatTabRow(
+                tabs = listOf("%", "Time"),
+                selectedIndex = if (byPercent) 0 else 1,
+                onSelect = { byPercent = it == 0 },
+            )
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.material3.OutlinedTextField(
+                value = field,
+                onValueChange = { field = it },
+                singleLine = true,
+                label = { Text(if (byPercent) "Percent" else "Time") },
+                placeholder = { Text(if (byPercent) "0–100" else "h:mm:ss") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
                     Text(
-                        text = "Jump to where you're reading (${formatTime((rs * 1000).toLong())})",
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = "Go",
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.seekTo((rs * 1000).toLong()); onDismiss() }
-                            .padding(vertical = 8.dp),
+                            .clickable {
+                                if (byPercent) {
+                                    field.trim().toDoubleOrNull()?.let { viewModel.seekToFraction(it / 100.0) }
+                                } else {
+                                    parseTime(field)?.let { viewModel.seekTo(it) }
+                                }
+                                onClose()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                },
+            )
+            readingS?.let { rs ->
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.seekTo((rs * 1000).toLong()); onClose() }
+                        .padding(vertical = 10.dp),
+                ) {
+                    Text(
+                        text = "Where you're reading",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = display((rs * 1000).toLong()),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(
-                onClick = {
-                    if (byPercent) {
-                        field.trim().toDoubleOrNull()?.let { viewModel.seekToFraction(it / 100.0) }
-                    } else {
-                        parseTime(field)?.let { viewModel.seekTo(it) }
-                    }
-                    onDismiss()
-                },
-            ) { Text("Go") }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+        }
+    }
 }
 
 @Composable

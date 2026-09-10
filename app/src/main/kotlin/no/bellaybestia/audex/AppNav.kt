@@ -296,7 +296,11 @@ fun AppNav() {
                 ReaderScreen()
             }
             composable(Routes.PLAYER) {
-                PlayerScreen()
+                PlayerScreen(
+                    onRead = { serverId, itemId, title ->
+                        navController.navigate(Routes.reader(serverId, itemId, title))
+                    },
+                )
             }
         }
     }

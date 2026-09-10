@@ -64,16 +64,26 @@ class PlayerViewModel @Inject constructor(
     private val _readingAudioSeconds = MutableStateFlow<Double?>(null)
     val readingAudioSeconds: StateFlow<Double?> = _readingAudioSeconds.asStateFlow()
 
+    /** The ebook edition of the work currently playing, if it has one — lets the
+     *  player's jump panel offer a one-tap "Read" switch. serverId to libraryItemId. */
+    private val _readEbookTarget = MutableStateFlow<Pair<String, String>?>(null)
+    val readEbookTarget: StateFlow<Pair<String, String>?> = _readEbookTarget.asStateFlow()
+
     init {
         viewModelScope.launch {
             state.map { it.serverId to it.libraryItemId }.distinctUntilChanged().collectLatest { (sid, itemId) ->
                 _readingAudioSeconds.value = null
+                _readEbookTarget.value = null
                 if (sid == null || itemId == null) return@collectLatest
                 val workId = catalogRepository.workIdForItem(sid, itemId) ?: return@collectLatest
-                val map = alignmentRepository.syncMap(sid, itemId) ?: return@collectLatest
+                // Read-along cross-format seconds need a sync map; the "Read" switch itself
+                // doesn't — a book can be openable in the reader with no map built yet.
+                val map = alignmentRepository.syncMap(sid, itemId)
                 catalogRepository.editionsForWork(workId).collect { eds ->
-                    val frac = eds.firstOrNull { it.format == Format.EBOOK }?.fraction?.takeIf { it > 0.0 }
-                    _readingAudioSeconds.value = frac?.let { map.timeAtProgression(it) }
+                    val ebook = eds.firstOrNull { it.format == Format.EBOOK }
+                    _readEbookTarget.value = ebook?.let { it.serverId to it.libraryItemId }
+                    val frac = ebook?.fraction?.takeIf { it > 0.0 }
+                    _readingAudioSeconds.value = map?.let { m -> frac?.let { m.timeAtProgression(it) } }
                 }
             }
         }

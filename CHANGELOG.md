@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.35.0
+
+- **The player's "Jump" no longer covers the screen.** It now takes over the cover art's own spot instead of a popup — the rest of the player (transport, chapters, bookmarks) stays visible and usable while it's open. Tap **Jump** again (now labeled **Close**) to bring the cover back.
+- **Listen ↔ Read, right from the jump panel.** If the book has an ebook edition, a **Listen/Read** switch sits at the top — tap **Read** to open it in the reader without leaving through the library.
+
 ## 0.4.34.0
 
 - **Fixed: closing the app while listening could reset your position to the start.** If playback had paused (or the app was swiped away) and the player service shut down, a background timer kept polling it anyway — and, reading a dead connection as "position 0," quietly saved that over your real progress. It now stops the moment the connection drops instead of trusting it.

@@ -23,17 +23,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.window.Dialog
 import no.bellaybestia.audex.designsystem.FlatTabRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -549,51 +549,59 @@ private fun EpubReader(
                     )
                 }
             }
+
+            // "Go to…" jump (item 7): takes over this same content slot — the
+            // book's own viewport — instead of a modal dialog, matching the
+            // player's jump panel (which takes over the cover's slot). The
+            // navigator stays mounted underneath (never removed from
+            // composition — its Fragment attach/detach is fragile, see the
+            // AndroidView factory above) so nothing about page restoration is
+            // disturbed; the panel just draws over it. Percent, or an exact
+            // page number, per the Settings → Playback unit. Percent maps
+            // through the positions list; page is a direct 1-based index.
+            if (showGoTo) {
+                // Cross-format: turn an audiobook second into the matching text
+                // position — exact via the sync map's narration anchor, else
+                // proportional.
+                val goToAudioSeconds: (Double) -> Unit = { seconds ->
+                    val map = syncMap
+                    val loc = if (map != null) {
+                        map.anchorAt(seconds)?.let { narrationLocator(ready.publication, map, it) }
+                            ?: locatorForFraction(ready.positions, map.progressionAt(seconds) ?: 0.0)
+                    } else {
+                        null
+                    }
+                    loc?.let { navigator?.go(it) }
+                    showGoTo = false
+                }
+                ReaderGoToPanel(
+                    byPercentDefault = progressUnit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT,
+                    totalPages = ready.positions.size,
+                    bookmarks = audioBookmarks,
+                    audioPositionS = audioPositionS,
+                    audioFurthestS = audioFurthestS,
+                    audioDurationS = audioDurationS,
+                    hasAudio = hasAudio,
+                    onListen = {
+                        viewModel.ensureAudioForHandoff()
+                        onListen()
+                    },
+                    onClose = { showGoTo = false },
+                    onGoPercent = { pct ->
+                        locatorForFraction(ready.positions, pct)?.let { navigator?.go(it) }
+                        showGoTo = false
+                    },
+                    onGoPage = { pageIndex ->
+                        ready.positions.getOrNull(pageIndex)?.let { navigator?.go(it) }
+                        showGoTo = false
+                    },
+                    onGoAudioSeconds = goToAudioSeconds,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         if (chromeVisible && !barAtTop) appearanceBar()
-    }
-
-    // "Go to…" jump (item 7): percent, or an exact page number, per the
-    // Settings → Playback unit. Percent maps through the positions list; page is
-    // a direct 1-based index into it.
-    if (showGoTo) {
-        // Cross-format: turn an audiobook second into the matching text position —
-        // exact via the sync map's narration anchor, else proportional.
-        val goToAudioSeconds: (Double) -> Unit = { seconds ->
-            val map = syncMap
-            val loc = if (map != null) {
-                map.anchorAt(seconds)?.let { narrationLocator(ready.publication, map, it) }
-                    ?: locatorForFraction(ready.positions, map.progressionAt(seconds) ?: 0.0)
-            } else {
-                null
-            }
-            loc?.let { navigator?.go(it) }
-            showGoTo = false
-        }
-        ReaderGoToDialog(
-            byPercentDefault = progressUnit == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT,
-            totalPages = ready.positions.size,
-            bookmarks = audioBookmarks,
-            audioPositionS = audioPositionS,
-            audioFurthestS = audioFurthestS,
-            audioDurationS = audioDurationS,
-            hasAudio = hasAudio,
-            onListen = {
-                viewModel.ensureAudioForHandoff()
-                onListen()
-            },
-            onDismiss = { showGoTo = false },
-            onGoPercent = { pct ->
-                locatorForFraction(ready.positions, pct)?.let { navigator?.go(it) }
-                showGoTo = false
-            },
-            onGoPage = { pageIndex ->
-                ready.positions.getOrNull(pageIndex)?.let { navigator?.go(it) }
-                showGoTo = false
-            },
-            onGoAudioSeconds = goToAudioSeconds,
-        )
     }
 
     // Stream locator changes (page turns, chapter jumps) into the debounced sync,
@@ -1068,17 +1076,23 @@ private fun no.bellaybestia.audex.domain.playback.Bookmark.goToKind(): GoToKind 
 }
 
 /**
- * "Go to…" sheet for the reader: a percentage (0–100) or a page number
- * (1–[totalPages]); plus cross-format jumps — straight to where the audiobook is (both
- * its current spot and, if you've since dragged back to relisten, the furthest point
- * you'd reached) — and to any [bookmarks] (including the auto "you were here" markers),
- * every one labeled with why it's there. The %/time toggle governs how every row below
- * the input field displays its position; [byPercentDefault] seeds it from the app-wide
- * Progress unit setting, but it's a local, in-context override — flipping it here doesn't
- * change that setting.
+ * "Go to…" panel for the reader — takes over the book's own viewport (this
+ * screen's equivalent of the player's cover slot) instead of a modal dialog,
+ * matching [no.bellaybestia.audex.feature.player]'s PlayerJumpPanel: a flat
+ * surface fill with no scrim, so the surrounding chrome (appearance bar, its
+ * own Jump/Close toggle) stays visible and usable while this is open.
+ *
+ * A percentage (0–100) or a page number (1–[totalPages]); plus cross-format
+ * jumps — straight to where the audiobook is (both its current spot and, if
+ * you've since dragged back to relisten, the furthest point you'd reached) —
+ * and to any [bookmarks] (including the auto "you were here" markers), every
+ * one labeled with why it's there. The %/time toggle governs how every row
+ * below the input field displays its position; [byPercentDefault] seeds it
+ * from the app-wide Progress unit setting, but it's a local, in-context
+ * override — flipping it here doesn't change that setting.
  */
 @Composable
-private fun ReaderGoToDialog(
+private fun ReaderGoToPanel(
     byPercentDefault: Boolean,
     totalPages: Int,
     bookmarks: List<no.bellaybestia.audex.domain.playback.Bookmark>,
@@ -1087,10 +1101,11 @@ private fun ReaderGoToDialog(
     audioDurationS: Long?,
     hasAudio: Boolean,
     onListen: () -> Unit,
-    onDismiss: () -> Unit,
+    onClose: () -> Unit,
     onGoPercent: (Double) -> Unit,
     onGoPage: (Int) -> Unit,
     onGoAudioSeconds: (Double) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var field by remember { mutableStateOf("") }
     var byPercent by remember { mutableStateOf(byPercentDefault) }
@@ -1099,93 +1114,94 @@ private fun ReaderGoToDialog(
     fun display(seconds: Double): String =
         if (byPercent && dur != null) "${((seconds / dur) * 100).roundToInt().coerceIn(0, 100)}%" else hms(seconds)
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 4.dp,
-            modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 560.dp),
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
-            Column(Modifier.padding(top = 22.dp, bottom = 8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Go to",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 22.dp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose)
+                        .padding(6.dp),
+                )
+            }
+            if (hasAudio) {
                 Spacer(Modifier.height(14.dp))
-                if (hasAudio) {
-                    Box(Modifier.padding(horizontal = 22.dp)) {
-                        FlatTabRow(
-                            tabs = listOf("Read", "Listen"),
-                            selectedIndex = 0,
-                            onSelect = { if (it == 1) onListen() },
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
-                Box(Modifier.padding(horizontal = 22.dp)) {
-                    FlatTabRow(
-                        tabs = listOf("%", "Time"),
-                        selectedIndex = if (byPercent) 0 else 1,
-                        onSelect = { byPercent = it == 0 },
-                    )
-                }
-                Column(
-                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
-                        .padding(horizontal = 22.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = field,
-                        onValueChange = { field = it },
-                        singleLine = true,
-                        label = { Text(if (byPercent) "Percent" else "Page") },
-                        placeholder = { Text(if (byPercent) "0–100" else "1–$totalPages") },
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    )
-                    if (audioPositionS != null) {
-                        GoToSectionLabel("Audiobook")
-                        GoToRow(GoToKind.AUDIO_CURRENT, display(audioPositionS)) { onGoAudioSeconds(audioPositionS) }
-                        audioFurthestS?.let { f ->
-                            GoToRow(GoToKind.AUDIO_FURTHEST, display(f)) { onGoAudioSeconds(f) }
-                        }
-                    }
-                    if (bookmarks.isNotEmpty()) {
-                        GoToSectionLabel("Bookmarks")
-                        bookmarks.sortedByDescending { it.createdAt }.take(12).forEach { bm ->
-                            val kind = bm.goToKind()
-                            GoToRow(
-                                kind = kind,
-                                position = display(bm.timeS.toDouble()),
-                                // A custom title from another client carries real info the
-                                // kind label doesn't — show it instead of the generic label.
-                                caption = if (kind == GoToKind.BOOKMARK) bm.title.ifBlank { null } else null,
-                                onClick = { onGoAudioSeconds(bm.timeS.toDouble()) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                }
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            if (byPercent) {
-                                field.trim().toDoubleOrNull()
-                                    ?.let { onGoPercent((it / 100.0).coerceIn(0.0, 1.0)) }
-                            } else {
-                                field.trim().toIntOrNull()
-                                    ?.let { onGoPage((it - 1).coerceIn(0, (totalPages - 1).coerceAtLeast(0))) }
+                FlatTabRow(
+                    tabs = listOf("Read", "Listen"),
+                    selectedIndex = 0,
+                    onSelect = { if (it == 1) onListen() },
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            FlatTabRow(
+                tabs = listOf("%", "Time"),
+                selectedIndex = if (byPercent) 0 else 1,
+                onSelect = { byPercent = it == 0 },
+            )
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.material3.OutlinedTextField(
+                value = field,
+                onValueChange = { field = it },
+                singleLine = true,
+                label = { Text(if (byPercent) "Percent" else "Page") },
+                placeholder = { Text(if (byPercent) "0–100" else "1–$totalPages") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Text(
+                        text = "Go",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable {
+                                if (byPercent) {
+                                    field.trim().toDoubleOrNull()
+                                        ?.let { onGoPercent((it / 100.0).coerceIn(0.0, 1.0)) }
+                                } else {
+                                    field.trim().toIntOrNull()
+                                        ?.let { onGoPage((it - 1).coerceIn(0, (totalPages - 1).coerceAtLeast(0))) }
+                                }
                             }
-                        },
-                    ) { Text("Go") }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                },
+            )
+            if (audioPositionS != null) {
+                GoToSectionLabel("Audiobook")
+                GoToRow(GoToKind.AUDIO_CURRENT, display(audioPositionS)) { onGoAudioSeconds(audioPositionS) }
+                audioFurthestS?.let { f ->
+                    GoToRow(GoToKind.AUDIO_FURTHEST, display(f)) { onGoAudioSeconds(f) }
                 }
             }
+            if (bookmarks.isNotEmpty()) {
+                GoToSectionLabel("Bookmarks")
+                bookmarks.sortedByDescending { it.createdAt }.take(12).forEach { bm ->
+                    val kind = bm.goToKind()
+                    GoToRow(
+                        kind = kind,
+                        position = display(bm.timeS.toDouble()),
+                        // A custom title from another client carries real info the
+                        // kind label doesn't — show it instead of the generic label.
+                        caption = if (kind == GoToKind.BOOKMARK) bm.title.ifBlank { null } else null,
+                        onClick = { onGoAudioSeconds(bm.timeS.toDouble()) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
         }
     }
 }

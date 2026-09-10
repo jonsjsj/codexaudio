@@ -66,23 +66,29 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
-     * In-progress works (0 < max(listen, read) < 0.99), MOST RECENTLY LISTENED
-     * FIRST — so the Home hero features the book you last had open, not an
-     * arbitrary catalog-order pick. Works with no progress timestamp sort last.
+     * Every work you've actually opened — listened to or read at all, not just
+     * ones still in progress — MOST RECENT FIRST, so the Home hero features
+     * the book you last had open. Home leads with this (your own activity)
+     * rather than what was merely added to the server; a work you just
+     * finished, or only just started, belongs here as much as one you're
+     * halfway through.
      */
     val continueWorks: StateFlow<List<Work>> = catalogRepository.works()
         .map { works ->
-            works.filter { work ->
-                val progress = maxOf(work.listenFraction, work.readFraction)
-                progress > 0.0 && progress < 0.99
-            }.sortedByDescending { it.listenedAt ?: Long.MIN_VALUE }
+            works.filter { it.listenedAt != null }
+                .sortedByDescending { it.listenedAt }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Newest arrivals by remote updatedAt — fills Home before any progress exists. */
+    /**
+     * Newest arrivals by remote updatedAt, for books you haven't opened yet —
+     * fills Home (and gives you something to discover) once you're caught up
+     * on your own activity. Excludes anything already surfaced in
+     * [continueWorks] so a book you're mid-way through never shows twice.
+     */
     val recentWorks: StateFlow<List<Work>> = catalogRepository.works()
         .map { works ->
-            works.filter { it.updatedAt != null }
+            works.filter { it.updatedAt != null && it.listenedAt == null }
                 .sortedByDescending { it.updatedAt }
                 .take(15)
         }

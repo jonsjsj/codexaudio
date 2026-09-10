@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.37.0
+
+- **The reader's "Go to" is now in the player's style.** It no longer pops up as a boxed dialog that dims the page — it takes over the book's own viewport instead, exactly like the player's Jump panel takes over the cover. The appearance bar (and its own Jump/Close button) stays visible and usable while it's open.
+- **Home now leads with what you've actually read or listened to.** Previously "Continue" only showed books still in progress, so a book you'd just finished — or only just opened — fell out of view and Home was effectively led by "Recently added" instead. It now shows everything you've opened, most recent first; "Recently added" is left for books you haven't started yet.
+
 ## 0.4.36.0
 
 - **Fixed: both the audiobook and the e-book could reset to the start.** Three separate bugs stacked up here. The reader's own progress-save could silently overwrite other fields on your saved position (including quietly un-marking a finished book as unfinished on its very next page turn). Opening the reader could also fire an extra "save" for the position it had *just restored*, which raced the real one. And jumping back and forth between the player and the reader (via the new Listen/Read switches) could leave a stale, duplicate copy of one screen running in the background, still writing its old position over your new one after you'd moved on. All three are fixed — the last one also hardens the position-tracking loop from 0.4.34.0 against a similar timing gap.

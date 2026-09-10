@@ -34,16 +34,20 @@ class HomeViewModel @Inject constructor(
     private val _openReader = MutableSharedFlow<ReaderNav>(extraBufferCapacity = 1)
     val openReader: SharedFlow<ReaderNav> = _openReader.asSharedFlow()
 
+    private val _openPlayer = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openPlayer: SharedFlow<Unit> = _openPlayer.asSharedFlow()
+
     /**
-     * Home "Resume": jump straight into the book's last-used edition — start the
-     * audiobook (mini-player), or open the reader for an ebook — instead of
-     * detouring through the detail screen.
+     * Home "Resume": jump straight into the book's last-used edition and the
+     * full-screen experience for it — the player for an audiobook, the reader
+     * for an ebook — instead of detouring through the detail screen.
      */
     fun resume(work: Work) {
         viewModelScope.launch {
             val t = catalogRepository.resumeTarget(work.id) ?: return@launch
             if (t.format == Format.AUDIO) {
                 playbackController.play(t.serverId, t.libraryItemId, t.title, t.author, resumeAtS = t.resumeAtS)
+                _openPlayer.emit(Unit)
             } else {
                 _openReader.emit(ReaderNav(t.serverId, t.libraryItemId, t.title))
             }

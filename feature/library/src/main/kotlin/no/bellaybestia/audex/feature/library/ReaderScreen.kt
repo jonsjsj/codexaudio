@@ -25,6 +25,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.IntOffset
@@ -843,12 +847,13 @@ private fun AppearanceBar(
     onGoTo: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-        // In-reader audio mini-player: play/pause + skip the narration while you read.
+        // In-reader audio mini-player: play/pause + skip the narration while you
+        // read — real transport icons (matching the player's TransportRow) in
+        // place of the old emoji glyphs, sized down to fit a single compact row.
         if (hasAudio) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = if (syncedWithAudio) "Synced with audio" else "Audiobook",
@@ -857,23 +862,33 @@ private fun AppearanceBar(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "⏮",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clickable(onClick = onAudioSkipBack).padding(8.dp),
+                Icon(
+                    imageVector = Icons.Filled.FastRewind,
+                    contentDescription = "Skip back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onAudioSkipBack).padding(4.dp),
                 )
-                Text(
-                    text = if (audioPlaying) "⏸" else "▶",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable(onClick = onAudioToggle).padding(8.dp),
-                )
-                Text(
-                    text = "⏭",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clickable(onClick = onAudioSkipForward).padding(8.dp),
+                Box(
+                    Modifier
+                        .padding(horizontal = 10.dp)
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable(onClick = onAudioToggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (audioPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (audioPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.FastForward,
+                    contentDescription = "Skip forward",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onAudioSkipForward).padding(4.dp),
                 )
             }
         } else if (syncedWithAudio) {

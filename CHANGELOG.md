@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.38.0
+
+- **Resume now opens the player for audiobooks, not just the mini-player.** Tapping Resume on Home for a book you were listening to used to start playback in the background and leave you on Home; it now takes you straight into the full player, matching what Resume already did for ebooks.
+- **The Listen ↔ Read handoff now cross-fades instead of sliding.** Switching between the player and reader is a mode change on the same book, not a trip to a new screen — it reads that way now.
+- **The reader's in-line audio controls got real icons.** The play/skip row above the reading scrubber used to be emoji (⏮ ⏸ ⏭); it's the same transport icons the player uses now, sized to fit a compact single row.
+
 ## 0.4.37.0
 
 - **The reader's "Go to" is now in the player's style.** It no longer pops up as a boxed dialog that dims the page — it takes over the book's own viewport instead, exactly like the player's Jump panel takes over the cover. The appearance bar (and its own Jump/Close button) stays visible and usable while it's open.

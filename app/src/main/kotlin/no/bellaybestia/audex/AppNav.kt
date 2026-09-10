@@ -1,6 +1,11 @@
 package no.bellaybestia.audex
 
 import android.net.Uri
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +57,9 @@ import no.bellaybestia.audex.feature.settings.StatsScreen
 import no.bellaybestia.audex.feature.settings.AddServerScreen
 import no.bellaybestia.audex.feature.settings.ReportScreen
 import no.bellaybestia.audex.feature.settings.SettingsScreen
+
+/** Cross-fade duration for the Listen/Read handoff between the player and reader. */
+private const val PLAYER_READER_FADE_MS = 220
 
 private object Routes {
     const val HOME = "home"
@@ -150,6 +158,7 @@ fun AppNav() {
                     onOpenReader = { serverId, itemId, title ->
                         navController.navigateToReader(serverId, itemId, title)
                     },
+                    onOpenPlayer = { navController.navigateToPlayer() },
                 )
             }
             composable(Routes.LIBRARY) {
@@ -292,12 +301,42 @@ fun AppNav() {
                         defaultValue = null
                     },
                 ),
+                // The Listen/Read handoff is a mode swap on the same book, not a
+                // navigation to a new place — cross-fade instead of the normal
+                // push/pop animation so it reads that way. Any other way of
+                // arriving at (or leaving) the reader keeps the default.
+                enterTransition = {
+                    if (initialState.destination.route == Routes.PLAYER) fadeIn(tween(PLAYER_READER_FADE_MS)) else EnterTransition.None
+                },
+                exitTransition = {
+                    if (targetState.destination.route == Routes.PLAYER) fadeOut(tween(PLAYER_READER_FADE_MS)) else ExitTransition.None
+                },
+                popEnterTransition = {
+                    if (initialState.destination.route == Routes.PLAYER) fadeIn(tween(PLAYER_READER_FADE_MS)) else EnterTransition.None
+                },
+                popExitTransition = {
+                    if (targetState.destination.route == Routes.PLAYER) fadeOut(tween(PLAYER_READER_FADE_MS)) else ExitTransition.None
+                },
             ) {
                 ReaderScreen(
                     onListen = { navController.navigateToPlayer() },
                 )
             }
-            composable(Routes.PLAYER) {
+            composable(
+                route = Routes.PLAYER,
+                enterTransition = {
+                    if (initialState.destination.route == Routes.READER) fadeIn(tween(PLAYER_READER_FADE_MS)) else EnterTransition.None
+                },
+                exitTransition = {
+                    if (targetState.destination.route == Routes.READER) fadeOut(tween(PLAYER_READER_FADE_MS)) else ExitTransition.None
+                },
+                popEnterTransition = {
+                    if (initialState.destination.route == Routes.READER) fadeIn(tween(PLAYER_READER_FADE_MS)) else EnterTransition.None
+                },
+                popExitTransition = {
+                    if (targetState.destination.route == Routes.READER) fadeOut(tween(PLAYER_READER_FADE_MS)) else ExitTransition.None
+                },
+            ) {
                 PlayerScreen(
                     onRead = { serverId, itemId, title ->
                         navController.navigateToReader(serverId, itemId, title)

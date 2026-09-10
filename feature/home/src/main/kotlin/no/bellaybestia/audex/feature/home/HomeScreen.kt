@@ -53,6 +53,7 @@ import no.bellaybestia.audex.domain.settings.HomeLook
 fun HomeScreen(
     onWorkClick: (Work) -> Unit = {},
     onOpenReader: (String, String, String) -> Unit = { _, _, _ -> },
+    onOpenPlayer: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -62,9 +63,13 @@ fun HomeScreen(
     val totalBooks by viewModel.totalBooks.collectAsState()
     val serverCount by viewModel.serverCount.collectAsState()
 
-    // Resume on an ebook opens the reader; audio starts in-place (mini-player).
+    // Resume jumps straight into the full-screen experience: the reader for
+    // an ebook, the player for an audiobook — not just a mini-player.
     LaunchedEffect(Unit) {
         viewModel.openReader.collect { onOpenReader(it.serverId, it.libraryItemId, it.title) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.openPlayer.collect { onOpenPlayer() }
     }
 
     if (continueWorks.isEmpty() && recentWorks.isEmpty()) {

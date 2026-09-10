@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.39.0
+
+- **A direct way to go from listening to reading.** The Listen/Read switch used to live only inside the "Jump" panel — easy to miss. The player now shows a "Read" pill in the top corner of the cover whenever the book has an ebook edition; the reader's in-line audio row is tappable the same way to jump straight to the player.
+
 ## 0.4.38.0
 
 - **Resume now opens the player for audiobooks, not just the mini-player.** Tapping Resume on Home for a book you were listening to used to start playback in the background and leave you on Home; it now takes you straight into the full player, matching what Resume already did for ebooks.

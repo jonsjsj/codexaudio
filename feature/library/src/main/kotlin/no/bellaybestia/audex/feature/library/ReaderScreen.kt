@@ -260,6 +260,7 @@ private fun EpubReader(
             onAudioToggle = { viewModel.toggleAudio() },
             onAudioSkipBack = { viewModel.audioSkipBack() },
             onAudioSkipForward = { viewModel.audioSkipForward() },
+            onOpenPlayer = { viewModel.ensureAudioForHandoff(); onListen() },
             readProgress = readProgress?.toFloat() ?: 0f,
             bookmarks = bookmarkTicks,
             furthestFraction = furthestFraction,
@@ -832,6 +833,7 @@ private fun AppearanceBar(
     onAudioToggle: () -> Unit,
     onAudioSkipBack: () -> Unit,
     onAudioSkipForward: () -> Unit,
+    onOpenPlayer: () -> Unit,
     readProgress: Float,
     bookmarks: List<ReaderViewModel.BookmarkTick>,
     furthestFraction: Float?,
@@ -855,12 +857,14 @@ private fun AppearanceBar(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Tapping the label itself — not just the Jump panel's Listen/Read
+                // switch — opens the full player. The chevron marks it as a link.
                 Text(
-                    text = if (syncedWithAudio) "Synced with audio" else "Audiobook",
+                    text = (if (syncedWithAudio) "Synced with audio" else "Audiobook") + "  ›",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (syncedWithAudio) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).clickable(onClick = onOpenPlayer),
                 )
                 Icon(
                     imageVector = Icons.Filled.FastRewind,

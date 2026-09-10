@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
@@ -98,8 +99,8 @@ fun PlayerScreen(
         // the rest of the player (transport, chapters/bookmarks below) stays visible
         // and usable while it's open. Tapping "Jump" again (or the panel's own close)
         // swaps the cover back.
+        val readTarget by viewModel.readEbookTarget.collectAsState()
         if (goToOpen) {
-            val readTarget by viewModel.readEbookTarget.collectAsState()
             PlayerJumpPanel(
                 state = state,
                 viewModel = viewModel,
@@ -108,7 +109,7 @@ fun PlayerScreen(
                 onClose = { goToOpen = false },
             )
         } else {
-            PlayerHero(state = state)
+            PlayerHero(state = state, readTarget = readTarget, onRead = onRead)
         }
 
         Column(Modifier.padding(horizontal = 20.dp)) {
@@ -158,10 +159,16 @@ fun PlayerScreen(
 /**
  * Cover-image hero (the mockup's cover-gradient banner) — the real cover fills
  * the top, a vertical scrim fades it into the page background, and the title
- * block sits over the bottom in Space Grotesk. "NOW PLAYING" pins the top-left.
+ * block sits over the bottom in Space Grotesk. "NOW PLAYING" pins the top-left;
+ * when the book also has an ebook edition, a "Read" pill pins the top-right —
+ * always reachable, not just from inside the Jump panel's Listen/Read switch.
  */
 @Composable
-private fun PlayerHero(state: PlaybackState) {
+private fun PlayerHero(
+    state: PlaybackState,
+    readTarget: Pair<String, String>? = null,
+    onRead: (serverId: String, itemId: String, title: String) -> Unit = { _, _, _ -> },
+) {
     val bg = MaterialTheme.colorScheme.background
     Box(
         Modifier
@@ -194,6 +201,32 @@ private fun PlayerHero(state: PlaybackState) {
                 .align(Alignment.TopStart)
                 .padding(20.dp),
         )
+        readTarget?.let { (sid, itemId) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                    .clickable { onRead(sid, itemId, state.title.orEmpty()) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MenuBook,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Read",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         Column(
             Modifier
                 .align(Alignment.BottomStart)

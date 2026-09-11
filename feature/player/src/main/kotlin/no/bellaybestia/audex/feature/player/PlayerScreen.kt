@@ -110,19 +110,10 @@ fun PlayerScreen(
                 onClose = { goToOpen = false },
             )
         } else {
-            PlayerHero(state = state)
+            PlayerHero(state = state, readTarget = readTarget, onRead = onRead)
         }
 
         Column(Modifier.padding(horizontal = 20.dp)) {
-            // Listen/Read, directly above the scrubber — not on top of the cover
-            // art, and not buried in the Jump panel (which has its own copy of
-            // this switch for when it's already open).
-            if (!goToOpen) {
-                readTarget?.let { (sid, itemId) ->
-                    ReadPill(onClick = { onRead(sid, itemId, state.title.orEmpty()) })
-                    Spacer(Modifier.height(10.dp))
-                }
-            }
             val playerBookmarks by viewModel.bookmarks.collectAsState()
             ProgressSection(
                 state = state,
@@ -170,9 +161,16 @@ fun PlayerScreen(
  * Cover-image hero (the mockup's cover-gradient banner) — the real cover fills
  * the top, a vertical scrim fades it into the page background, and the title
  * block sits over the bottom in Space Grotesk. "NOW PLAYING" pins the top-left.
+ * When the book also has an ebook edition, a "Read" pill sits beside the
+ * title/author block — on the cover, not a separate row above the scrubber,
+ * so it never adds height of its own.
  */
 @Composable
-private fun PlayerHero(state: PlaybackState) {
+private fun PlayerHero(
+    state: PlaybackState,
+    readTarget: Pair<String, String>? = null,
+    onRead: (serverId: String, itemId: String, title: String) -> Unit = { _, _, _ -> },
+) {
     val bg = MaterialTheme.colorScheme.background
     Box(
         Modifier
@@ -205,36 +203,43 @@ private fun PlayerHero(state: PlaybackState) {
                 .align(Alignment.TopStart)
                 .padding(20.dp),
         )
-        Column(
-            Modifier
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            Text(
-                text = state.title.orEmpty(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            state.author?.let {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    text = state.title.orEmpty(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp),
                 )
+                state.author?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+            readTarget?.let { (sid, itemId) ->
+                Spacer(Modifier.width(12.dp))
+                ReadPill(onClick = { onRead(sid, itemId, state.title.orEmpty()) })
             }
         }
     }
 }
 
-/** Listen/Read quick-switch, sitting above the scrubber (not on the cover, not
- *  buried in the Jump panel) — a one-tap way into the ebook. */
+/** Listen/Read quick-switch, beside the title on the cover (not a separate row,
+ *  not buried in the Jump panel) — a one-tap way into the ebook. */
 @Composable
 private fun ReadPill(onClick: () -> Unit) {
     Row(

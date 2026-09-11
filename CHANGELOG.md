@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.43.0
+
+- **The Read pill moved back onto the cover, beside the title.** Its own row above the scrubber added height it didn't need to; it now sits to the right of the title/author block on the cover art itself, like it did originally, just without covering the text.
+
 ## 0.4.42.0
 
 - **The Read switch moved off the cover, to right above the scrubber.** It no longer sits on top of the artwork — it's now its own row directly above the progress bar, where it stays out of the way of the cover and the Jump panel's own copy.

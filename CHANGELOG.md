@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.46.0
+
+- **Book titles are now anonymized in report diagnostics.** Reports are filed as public issues — the diagnostic snapshot from 0.4.44.0 was including real book titles, visible to anyone. It now labels them "Book 1", "Book 2", etc. instead (consistent per book within one report, so a cross-format issue is still traceable) — everything else needed to diagnose a bug (percent, seconds, source, timestamps) is unchanged.
+
 ## 0.4.45.0
 
 - **Fixed: opening a book could briefly show it at 100%.** Found via a report's attached diagnostic data — the saved position was correct the whole time; the player just hadn't cleared the *previous* book's position and duration yet when it started rendering the new one, so for a moment the new title showed the old book's numbers. If that previous book happened to be finished, that showed as "jumped to the end." Starting playback now resets fully instead of carrying anything over.

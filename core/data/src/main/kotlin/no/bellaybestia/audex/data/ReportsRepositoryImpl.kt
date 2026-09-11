@@ -163,6 +163,19 @@ class ReportsRepositoryImpl @Inject constructor(
 
     override suspend fun buildDiagnostics(): String = withContext(Dispatchers.IO) {
         val rows = runCatching { catalogRepository.debugProgressRows().first() }.getOrDefault(emptyList())
+        // Reports are filed as PUBLIC GitHub issues — a book title is someone's
+        // actual reading history, not something that belongs on a public tracker.
+        // Replace it with a per-report label instead: stable WITHIN this one
+        // diagnostic dump (so a book's audio and ebook rows still carry the same
+        // label, keeping a cross-format issue traceable) but not across reports —
+        // labels.size ties it to iteration order, which is `rows`' own
+        // lastUpdate-DESC order, so "Book 1" is always whichever book was touched
+        // most recently (almost always the one actually being reported).
+        val labels = mutableMapOf<String, String>()
+        fun labelFor(title: String?): String {
+            val key = title ?: return "Book ?"
+            return labels.getOrPut(key) { "Book ${labels.size + 1}" }
+        }
         val progressBlock = if (rows.isEmpty()) {
             "(no progress rows)"
         } else {
@@ -171,13 +184,22 @@ class ReportsRepositoryImpl @Inject constructor(
                 // is a .no domain) rendered "pct=0,2525" - fine for a human, but it
                 // reads as three fields to anything trying to parse the number back
                 // out, and a report should be consistent regardless of the phone.
-                "${r.title ?: "?"} [${r.format ?: "?"}] pct=${"%.4f".format(java.util.Locale.ROOT, r.pct)} " +
+                "${labelFor(r.title)} [${r.format ?: "?"}] pct=${"%.4f".format(java.util.Locale.ROOT, r.pct)} " +
                     "currentTimeS=${r.currentTimeS} ebookProgress=${r.ebookProgress} " +
                     "isFinished=${r.isFinished} source=${r.source} lastUpdate=${r.lastUpdate}"
             }
         }
-        val logBlock = DiagnosticLog.snapshot().joinToString("\n").ifBlank { "(no log lines captured)" }
-        "Progress table:\n$progressBlock\n\nRecent log:\n$logBlock"
+        // Best-effort scrub of the same titles out of the log text too: nothing in
+        // this app logs a title directly through Timber today (only the Readium
+        // reader library's own internal diagnostics flow through it), but if any of
+        // these exact titles happen to appear there anyway, swap them for the same
+        // label used above rather than risk a duplicate leak. Longest title first,
+        // so a title that's a substring of another doesn't get partially replaced.
+        var logText = DiagnosticLog.snapshot().joinToString("\n").ifBlank { "(no log lines captured)" }
+        labels.keys.sortedByDescending { it.length }.forEach { title ->
+            if (title.length >= 3) logText = logText.replace(title, labels.getValue(title))
+        }
+        "Progress table:\n$progressBlock\n\nRecent log:\n$logText"
     }
 
     override suspend fun refreshMyReports() = withContext(Dispatchers.IO) {

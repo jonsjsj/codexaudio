@@ -98,8 +98,10 @@ fun ReportScreen(
             Text(
                 text = "Attaches an anonymous snapshot — every book's saved position and " +
                     "where it came from, plus the last few hundred lines of the app's own log. " +
-                    "No server address, account, or personal info. This is usually what actually " +
-                    "lets a bug like a wrong position get found.",
+                    "Book titles are replaced with \"Book 1\", \"Book 2\", etc. — reports are " +
+                    "public, so what you're reading stays off the tracker, only the numbers " +
+                    "needed to find the bug go with it. No server address, account, or other " +
+                    "personal info either.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -167,7 +167,11 @@ class ReportsRepositoryImpl @Inject constructor(
             "(no progress rows)"
         } else {
             rows.joinToString("\n") { r ->
-                "${r.title ?: "?"} [${r.format ?: "?"}] pct=${"%.4f".format(r.pct)} " +
+                // Locale.ROOT, not the device default: a comma-decimal locale (this
+                // is a .no domain) rendered "pct=0,2525" - fine for a human, but it
+                // reads as three fields to anything trying to parse the number back
+                // out, and a report should be consistent regardless of the phone.
+                "${r.title ?: "?"} [${r.format ?: "?"}] pct=${"%.4f".format(java.util.Locale.ROOT, r.pct)} " +
                     "currentTimeS=${r.currentTimeS} ebookProgress=${r.ebookProgress} " +
                     "isFinished=${r.isFinished} source=${r.source} lastUpdate=${r.lastUpdate}"
             }

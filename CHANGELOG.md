@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.45.0
+
+- **Fixed: opening a book could briefly show it at 100%.** Found via a report's attached diagnostic data — the saved position was correct the whole time; the player just hadn't cleared the *previous* book's position and duration yet when it started rendering the new one, so for a moment the new title showed the old book's numbers. If that previous book happened to be finished, that showed as "jumped to the end." Starting playback now resets fully instead of carrying anything over.
+
 ## 0.4.44.0
 
 - **"Report a problem" can now attach diagnostic data.** A new switch on the report form (on by default) includes an anonymous snapshot with every book's saved position and where it came from, plus the app's own recent log — no server address, account, or personal info. This is what actually lets a hard-to-describe bug (a wrong position, a stuck percentage) get tracked down, without you having to hunt for a separate debug page.

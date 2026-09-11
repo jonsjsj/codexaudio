@@ -115,9 +115,25 @@ class PlaybackControllerImpl @Inject constructor(
         resumeAtS: Double?,
         episodeId: String?,
     ) {
-        _state.update {
-            it.copy(isLoading = true, error = null, serverId = serverId, libraryItemId = libraryItemId, episodeId = episodeId, title = title, author = author)
-        }
+        // Full reset, not a .copy() onto whatever was there — play() is only ever
+        // called to start a NEW item (togglePlayPause resumes an already-loaded one
+        // without calling this), but the state itself is one shared object across
+        // the whole app session. Without this, the previous book's positionMs/
+        // durationMs/chapters sat in state until the first ticker tick landed a
+        // moment later (session setup + MediaController connect are both async) -
+        // so opening a book right after a FINISHED one flashed its title against
+        // the old book's ~100% position. Traced from a user report: the persisted
+        // progress for the book in question was correct the whole time (confirmed
+        // via the diagnostic dump) - this was purely a stale in-memory render, not
+        // a data bug.
+        _state.value = PlaybackState(
+            isLoading = true,
+            serverId = serverId,
+            libraryItemId = libraryItemId,
+            episodeId = episodeId,
+            title = title,
+            author = author,
+        )
         // Device-local audiobook: play the referenced file directly, no ABS server/sync.
         if (serverId == no.bellaybestia.audex.domain.local.LOCAL_SERVER_ID) {
             playLocalItem(serverId, libraryItemId, title, author, resumeAtS)

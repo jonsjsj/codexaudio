@@ -18,6 +18,9 @@ data class ReportUiState(
     val kind: ReportKind = ReportKind.BUG,
     val title: String = "",
     val body: String = "",
+    /** Attach an anonymous diagnostic snapshot (progress table + recent log
+     *  lines) — on by default since it's what actually lets a bug get found. */
+    val includeDiagnostics: Boolean = true,
     val sending: Boolean = false,
     val result: String? = null,
     val resultIsError: Boolean = false,
@@ -42,6 +45,7 @@ class ReportViewModel @Inject constructor(
     fun setKind(kind: ReportKind) = _state.update { it.copy(kind = kind) }
     fun setTitle(title: String) = _state.update { it.copy(title = title, result = null) }
     fun setBody(body: String) = _state.update { it.copy(body = body, result = null) }
+    fun setIncludeDiagnostics(include: Boolean) = _state.update { it.copy(includeDiagnostics = include) }
 
     fun send(appVersion: String, screen: String? = null) {
         val current = _state.value
@@ -49,7 +53,12 @@ class ReportViewModel @Inject constructor(
         _state.update { it.copy(sending = true, result = null) }
         viewModelScope.launch {
             runCatching {
-                reports.submit(current.kind, current.title.trim(), current.body.trim(), appVersion, screen)
+                val diagnostics = if (current.includeDiagnostics) {
+                    runCatching { reports.buildDiagnostics() }.getOrNull()
+                } else {
+                    null
+                }
+                reports.submit(current.kind, current.title.trim(), current.body.trim(), appVersion, screen, diagnostics)
             }.onSuccess { filed ->
                 _state.update {
                     it.copy(

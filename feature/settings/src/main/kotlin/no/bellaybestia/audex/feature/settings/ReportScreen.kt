@@ -81,6 +81,31 @@ fun ReportScreen(
         )
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Include diagnostic data",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = state.includeDiagnostics,
+                    onCheckedChange = viewModel::setIncludeDiagnostics,
+                )
+            }
+            Text(
+                text = "Attaches an anonymous snapshot — every book's saved position and " +
+                    "where it came from, plus the last few hundred lines of the app's own log. " +
+                    "No server address, account, or personal info. This is usually what actually " +
+                    "lets a bug like a wrong position get found.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
         val sendable = state.title.isNotBlank() && !state.sending
         Text(
             text = when {

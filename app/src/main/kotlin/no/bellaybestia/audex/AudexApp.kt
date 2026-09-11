@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.data.AppStartup
+import no.bellaybestia.audex.data.DiagnosticLogTree
 import no.bellaybestia.audex.data.SocketLifecycle
 import no.bellaybestia.audex.data.WorkScheduler
 import no.bellaybestia.audex.player.StreamTokenResolver
@@ -39,6 +40,11 @@ class AudexApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Mirrors every log line into an in-memory ring buffer — the source for the
+        // "Send report" diagnostic attachment. Planted unconditionally (not gated to
+        // debuggable) so a report always has recent log context to attach, regardless
+        // of the DebugTree below.
+        Timber.plant(DiagnosticLogTree())
         val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (debuggable) {
             // Readium logs exclusively through Timber — without a planted tree

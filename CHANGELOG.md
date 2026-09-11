@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.44.0
+
+- **"Report a problem" can now attach diagnostic data.** A new switch on the report form (on by default) includes an anonymous snapshot with every book's saved position and where it came from, plus the app's own recent log — no server address, account, or personal info. This is what actually lets a hard-to-describe bug (a wrong position, a stuck percentage) get tracked down, without you having to hunt for a separate debug page.
+
 ## 0.4.43.0
 
 - **The Read pill moved back onto the cover, beside the title.** Its own row above the scrubber added height it didn't need to; it now sits to the right of the title/author block on the cover art itself, like it did originally, just without covering the text.

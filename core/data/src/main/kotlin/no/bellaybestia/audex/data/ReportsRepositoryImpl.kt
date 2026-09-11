@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import no.bellaybestia.audex.domain.reader.AlignmentRepository
+import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.settings.FiledReport
 import no.bellaybestia.audex.domain.settings.MyReport
 import no.bellaybestia.audex.domain.settings.ReportKind
@@ -74,6 +75,7 @@ private data class StoredReport(
 class ReportsRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val alignment: AlignmentRepository,
+    private val catalogRepository: CatalogRepository,
 ) : ReportsRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -106,8 +108,17 @@ class ReportsRepositoryImpl @Inject constructor(
         body: String,
         appVersion: String,
         screen: String?,
+        diagnostics: String?,
     ): FiledReport = withContext(Dispatchers.IO) {
-        val fullBody = if (screen != null) "$body\n\nScreen: $screen" else body
+        val fullBody = buildString {
+            append(body)
+            if (screen != null) append("\n\nScreen: $screen")
+            if (!diagnostics.isNullOrBlank()) {
+                append("\n\n<details><summary>Diagnostic data</summary>\n\n```\n")
+                append(diagnostics)
+                append("\n```\n</details>")
+            }
+        }
         val payloadJson = json.encodeToString(
             WireReport.serializer(),
             WireReport(kind.name.lowercase(), title, fullBody, appVersion),
@@ -148,6 +159,21 @@ class ReportsRepositoryImpl @Inject constructor(
             )
         }
         FiledReport(filed.number, filed.url)
+    }
+
+    override suspend fun buildDiagnostics(): String = withContext(Dispatchers.IO) {
+        val rows = runCatching { catalogRepository.debugProgressRows().first() }.getOrDefault(emptyList())
+        val progressBlock = if (rows.isEmpty()) {
+            "(no progress rows)"
+        } else {
+            rows.joinToString("\n") { r ->
+                "${r.title ?: "?"} [${r.format ?: "?"}] pct=${"%.4f".format(r.pct)} " +
+                    "currentTimeS=${r.currentTimeS} ebookProgress=${r.ebookProgress} " +
+                    "isFinished=${r.isFinished} source=${r.source} lastUpdate=${r.lastUpdate}"
+            }
+        }
+        val logBlock = DiagnosticLog.snapshot().joinToString("\n").ifBlank { "(no log lines captured)" }
+        "Progress table:\n$progressBlock\n\nRecent log:\n$logBlock"
     }
 
     override suspend fun refreshMyReports() = withContext(Dispatchers.IO) {

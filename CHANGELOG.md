@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.42.0
+
+- **The Read switch moved off the cover, to right above the scrubber.** It no longer sits on top of the artwork — it's now its own row directly above the progress bar, where it stays out of the way of the cover and the Jump panel's own copy.
+- **Real chapters in audio for books with a read-along built.** If your audiobook's only "chapters" were bare file numbers (001, 009…) — a common Audiobookshelf fallback when a book has no real chapter metadata — Audex now uses the read-along map's chapter breaks instead, the same ones the ebook has. Books with genuine chapter titles are untouched.
+- **Jump now shows chapters and bookmarks together, over the cover.** The flat gray panel is gone — it's an overlay on the dimmed cover art now, like the rest of the player. Chapters and bookmarks are merged into one time-ordered list right there, instead of only living in the separate tabs below.
+
 ## 0.4.41.0
 
 - **A "Progress debug" page (Settings → About).** The position-reset-on-update issue is still happening after the last fix, and guessing at a cause without proof risks chasing the wrong thing again. This page shows the raw saved position for every book — title, format, percent, seconds listened, ebook page fraction, where it came from, and when it was last touched — so the exact moment it goes wrong can be pinned down instead of guessed at.

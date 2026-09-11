@@ -259,21 +259,28 @@ class PlaybackControllerImpl @Inject constructor(
     }
 
     /**
-     * Chapters where none exist: when the audio files carry no chapter markers
-     * but the work has a word-sync map, project the EPUB's chapter boundaries
-     * through the alignment onto the audio timeline. Cached maps make this work
-     * offline too; any failure just means "no chapters", like before.
+     * Chapters where none exist, OR where the "chapters" are really just a bare
+     * file/track number ("001", "009" — a common ABS fallback when the audiobook
+     * carries no real chapter metadata, so it numbers the files instead): when
+     * the work has a word-sync map (a built read-along), project the EPUB's real
+     * chapter boundaries through the alignment onto the audio timeline instead.
+     * Checked by TITLE, not by count — a book split one-file-per-chapter with
+     * genuinely descriptive titles must keep them even though its file count
+     * might otherwise look suspicious. Cached maps make this work offline too;
+     * any failure falls back to whatever the source had.
      */
     private suspend fun withSynthesizedFallback(
         serverId: String,
         libraryItemId: String,
         fromSource: List<Chapter>,
     ): List<Chapter> {
-        if (fromSource.isNotEmpty()) return fromSource
+        val looksLikeBareFileNumbers = fromSource.isNotEmpty() &&
+            fromSource.all { it.title.trim().matches(Regex("^0*\\d+$")) }
+        if (fromSource.isNotEmpty() && !looksLikeBareFileNumbers) return fromSource
         val map = runCatching { alignmentRepository.syncMap(serverId, libraryItemId) }
-            .getOrNull() ?: return emptyList()
+            .getOrNull() ?: return fromSource
         val starts = map.synthesizedChapterStarts()
-        if (starts.size < 2) return emptyList()
+        if (starts.size < 2) return fromSource
         val totalMs = (map.durationS * 1000).toLong()
         return starts.mapIndexed { index, startS ->
             Chapter(

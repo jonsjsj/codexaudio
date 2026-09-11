@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Replay30
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.offset
@@ -109,10 +110,19 @@ fun PlayerScreen(
                 onClose = { goToOpen = false },
             )
         } else {
-            PlayerHero(state = state, readTarget = readTarget, onRead = onRead)
+            PlayerHero(state = state)
         }
 
         Column(Modifier.padding(horizontal = 20.dp)) {
+            // Listen/Read, directly above the scrubber — not on top of the cover
+            // art, and not buried in the Jump panel (which has its own copy of
+            // this switch for when it's already open).
+            if (!goToOpen) {
+                readTarget?.let { (sid, itemId) ->
+                    ReadPill(onClick = { onRead(sid, itemId, state.title.orEmpty()) })
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
             val playerBookmarks by viewModel.bookmarks.collectAsState()
             ProgressSection(
                 state = state,
@@ -159,16 +169,10 @@ fun PlayerScreen(
 /**
  * Cover-image hero (the mockup's cover-gradient banner) — the real cover fills
  * the top, a vertical scrim fades it into the page background, and the title
- * block sits over the bottom in Space Grotesk. "NOW PLAYING" pins the top-left;
- * when the book also has an ebook edition, a "Read" pill pins the top-right —
- * always reachable, not just from inside the Jump panel's Listen/Read switch.
+ * block sits over the bottom in Space Grotesk. "NOW PLAYING" pins the top-left.
  */
 @Composable
-private fun PlayerHero(
-    state: PlaybackState,
-    readTarget: Pair<String, String>? = null,
-    onRead: (serverId: String, itemId: String, title: String) -> Unit = { _, _, _ -> },
-) {
+private fun PlayerHero(state: PlaybackState) {
     val bg = MaterialTheme.colorScheme.background
     Box(
         Modifier
@@ -201,32 +205,6 @@ private fun PlayerHero(
                 .align(Alignment.TopStart)
                 .padding(20.dp),
         )
-        readTarget?.let { (sid, itemId) ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                    .clickable { onRead(sid, itemId, state.title.orEmpty()) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.MenuBook,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "Read",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
         Column(
             Modifier
                 .align(Alignment.BottomStart)
@@ -252,6 +230,34 @@ private fun PlayerHero(
                 )
             }
         }
+    }
+}
+
+/** Listen/Read quick-switch, sitting above the scrubber (not on the cover, not
+ *  buried in the Jump panel) — a one-tap way into the ebook. */
+@Composable
+private fun ReadPill(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(30.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.MenuBook,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "Read",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
@@ -584,11 +590,19 @@ private fun BookmarkList(viewModel: PlayerViewModel) {
     }
 }
 
+/** One entry in the jump panel's merged list — a chapter boundary or a bookmark,
+ *  interleaved by time so the whole book's landmarks read as one timeline. */
+private data class JumpEntry(val label: String, val isChapter: Boolean, val timeMs: Long, val onClick: () -> Unit)
+
 /**
  * The jump panel, filling the cover's own slot (same [aspectRatio] as [PlayerHero]) so
  * swapping between them never reflows the rest of the screen. Unlike the old modal
  * dialog it replaced, everything below — transport, chapters/bookmarks — stays visible
- * and usable while this is open; "Jump"/"Close" on the utility strip toggles it.
+ * and usable while this is open; "Jump"/"Close" on the utility strip toggles it. The
+ * cover shows through a dark scrim behind the controls (an overlay ON the book, not a
+ * flat card that replaces it) and chapters + bookmarks are merged into one
+ * time-ordered list beneath the manual jump field, instead of living only in the
+ * separate tabs below the transport.
  *
  * Unit follows Settings → Playback → "Go to uses" by default (a percentage or an exact
  * timestamp) but the %/time switch here is a local, in-context override, matching the
@@ -606,18 +620,34 @@ private fun PlayerJumpPanel(
     val unitPref by viewModel.progressUnit.collectAsState()
     var byPercent by remember { mutableStateOf(unitPref == no.bellaybestia.audex.domain.settings.ProgressUnit.PERCENT) }
     val readingS by viewModel.readingAudioSeconds.collectAsState()
+    val bookmarks by viewModel.bookmarks.collectAsState()
     var field by remember { mutableStateOf("") }
     val duration = state.durationMs.coerceAtLeast(1)
 
     fun display(ms: Long): String =
         if (byPercent) "${(ms * 100 / duration).coerceIn(0, 100)}%" else formatTime(ms)
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.92f)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    ) {
+    val merged = remember(state.chapters, bookmarks) {
+        val chapterEntries = state.chapters.map {
+            JumpEntry(it.title, isChapter = true, timeMs = it.startMs, onClick = { viewModel.seekTo(it.startMs) })
+        }
+        val bookmarkEntries = bookmarks.map {
+            JumpEntry(it.title, isChapter = false, timeMs = it.timeS * 1000, onClick = { viewModel.seekTo(it.timeS * 1000) })
+        }
+        (chapterEntries + bookmarkEntries).sortedBy { it.timeMs }
+    }
+
+    Box(Modifier.fillMaxWidth().aspectRatio(0.92f)) {
+        CoverImage(
+            url = state.coverUrl,
+            contentDescription = state.title,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.88f)),
+        )
         Column(
             Modifier
                 .fillMaxSize()
@@ -703,6 +733,48 @@ private fun PlayerJumpPanel(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+                }
+            }
+            if (merged.isNotEmpty()) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Text(
+                    text = "Chapters & bookmarks",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                )
+                merged.forEach { entry ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { entry.onClick(); onClose() }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (entry.isChapter) "CHAPTER" else "BOOKMARK",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (entry.isChapter) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                                letterSpacing = 1.sp,
+                            )
+                            Text(
+                                text = entry.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Text(
+                            text = display(entry.timeMs),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

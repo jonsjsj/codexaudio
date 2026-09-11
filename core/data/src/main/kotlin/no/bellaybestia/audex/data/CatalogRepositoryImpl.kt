@@ -278,6 +278,24 @@ class CatalogRepositoryImpl @Inject constructor(
             }
         }
 
+    override fun debugProgressRows(): Flow<List<no.bellaybestia.audex.domain.model.ProgressDebugRow>> =
+        progressDao.observeDebugRows().map { rows ->
+            rows.map {
+                no.bellaybestia.audex.domain.model.ProgressDebugRow(
+                    serverId = it.serverId,
+                    libraryItemId = it.libraryItemId,
+                    title = it.title,
+                    format = it.format,
+                    pct = it.pct,
+                    currentTimeS = it.currentTimeS,
+                    ebookProgress = it.ebookProgress,
+                    isFinished = it.isFinished,
+                    lastUpdate = it.lastUpdate,
+                    source = it.source,
+                )
+            }
+        }
+
     override suspend fun workIdForItem(serverId: String, libraryItemId: String): String? =
         catalogDao.workIdForItem(serverId, libraryItemId)
 

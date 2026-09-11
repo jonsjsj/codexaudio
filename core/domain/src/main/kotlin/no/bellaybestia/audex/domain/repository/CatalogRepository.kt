@@ -25,6 +25,14 @@ interface CatalogRepository {
     fun worksForSeries(seriesId: String): Flow<List<Work>>
     fun editionsForWork(workId: String): Flow<List<Edition>>
 
+    /**
+     * Raw dump of every progress row (Settings → About "Progress debug") — lets a
+     * position report be traced against the actual DB values (title, pct,
+     * currentTimeS, ebookProgress, source, lastUpdate) instead of guessing from
+     * behavior alone. Most recently touched first.
+     */
+    fun debugProgressRows(): Flow<List<no.bellaybestia.audex.domain.model.ProgressDebugRow>>
+
     /** The work an item's edition belongs to — bridges audio↔ebook editions of one work. */
     suspend fun workIdForItem(serverId: String, libraryItemId: String): String?
 

@@ -225,7 +225,35 @@ interface ProgressDao {
      * all (empty keep-list) — clears every SERVER row, keeping local-origin ones. */
     @Query("DELETE FROM progress WHERE serverId = :serverId AND source = 'SERVER'")
     suspend fun deleteAllServerRows(serverId: String)
+
+    /**
+     * Raw dump of every progress row, titled via the editions/works graph, most
+     * recently touched first — a diagnostic view (Settings → About) for tracing
+     * exactly what's in this table when a position looks wrong, without adb.
+     */
+    @Query(
+        """SELECT p.*, w.title AS title, e.format AS format FROM progress p
+           LEFT JOIN editions e ON e.serverId = p.serverId AND e.libraryItemId = p.libraryItemId
+           LEFT JOIN works w ON w.workId = e.workId
+           ORDER BY p.lastUpdate DESC"""
+    )
+    fun observeDebugRows(): Flow<List<ProgressDebugRow>>
 }
+
+/** Raw progress row + title/format, for the Settings → About diagnostic dump. */
+data class ProgressDebugRow(
+    val serverId: String,
+    val libraryItemId: String,
+    val pct: Double,
+    val currentTimeS: Double?,
+    val ebookLocation: String?,
+    val ebookProgress: Double?,
+    val isFinished: Boolean,
+    val lastUpdate: Long,
+    val source: String,
+    val title: String?,
+    val format: String?,
+)
 
 @Dao
 interface SessionDao {

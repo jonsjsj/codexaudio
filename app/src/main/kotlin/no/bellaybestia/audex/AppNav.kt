@@ -69,6 +69,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val ADD_SERVER = "add_server"
     const val ABOUT = "about"
+    const val PROGRESS_DEBUG = "progress_debug"
     const val REPORT = "report"
     const val STATS = "stats"
     const val PLAYER = "player"
@@ -117,7 +118,7 @@ fun AppNav() {
         Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER -> 1
         Routes.PODCASTS, Routes.PODCAST, Routes.ADD_PODCAST -> 2
         Routes.DOWNLOADS -> 3
-        Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.REPORT -> 4
+        Routes.SETTINGS, Routes.ADD_SERVER, Routes.ABOUT, Routes.PROGRESS_DEBUG, Routes.REPORT -> 4
         else -> 0
     }
 
@@ -222,7 +223,11 @@ fun AppNav() {
                     update = updateState.toUi(),
                     onCheck = aboutVm::check,
                     onInstall = aboutVm::install,
+                    onProgressDebug = { navController.navigate(Routes.PROGRESS_DEBUG) },
                 )
+            }
+            composable(Routes.PROGRESS_DEBUG) {
+                no.bellaybestia.audex.feature.settings.ProgressDebugScreen()
             }
             composable(Routes.REPORT) {
                 ReportScreen(appVersion = BuildConfig.VERSION_NAME)

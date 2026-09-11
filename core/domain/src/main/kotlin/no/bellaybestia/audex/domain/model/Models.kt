@@ -1,5 +1,20 @@
 package no.bellaybestia.audex.domain.model
 
+/** Raw progress row for the Settings → About diagnostic dump — see
+ *  [no.bellaybestia.audex.domain.repository.CatalogRepository.debugProgressRows]. */
+data class ProgressDebugRow(
+    val serverId: String,
+    val libraryItemId: String,
+    val title: String?,
+    val format: String?,
+    val pct: Double,
+    val currentTimeS: Double?,
+    val ebookProgress: Double?,
+    val isFinished: Boolean,
+    val lastUpdate: Long,
+    val source: String,
+)
+
 data class Author(
     val id: String,
     val name: String,

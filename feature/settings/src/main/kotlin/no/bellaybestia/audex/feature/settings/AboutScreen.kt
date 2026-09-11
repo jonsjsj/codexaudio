@@ -61,6 +61,7 @@ fun AboutScreen(
     update: UpdateUi,
     onCheck: () -> Unit,
     onInstall: () -> Unit,
+    onProgressDebug: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -85,6 +86,18 @@ fun AboutScreen(
         }
         item(key = "update-card") {
             UpdateCard(update = update, onCheck = onCheck, onInstall = onInstall)
+        }
+        item(key = "progress-debug") {
+            Text(
+                text = "Progress debug",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onProgressDebug)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
         }
         item(key = "updates-header") {
             Text(

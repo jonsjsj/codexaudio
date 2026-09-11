@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.41.0
+
+- **A "Progress debug" page (Settings → About).** The position-reset-on-update issue is still happening after the last fix, and guessing at a cause without proof risks chasing the wrong thing again. This page shows the raw saved position for every book — title, format, percent, seconds listened, ebook page fraction, where it came from, and when it was last touched — so the exact moment it goes wrong can be pinned down instead of guessed at.
+
 ## 0.4.40.0
 
 - **Found the real cause of "updating the app resets my position."** Every time the app comes to the foreground — which an update always forces, since it restarts the process — it reconciles progress from the server. That reconcile trusted the server's row whenever its timestamp looked newer, but a newer timestamp isn't proof of newer data: a stale server-side value (clock drift between phone and server, or any other client touching the same record) could still carry a fresher-looking timestamp while being well behind where you actually were. It could silently roll both the audiobook and the ebook back on every single update. The reconcile now also checks the actual position, not just the timestamp, and refuses to move it backward.

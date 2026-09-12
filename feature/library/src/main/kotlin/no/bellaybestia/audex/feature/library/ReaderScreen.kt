@@ -1247,8 +1247,8 @@ private fun GoToRow(
     kind: GoToKind,
     position: String,
     caption: String? = null,
-    onClick: () -> Unit,
     onRemove: (() -> Unit)? = null,
+    onClick: () -> Unit,
 ) {
     val accent = if (kind == GoToKind.AUDIO_CURRENT || kind == GoToKind.AUDIO_FURTHEST) {
         MaterialTheme.colorScheme.primary

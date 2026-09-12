@@ -596,8 +596,15 @@ private fun BookmarkList(viewModel: PlayerViewModel) {
 }
 
 /** One entry in the jump panel's merged list — a chapter boundary or a bookmark,
- *  interleaved by time so the whole book's landmarks read as one timeline. */
-private data class JumpEntry(val label: String, val isChapter: Boolean, val timeMs: Long, val onClick: () -> Unit)
+ *  interleaved by time so the whole book's landmarks read as one timeline. [bookmark]
+ *  is non-null only for bookmark entries, so delete can target the right one. */
+private data class JumpEntry(
+    val label: String,
+    val isChapter: Boolean,
+    val timeMs: Long,
+    val bookmark: no.bellaybestia.audex.domain.playback.Bookmark? = null,
+    val onClick: () -> Unit,
+)
 
 /**
  * The jump panel, filling the cover's own slot (same [aspectRatio] as [PlayerHero]) so
@@ -637,7 +644,7 @@ private fun PlayerJumpPanel(
             JumpEntry(it.title, isChapter = true, timeMs = it.startMs, onClick = { viewModel.seekTo(it.startMs) })
         }
         val bookmarkEntries = bookmarks.map {
-            JumpEntry(it.title, isChapter = false, timeMs = it.timeS * 1000, onClick = { viewModel.seekTo(it.timeS * 1000) })
+            JumpEntry(it.title, isChapter = false, timeMs = it.timeS * 1000, bookmark = it, onClick = { viewModel.seekTo(it.timeS * 1000) })
         }
         (chapterEntries + bookmarkEntries).sortedBy { it.timeMs }
     }
@@ -752,6 +759,7 @@ private fun PlayerJumpPanel(
                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                 )
                 merged.forEach { entry ->
+                    var armed by remember(entry.timeMs, entry.bookmark) { mutableStateOf(false) }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -779,6 +787,17 @@ private fun PlayerJumpPanel(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        entry.bookmark?.let { bm ->
+                            Text(
+                                text = if (armed) "Remove?" else "Remove",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (armed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .clickable { if (armed) viewModel.removeBookmark(bm) else armed = true }
+                                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                            )
+                        }
                     }
                 }
             }

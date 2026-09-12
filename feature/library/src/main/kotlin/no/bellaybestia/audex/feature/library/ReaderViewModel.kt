@@ -282,6 +282,14 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    /** Delete a bookmark from the Go-to sheet's bookmark list. */
+    fun removeBookmark(bookmark: no.bellaybestia.audex.domain.playback.Bookmark) {
+        viewModelScope.launch {
+            runCatching { bookmarksRepository.remove(bookmark) }
+            _bookmarksRefresh.value++
+        }
+    }
+
     /**
      * Commit an explicit jump in the reader (scrubber release / tap / bookmark). Re-syncs
      * the audiobook to [toFraction] in BOTH directions (an explicit jump overrides the

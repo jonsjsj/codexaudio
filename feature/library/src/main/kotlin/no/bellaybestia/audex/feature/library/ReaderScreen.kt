@@ -601,6 +601,7 @@ private fun EpubReader(
                         showGoTo = false
                     },
                     onGoAudioSeconds = goToAudioSeconds,
+                    onRemoveBookmark = viewModel::removeBookmark,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1124,6 +1125,7 @@ private fun ReaderGoToPanel(
     onGoPercent: (Double) -> Unit,
     onGoPage: (Int) -> Unit,
     onGoAudioSeconds: (Double) -> Unit,
+    onRemoveBookmark: (no.bellaybestia.audex.domain.playback.Bookmark) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var field by remember { mutableStateOf("") }
@@ -1217,6 +1219,7 @@ private fun ReaderGoToPanel(
                         // kind label doesn't — show it instead of the generic label.
                         caption = if (kind == GoToKind.BOOKMARK) bm.title.ifBlank { null } else null,
                         onClick = { onGoAudioSeconds(bm.timeS.toDouble()) },
+                        onRemove = { onRemoveBookmark(bm) },
                     )
                 }
             }
@@ -1240,30 +1243,51 @@ private fun GoToSectionLabel(text: String) {
  *  (or, for an unlabeled bookmark, its own title) below — bigger and easier to scan
  *  than the old single-line "title · time" row. */
 @Composable
-private fun GoToRow(kind: GoToKind, position: String, caption: String? = null, onClick: () -> Unit) {
+private fun GoToRow(
+    kind: GoToKind,
+    position: String,
+    caption: String? = null,
+    onClick: () -> Unit,
+    onRemove: (() -> Unit)? = null,
+) {
     val accent = if (kind == GoToKind.AUDIO_CURRENT || kind == GoToKind.AUDIO_FURTHEST) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.tertiary
     }
-    Column(
+    var armed by remember(position, caption) { mutableStateOf(false) }
+    Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = caption ?: kind.label(),
-            style = MaterialTheme.typography.labelMedium,
-            color = accent,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = position,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = caption ?: kind.label(),
+                style = MaterialTheme.typography.labelMedium,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = position,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        if (onRemove != null) {
+            Text(
+                text = if (armed) "Remove?" else "Remove",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (armed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(2.dp))
+                    .clickable { if (armed) onRemove() else armed = true }
+                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+            )
+        }
     }
 }
 

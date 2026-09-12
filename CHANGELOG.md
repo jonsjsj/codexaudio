@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.53.0
+
+- **Fixed: a book stuck at a bogus 100% on audio could hide real, active ebook progress from Continue too.** A work only counts as finished now once every format you actually have is finished — a format's own bug (or a real "finished this one, still reading the other") no longer erases the other format's place in Continue.
+- **New: discard progress per format.** A book with both audio and ebook editions now shows separate "Discard audiobook progress" / "Discard ebook progress" options, so clearing a stuck or wrong position on one side never touches real progress on the other. Traced why a stuck audio position could keep coming back after being fixed on the server: the app's own regression guard was (correctly, by its own logic) protecting a stale value cached on the phone — clearing it there is what actually breaks the loop.
+
 ## 0.4.52.0
 
 - **Found why a book you'd never opened could show up as "Resume."** Continue's ordering counted any saved-progress touch as "last listened" — including a stub entry with zero real progress that the server can create from something short of actual listening. Only real progress (not just a bare touch) counts now.

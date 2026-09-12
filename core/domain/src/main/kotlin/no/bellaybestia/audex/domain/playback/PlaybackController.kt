@@ -82,4 +82,17 @@ interface PlaybackController {
     fun seekToChapter(index: Int)
 
     fun stop()
+
+    /**
+     * Best-effort close of the active ABS session with the last known position,
+     * awaitable (unlike [stop]'s fire-and-forget launch) so a caller tearing down
+     * the process — [no.bellaybestia.audex.player.PlaybackService.onDestroy] —
+     * can block briefly until it actually completes. Closing a session is the
+     * ONLY channel that durably persists audio progress server-side (see
+     * AbsApi.kt's session-API comment); skipping it (e.g. the app being swiped
+     * away instead of an explicit Stop) leaves the server's progress wedged at
+     * whatever the last successfully-closed session reported, however stale.
+     * No-op if nothing is playing.
+     */
+    suspend fun closeActiveSession()
 }

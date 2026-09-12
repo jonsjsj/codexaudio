@@ -523,6 +523,16 @@ class PlaybackControllerImpl @Inject constructor(
         }
     }
 
+    override suspend fun closeActiveSession() {
+        val api = activeApi ?: return
+        val sessionId = activeSessionId ?: return
+        val position = withContext(main) {
+            val c = controller
+            if (c == null || !c.isConnected()) null else overallPositionS()
+        } ?: return
+        runCatching { api.closeSession(sessionId, AbsSessionSyncBody(position, 0.0, totalDurationS)) }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (!isPlaying) pausedAtMs = System.currentTimeMillis()

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 
@@ -48,6 +49,7 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var tokenResolver: StreamTokenResolver
     @Inject lateinit var browseSource: MediaBrowseSource
     @Inject lateinit var playbackSettings: no.bellaybestia.audex.domain.settings.PlaybackSettings
+    @Inject lateinit var playbackController: no.bellaybestia.audex.domain.playback.PlaybackController
 
     private var player: ExoPlayer? = null
     private var session: MediaLibrarySession? = null
@@ -127,6 +129,16 @@ class PlaybackService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
     override fun onDestroy() {
+        // Close the ABS session with the real last-known position BEFORE tearing
+        // the player/session down (closeActiveSession needs the still-connected
+        // MediaController to read it). This is the safety net for the common case
+        // where the app is swiped away or killed by the OS rather than stopped
+        // via the in-app Stop action — without it, the server's persisted
+        // progress is left wedged at whatever the last EXPLICIT stop reported,
+        // however stale or wrong, since sync alone doesn't finalize it (see
+        // AbsApi.kt's session-API comment). Blocking briefly here is deliberate:
+        // the alternative is losing the write entirely once the process dies.
+        runBlocking { withTimeoutOrNull(2_000) { playbackController.closeActiveSession() } }
         sessionRecorder.finalizeActive()
         session?.release()
         player?.release()

@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.54.0
+
+- **Continue no longer refills with every book you've ever only read.** A format you never actually started (a clean, untouched 0%) no longer counts as "left incomplete" — only a format you've made real progress in and haven't finished does. A book finished on ebook, with its audiobook never opened, now correctly stays out of Continue instead of flooding back in the moment the ebook hits 100%.
+
 ## 0.4.53.0
 
 - **Fixed: a book stuck at a bogus 100% on audio could hide real, active ebook progress from Continue too.** A work only counts as finished now once every format you actually have is finished — a format's own bug (or a real "finished this one, still reading the other") no longer erases the other format's place in Continue.

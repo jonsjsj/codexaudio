@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,17 +116,38 @@ class PlaybackControllerImpl @Inject constructor(
         resumeAtS: Double?,
         episodeId: String?,
     ) {
-        // Full reset, not a .copy() onto whatever was there — play() is only ever
-        // called to start a NEW item (togglePlayPause resumes an already-loaded one
-        // without calling this), but the state itself is one shared object across
-        // the whole app session. Without this, the previous book's positionMs/
-        // durationMs/chapters sat in state until the first ticker tick landed a
-        // moment later (session setup + MediaController connect are both async) -
-        // so opening a book right after a FINISHED one flashed its title against
-        // the old book's ~100% position. Traced from a user report: the persisted
-        // progress for the book in question was correct the whole time (confirmed
-        // via the diagnostic dump) - this was purely a stale in-memory render, not
-        // a data bug.
+        // Cancel any already-running ticker/sync loop from a PREVIOUS play() call
+        // before touching a single instance field they read. activeOffsets,
+        // totalDurationS, and activeChapters below are reassigned as soon as this
+        // new session sets up — but startTicker()/startSyncLoop() (further down)
+        // don't cancel the OLD loop until they themselves are called, well after
+        // that reassignment. calling play() again while a previous session's loop
+        // was still alive (Resume on an already-loaded book, the Listen/Read
+        // handoff, tapping a different book while one plays — none of these call
+        // stop() first) left a real window where the OLD loop's next tick read
+        // the NEW activeOffsets table against a controller mid-transition,
+        // computing a position like "new book's last track's offset" — a genuine
+        // jump to near the end, not merely a stale-render flash. Traced from a
+        // recurring user report + a "Left off" auto-bookmark that landed 35
+        // seconds from the end of a ~14h55m book at almost the exact moment the
+        // jump was reported (seekOverall's maybeAutoBookmark only ever fires from
+        // a real position read, confirming the live state genuinely held that
+        // value, not just a cosmetic render).
+        //
+        // cancelAndJoin, not a fire-and-forget cancel(): coroutine cancellation is
+        // cooperative, so a bare cancel() only takes effect at the old loop's next
+        // suspension checkpoint — if it's mid-tick (already past the checkpoint,
+        // inside the main-thread position read), that ONE iteration still runs to
+        // completion and can still write against the fields this function is
+        // about to reassign. Joining actually waits for that to finish first.
+        tickJob?.cancelAndJoin(); tickJob = null
+        syncJob?.cancelAndJoin(); syncJob = null
+        // Full reset, not a .copy() onto whatever was there — the state itself is
+        // one shared object across the whole app session. Without this, the
+        // previous book's positionMs/durationMs/chapters sat in state until the
+        // first ticker tick landed a moment later (session setup + MediaController
+        // connect are both async) — so opening a book right after a FINISHED one
+        // flashed its title against the old book's ~100% position.
         _state.value = PlaybackState(
             isLoading = true,
             serverId = serverId,

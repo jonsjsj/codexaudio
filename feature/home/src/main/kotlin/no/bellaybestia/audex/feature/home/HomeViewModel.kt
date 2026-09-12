@@ -28,19 +28,28 @@ import no.bellaybestia.audex.domain.settings.ThemeSettings
 /** One-shot event: open the reader for this ebook edition (Resume on an ebook). */
 data class ReaderNav(val serverId: String, val libraryItemId: String, val title: String)
 
-/** A book counts as finished — and drops out of "Continue" — only once EVERY
- *  format you actually own has reached (practically) the very end. Using the
- *  max of the two fractions was wrong: a book finished on audio but still
- *  being read on ebook (a real case, not just a bug where one format's
- *  progress is wrongly stuck at 100%) would vanish from Continue on the
- *  ebook's behalf too, even though there's real reading left to resume. A
- *  format the work doesn't have never counts against it. */
+/**
+ * A book belongs in "Continue" as long as some format you actually STARTED
+ * is left incomplete — not merely "some format you own isn't finished."
+ * Two real cases this distinguishes:
+ *  - Finished on audio, still mid-way on ebook (or vice versa, including a
+ *    format wrongly stuck at a bogus 100%): the started-but-incomplete side
+ *    keeps the book in Continue. A first cut of this fix used "every owned
+ *    format finished," which got this half right.
+ *  - Finished on ebook, audio never even opened (0%, not "incomplete," just
+ *    untouched): with the first cut, that untouched 0% on audio kept the
+ *    book "unfinished" forever, dragging every book you'd only ever read
+ *    back into Continue as soon as it hit 100% there. A format sitting at
+ *    exactly 0% isn't something to "continue" — there's nothing started to
+ *    pick back up in it.
+ */
 private const val FINISHED_FRACTION = 0.999
 
 private fun isFinished(work: Work): Boolean {
-    val audioDone = !work.hasAudio || work.listenFraction >= FINISHED_FRACTION
-    val ebookDone = !work.hasEbook || work.readFraction >= FINISHED_FRACTION
-    return audioDone && ebookDone
+    fun startedButIncomplete(has: Boolean, fraction: Double) =
+        has && fraction > 0.0 && fraction < FINISHED_FRACTION
+    return !startedButIncomplete(work.hasAudio, work.listenFraction) &&
+        !startedButIncomplete(work.hasEbook, work.readFraction)
 }
 
 /** Home caps each section to this many rows; a section's header opens the full

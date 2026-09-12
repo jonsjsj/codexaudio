@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.48.0
+
+- **Bookmarks can now be deleted from the Player's Jump panel and the Reader's Go-to sheet.** Both showed bookmarks as tap-to-seek-only; each bookmark row now has a two-tap Remove control, same as the player's dedicated Bookmarks tab already had. Chapters and the audiobook position rows are untouched — only bookmarks get the delete option.
+
 ## 0.4.47.0
 
 - **Found the actual cause of "jumps to the end."** Your own hunch about a bookmark near the end pointed the way: a "Left off" auto-bookmark had genuinely landed 35 seconds from the end of a ~15-hour book, at almost the exact moment you reported it — which meant the position wasn't just displayed wrong, it had actually briefly become wrong. Starting playback again (Resume on an already-loaded book, the Listen/Read handoff, or tapping a different book while one was already playing) didn't stop the previous book's background position-tracking loop first, so for a moment it could read the newly-loading book's data before the switch was complete, computing a position way out at the new book's last track. Starting playback now waits for the previous loop to fully stop before anything else happens.

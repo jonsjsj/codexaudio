@@ -3,6 +3,11 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.52.0
+
+- **Found why a book you'd never opened could show up as "Resume."** Continue's ordering counted any saved-progress touch as "last listened" — including a stub entry with zero real progress that the server can create from something short of actual listening. Only real progress (not just a bare touch) counts now.
+- **Home's Edit mode is now drag-and-drop.** Tap Edit and the section list becomes reorderable — drag to rearrange Continue, Recently added, Recently released, and Upcoming releases; tap × to hide one (it drops into a greyed-out list at the bottom with a + to bring it back).
+
 ## 0.4.51.0
 
 - **A book's cover no longer goes blank when one edition is missing a cover on the server.** Root-caused against a real book: its audiobook edition had no cover on the server at all, while its ebook edition's did — the detail screen was picking the audiobook's (broken) one by order. It now falls back through every edition's cover until one actually loads.

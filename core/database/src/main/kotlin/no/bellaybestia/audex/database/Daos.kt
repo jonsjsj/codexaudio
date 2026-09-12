@@ -65,8 +65,14 @@ data class WorkRow(
     val coverKey: String?,
     /** Latest remote updatedAt across the work's items — proxy for "recently added". */
     val updatedAtRemote: Long?,
-    /** Most recent progress update across the work's editions (epoch ms, from ABS
-     * mediaProgress.lastUpdate) — "last listened/read", for Continue ordering. */
+    /** Most recent MEANINGFUL progress update across the work's editions (epoch
+     * ms, from ABS mediaProgress.lastUpdate) — "last listened/read", for
+     * Continue ordering. A progress row can exist with zero real progress
+     * (ABS creates a stub mediaProgress entry from things short of actual
+     * listening — e.g. another client merely opening the item) and still
+     * carry a fresh lastUpdate; counting that made an untouched book appear
+     * as "just listened to" (and even win the Home hero slot). Only a row
+     * with real position (pct or currentTimeS > 0) counts here. */
     val progressUpdatedAt: Long?,
 )
 
@@ -80,7 +86,8 @@ private const val WORK_ROW_SELECT = """
            COUNT(CASE WHEN e.format = 'EBOOK' THEN 1 END) AS ebookCount,
            MIN(e.serverId || '|' || e.libraryItemId) AS coverKey,
            MAX(r.updatedAtRemote) AS updatedAtRemote,
-           MAX(p.lastUpdate) AS progressUpdatedAt
+           MAX(CASE WHEN COALESCE(p.pct, 0) > 0 OR COALESCE(p.currentTimeS, 0) > 0
+               THEN p.lastUpdate END) AS progressUpdatedAt
     FROM works w
     LEFT JOIN authors a ON a.authorId = w.authorId
     LEFT JOIN series s ON s.seriesId = w.seriesId

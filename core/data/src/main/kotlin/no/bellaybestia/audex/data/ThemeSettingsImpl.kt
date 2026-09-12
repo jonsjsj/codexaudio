@@ -80,6 +80,7 @@ class UpdateSettingsImpl @Inject constructor(
 }
 
 private val KEY_HOME_HIDDEN_SECTIONS = stringSetPreferencesKey("home_hidden_sections")
+private val KEY_HOME_SECTION_ORDER = stringPreferencesKey("home_section_order")
 
 @Singleton
 class HomeSettingsImpl @Inject constructor(
@@ -90,6 +91,22 @@ class HomeSettingsImpl @Inject constructor(
         (p[KEY_HOME_HIDDEN_SECTIONS] ?: emptySet())
             .mapNotNull { runCatching { HomeSection.valueOf(it) }.getOrNull() }
             .toSet()
+    }
+
+    override val sectionOrder: Flow<List<HomeSection>> = context.appSettingsDataStore.data.map { p ->
+        val stored = p[KEY_HOME_SECTION_ORDER]?.split(",")
+            ?.mapNotNull { runCatching { HomeSection.valueOf(it) }.getOrNull() }
+            ?: emptyList()
+        // Append any section missing from a stored order (new in a later update,
+        // for an install that saved its order before that section existed) so
+        // it's never silently dropped from the list entirely.
+        stored + HomeSection.values().filter { it !in stored }
+    }
+
+    override suspend fun setOrder(order: List<HomeSection>) {
+        context.appSettingsDataStore.edit { p ->
+            p[KEY_HOME_SECTION_ORDER] = order.joinToString(",") { it.name }
+        }
     }
 
     override suspend fun setHidden(section: HomeSection, hidden: Boolean) {

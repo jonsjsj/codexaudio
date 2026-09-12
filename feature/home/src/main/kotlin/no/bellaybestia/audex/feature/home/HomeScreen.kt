@@ -25,12 +25,10 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -74,9 +72,10 @@ fun HomeScreen(
     val recentlyReleasedWorks by viewModel.recentlyReleasedWorks.collectAsState()
     val upcomingWorks by viewModel.upcomingWorks.collectAsState()
     val hiddenSections by viewModel.hiddenSections.collectAsState()
+    val sectionOrder by viewModel.sectionOrder.collectAsState()
     val totalBooks by viewModel.totalBooks.collectAsState()
     val serverCount by viewModel.serverCount.collectAsState()
-    var showEdit by remember { mutableStateOf(false) }
+    var editMode by remember { mutableStateOf(false) }
 
     // Resume jumps straight into the full-screen experience: the reader for
     // an ebook, the player for an audiobook — not just a mini-player.
@@ -87,12 +86,17 @@ fun HomeScreen(
         viewModel.openPlayer.collect { onOpenPlayer() }
     }
 
-    if (showEdit) {
-        HomeEditDialog(
-            hiddenSections = hiddenSections,
-            onSetHidden = viewModel::setSectionHidden,
-            onDismiss = { showEdit = false },
-        )
+    if (editMode) {
+        Column(modifier.fillMaxSize()) {
+            EditModeHeader(onDone = { editMode = false })
+            HomeEditPanel(
+                order = sectionOrder,
+                hidden = hiddenSections,
+                onReorder = viewModel::setSectionOrder,
+                onSetHidden = viewModel::setSectionHidden,
+            )
+        }
+        return
     }
 
     // A section only actually shows when it's both non-empty AND not turned
@@ -103,12 +107,17 @@ fun HomeScreen(
     val shownRecent = recentWorks.takeIf { visible(HomeSection.RECENTLY_ADDED) } ?: emptyList()
     val shownReleased = recentlyReleasedWorks.takeIf { visible(HomeSection.RECENTLY_RELEASED) } ?: emptyList()
     val shownUpcoming = upcomingWorks.takeIf { visible(HomeSection.UPCOMING) } ?: emptyList()
+    // All 4 sections in the user's chosen order — Continue's REST-of-list
+    // (below the fixed hero) moves with the others; only the hero itself
+    // (the single most recent book) always stays pinned at the very top,
+    // since it's a distinct visual treatment, not really a reorderable "row".
+    val sectionsInOrder = sectionOrder.ifEmpty { listOf(*HomeSection.values()) }
 
     if (shownContinue.isEmpty() && shownRecent.isEmpty() && shownReleased.isEmpty() && shownUpcoming.isEmpty()) {
         Column(modifier.fillMaxSize().padding(24.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Nothing here yet", style = MaterialTheme.typography.headlineSmall)
-                IconButton(onClick = { showEdit = true }) {
+                IconButton(onClick = { editMode = true }) {
                     Icon(Icons.Outlined.Edit, contentDescription = "Edit Home")
                 }
             }
@@ -125,53 +134,33 @@ fun HomeScreen(
     when (look) {
         HomeLook.NIGHTFALL ->
             NightfallHome(
-                shownContinue, shownRecent, shownReleased, shownUpcoming, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, { showEdit = true }, modifier,
+                shownContinue, shownRecent, shownReleased, shownUpcoming, sectionsInOrder, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, { editMode = true }, modifier,
             )
         HomeLook.STACKS ->
             StacksHome(
-                shownContinue, shownRecent, shownReleased, shownUpcoming, totalBooks, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, { showEdit = true }, modifier,
+                shownContinue, shownRecent, shownReleased, shownUpcoming, sectionsInOrder, totalBooks, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, { editMode = true }, modifier,
             )
     }
 }
 
-/** Home's "Edit" affordance: a plain checklist of the 4 sections, each with a
- *  Switch — no reordering, just show/hide, per the ask ("add and remove these
- *  elements"). Persisted immediately per-toggle via [HomeViewModel.setSectionHidden]
- *  rather than needing a separate Save action. */
+/** Edit mode's fixed header — a title and the "Done" affordance that exits it
+ *  back to normal browsing (mirrors the Edit button that opened it). */
 @Composable
-private fun HomeEditDialog(
-    hiddenSections: Set<HomeSection>,
-    onSetHidden: (HomeSection, Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sections = listOf(
-        HomeSection.CONTINUE to "Continue",
-        HomeSection.RECENTLY_ADDED to "Recently added",
-        HomeSection.RECENTLY_RELEASED to "Recently released",
-        HomeSection.UPCOMING to "Upcoming releases",
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Home sections") },
-        text = {
-            Column {
-                sections.forEach { (section, label) ->
-                    val shown = section !in hiddenSections
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                        Switch(checked = shown, onCheckedChange = { onSetHidden(section, !it) })
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
+private fun EditModeHeader(onDone: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Edit Home",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        TextButton(onClick = onDone) { Text("Done") }
+    }
 }
 
 /** "Synced · 2 servers" (mockup 2a). Singular/plural, hidden with no servers. */
@@ -189,6 +178,7 @@ private fun NightfallHome(
     recentWorks: List<Work>,
     recentlyReleasedWorks: List<Work>,
     upcomingWorks: List<UpcomingItem>,
+    sectionsInOrder: List<HomeSection>,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
@@ -221,45 +211,50 @@ private fun NightfallHome(
         continueWorks.firstOrNull()?.let { hero ->
             item(key = "hero") { HeroCard(hero, onWorkClick, onResume) }
         }
-        // Below the hero: flat hairline rows per the mockup (2a) — the rest of
-        // in-progress books with dual listen/read bars, then discovery
-        // sections. Each is capped to HOME_SECTION_PREVIEW_COUNT here; the
-        // section header opens the full, uncapped list.
-        if (continueWorks.size > 1) {
-            item(key = "l_cont") {
-                SectionEyebrow("Continue", onClick = { onSeeAll(HomeSection.CONTINUE) })
+        // Below the hero: flat hairline rows per the mockup (2a), one block per
+        // section in the user's chosen order (Edit mode) — each capped to
+        // HOME_SECTION_PREVIEW_COUNT; the section header opens the full,
+        // uncapped list. Continue's block is the REST of the list (the hero
+        // above already covers its first/most-recent entry).
+        sectionsInOrder.forEach { section ->
+            when (section) {
+                HomeSection.CONTINUE -> if (continueWorks.size > 1) {
+                    item(key = "l_cont") {
+                        SectionEyebrow("Continue", onClick = { onSeeAll(HomeSection.CONTINUE) })
+                    }
+                    items(
+                        continueWorks.drop(1).take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "c_${it.id}" },
+                    ) { w -> FlatWorkRow(w, showBars = true, onWorkClick) }
+                }
+                HomeSection.RECENTLY_ADDED -> if (recentWorks.isNotEmpty()) {
+                    item(key = "l_recent") {
+                        SectionEyebrow("Recently added", onClick = { onSeeAll(HomeSection.RECENTLY_ADDED) })
+                    }
+                    items(
+                        recentWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "r_${it.id}" },
+                    ) { w -> FlatWorkRow(w, showBars = false, onWorkClick) }
+                }
+                HomeSection.RECENTLY_RELEASED -> if (recentlyReleasedWorks.isNotEmpty()) {
+                    item(key = "l_released") {
+                        SectionEyebrow("Recently released", onClick = { onSeeAll(HomeSection.RECENTLY_RELEASED) })
+                    }
+                    items(
+                        recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "rr_${it.id}" },
+                    ) { w -> FlatWorkRow(w, showBars = false, onWorkClick, showYear = true) }
+                }
+                HomeSection.UPCOMING -> if (upcomingWorks.isNotEmpty()) {
+                    item(key = "l_upcoming") {
+                        SectionEyebrow("Upcoming releases", onClick = { onSeeAll(HomeSection.UPCOMING) })
+                    }
+                    items(
+                        upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "u_${it.mediaId}" },
+                    ) { UpcomingRow(it) }
+                }
             }
-            items(
-                continueWorks.drop(1).take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "c_${it.id}" },
-            ) { w -> FlatWorkRow(w, showBars = true, onWorkClick) }
-        }
-        if (recentWorks.isNotEmpty()) {
-            item(key = "l_recent") {
-                SectionEyebrow("Recently added", onClick = { onSeeAll(HomeSection.RECENTLY_ADDED) })
-            }
-            items(
-                recentWorks.take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "r_${it.id}" },
-            ) { w -> FlatWorkRow(w, showBars = false, onWorkClick) }
-        }
-        if (recentlyReleasedWorks.isNotEmpty()) {
-            item(key = "l_released") {
-                SectionEyebrow("Recently released", onClick = { onSeeAll(HomeSection.RECENTLY_RELEASED) })
-            }
-            items(
-                recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "rr_${it.id}" },
-            ) { w -> FlatWorkRow(w, showBars = false, onWorkClick, showYear = true) }
-        }
-        if (upcomingWorks.isNotEmpty()) {
-            item(key = "l_upcoming") {
-                SectionEyebrow("Upcoming releases", onClick = { onSeeAll(HomeSection.UPCOMING) })
-            }
-            items(
-                upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "u_${it.mediaId}" },
-            ) { UpcomingRow(it) }
         }
         item(key = "tail") { Spacer(Modifier.height(24.dp)) }
     }
@@ -507,6 +502,7 @@ private fun StacksHome(
     recentWorks: List<Work>,
     recentlyReleasedWorks: List<Work>,
     upcomingWorks: List<UpcomingItem>,
+    sectionsInOrder: List<HomeSection>,
     totalBooks: Int,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
@@ -546,37 +542,41 @@ private fun StacksHome(
                 }
             }
         }
-        if (continueWorks.isNotEmpty()) {
-            item(key = "l_cont") { StacksLabel("Continue") { onSeeAll(HomeSection.CONTINUE) } }
-            items(
-                continueWorks.take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "c_${it.id}" },
-            ) { BigContinueRow(it, onWorkClick) }
-        }
-        if (recentWorks.isNotEmpty()) {
-            item(key = "l_recent") { StacksLabel("Recently added") { onSeeAll(HomeSection.RECENTLY_ADDED) } }
-            items(
-                recentWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
-                key = { it.first().id },
-            ) { pair -> PosterRow(pair, onWorkClick) }
-        }
-        if (recentlyReleasedWorks.isNotEmpty()) {
-            item(key = "l_released") {
-                StacksLabel("Recently released") { onSeeAll(HomeSection.RECENTLY_RELEASED) }
+        sectionsInOrder.forEach { section ->
+            when (section) {
+                HomeSection.CONTINUE -> if (continueWorks.isNotEmpty()) {
+                    item(key = "l_cont") { StacksLabel("Continue") { onSeeAll(HomeSection.CONTINUE) } }
+                    items(
+                        continueWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "c_${it.id}" },
+                    ) { BigContinueRow(it, onWorkClick) }
+                }
+                HomeSection.RECENTLY_ADDED -> if (recentWorks.isNotEmpty()) {
+                    item(key = "l_recent") { StacksLabel("Recently added") { onSeeAll(HomeSection.RECENTLY_ADDED) } }
+                    items(
+                        recentWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
+                        key = { it.first().id },
+                    ) { pair -> PosterRow(pair, onWorkClick) }
+                }
+                HomeSection.RECENTLY_RELEASED -> if (recentlyReleasedWorks.isNotEmpty()) {
+                    item(key = "l_released") {
+                        StacksLabel("Recently released") { onSeeAll(HomeSection.RECENTLY_RELEASED) }
+                    }
+                    items(
+                        recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
+                        key = { "rr_" + it.first().id },
+                    ) { pair -> PosterRow(pair, onWorkClick, showYear = true) }
+                }
+                HomeSection.UPCOMING -> if (upcomingWorks.isNotEmpty()) {
+                    item(key = "l_upcoming") {
+                        StacksLabel("Upcoming releases") { onSeeAll(HomeSection.UPCOMING) }
+                    }
+                    items(
+                        upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                        key = { "u_${it.mediaId}" },
+                    ) { UpcomingRow(it) }
+                }
             }
-            items(
-                recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
-                key = { "rr_" + it.first().id },
-            ) { pair -> PosterRow(pair, onWorkClick, showYear = true) }
-        }
-        if (upcomingWorks.isNotEmpty()) {
-            item(key = "l_upcoming") {
-                StacksLabel("Upcoming releases") { onSeeAll(HomeSection.UPCOMING) }
-            }
-            items(
-                upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
-                key = { "u_${it.mediaId}" },
-            ) { UpcomingRow(it) }
         }
     }
 }

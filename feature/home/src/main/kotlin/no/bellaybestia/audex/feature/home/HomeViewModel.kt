@@ -145,11 +145,20 @@ class HomeViewModel @Inject constructor(
         emit(codexSync.upcomingBooks(days = UPCOMING_WINDOW_DAYS).orEmpty())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Sections you've turned off via Home's Edit button. */
+    /** Sections you've turned off via Home's Edit mode. */
     val hiddenSections: StateFlow<Set<HomeSection>> = homeSettings.hiddenSections
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
+    /** Display order for all sections (hidden ones included, so re-enabling
+     *  one restores roughly where it was) — set via drag-and-drop in Edit mode. */
+    val sectionOrder: StateFlow<List<HomeSection>> = homeSettings.sectionOrder
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), listOf(*HomeSection.values()))
+
     fun setSectionHidden(section: HomeSection, hidden: Boolean) {
         viewModelScope.launch { homeSettings.setHidden(section, hidden) }
+    }
+
+    fun setSectionOrder(order: List<HomeSection>) {
+        viewModelScope.launch { homeSettings.setOrder(order) }
     }
 }

@@ -73,7 +73,7 @@ internal fun HomeEditPanel(
             text = "Drag to reorder. Tap × to hide a section.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
         )
         visible.forEach { section ->
             val isDragging = section == draggingSection
@@ -141,7 +141,7 @@ internal fun HomeEditPanel(
                 text = "HIDDEN",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, top = 20.dp, bottom = 4.dp),
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp),
             )
             hiddenOnes.forEach { section ->
                 Row(

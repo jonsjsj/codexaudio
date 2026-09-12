@@ -169,6 +169,16 @@ fun WorkDetailScreen(
                     onMerge = viewModel::setMergeProgress,
                     canDiscard = editions.any { it.fraction > 0.001 } || (furthest ?: 0.0) > 0.0,
                     onDiscard = viewModel::discardProgress,
+                    // Split by format too: audio and ebook progress can be wrong
+                    // independently (e.g. audio stuck at a bogus 100% while the
+                    // ebook is genuinely still being read) — a whole-book discard
+                    // would destroy the real side just to clear the broken one.
+                    hasAudio = hasAudioFmt,
+                    hasEbook = hasEbookFmt,
+                    canDiscardAudio = editions.any { it.format == Format.AUDIO && it.fraction > 0.001 } ||
+                        (furthest ?: 0.0) > 0.0,
+                    canDiscardEbook = editions.any { it.format == Format.EBOOK && it.fraction > 0.001 },
+                    onDiscardFormat = viewModel::discardProgress,
                     canFixMetadata = work?.authorId != null || work?.seriesId != null,
                     onFixMetadata = { showFixMetadata = true },
                     downloadItems = downloadItems,
@@ -671,6 +681,11 @@ private fun DetailOverflowMenu(
     onMerge: (Boolean) -> Unit,
     canDiscard: Boolean,
     onDiscard: () -> Unit,
+    hasAudio: Boolean = false,
+    hasEbook: Boolean = false,
+    canDiscardAudio: Boolean = false,
+    canDiscardEbook: Boolean = false,
+    onDiscardFormat: (Format) -> Unit = {},
     canFixMetadata: Boolean = false,
     onFixMetadata: () -> Unit = {},
     downloadItems: List<Pair<String, () -> Unit>> = emptyList(),
@@ -679,6 +694,9 @@ private fun DetailOverflowMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    // null = whole-book (the original action); non-null = just that format,
+    // for when only one side's progress is actually wrong.
+    var discardTarget by remember { mutableStateOf<Format?>(null) }
     val check: @Composable (Boolean) -> Unit = { on ->
         if (on) Text("✓", color = MaterialTheme.colorScheme.primary)
     }
@@ -725,27 +743,64 @@ private fun DetailOverflowMenu(
                     )
                 }
             }
-            if (canDiscard) {
+            // A dual-format book gets separate discard actions per format —
+            // audio and ebook progress can be wrong independently. A single-
+            // format book keeps the plain "Discard progress" item (discarding
+            // its one format IS discarding the whole book, so there's nothing
+            // extra to distinguish).
+            if (hasAudio && hasEbook) {
+                if (canDiscardAudio) {
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Discard audiobook progress", color = MaterialTheme.colorScheme.error) },
+                        onClick = { expanded = false; discardTarget = Format.AUDIO; confirmDiscard = true },
+                    )
+                }
+                if (canDiscardEbook) {
+                    DropdownMenuItem(
+                        text = { Text("Discard ebook progress", color = MaterialTheme.colorScheme.error) },
+                        onClick = { expanded = false; discardTarget = Format.EBOOK; confirmDiscard = true },
+                    )
+                }
+            } else if (canDiscard) {
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text("Discard progress", color = MaterialTheme.colorScheme.error) },
-                    onClick = { expanded = false; confirmDiscard = true },
+                    onClick = { expanded = false; discardTarget = null; confirmDiscard = true },
                 )
             }
         }
     }
     if (confirmDiscard) {
+        val target = discardTarget
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
-            title = { Text("Discard progress?") },
+            title = {
+                Text(
+                    when (target) {
+                        Format.AUDIO -> "Discard audiobook progress?"
+                        Format.EBOOK -> "Discard ebook progress?"
+                        null -> "Discard progress?"
+                    },
+                )
+            },
             text = {
                 Text(
-                    "Reset this book to the start on all your devices. Your " +
-                        "furthest-listened bookmark is kept, so you can jump back.",
+                    when (target) {
+                        null -> "Reset this book to the start on all your devices. Your " +
+                            "furthest-listened bookmark is kept, so you can jump back."
+                        else -> "Reset just the ${if (target == Format.AUDIO) "audiobook" else "ebook"} " +
+                            "to the start on all your devices — the other format's progress is untouched."
+                    },
                 )
             },
             confirmButton = {
-                TextButton(onClick = { onDiscard(); confirmDiscard = false }) {
+                TextButton(
+                    onClick = {
+                        if (target == null) onDiscard() else onDiscardFormat(target)
+                        confirmDiscard = false
+                    },
+                ) {
                     Text("Discard", color = MaterialTheme.colorScheme.error)
                 }
             },

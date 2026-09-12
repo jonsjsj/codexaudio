@@ -28,12 +28,20 @@ import no.bellaybestia.audex.domain.settings.ThemeSettings
 /** One-shot event: open the reader for this ebook edition (Resume on an ebook). */
 data class ReaderNav(val serverId: String, val libraryItemId: String, val title: String)
 
-/** A book counts as finished once you've reached (practically) the very end in
- *  either format — it no longer belongs in "Continue". */
+/** A book counts as finished — and drops out of "Continue" — only once EVERY
+ *  format you actually own has reached (practically) the very end. Using the
+ *  max of the two fractions was wrong: a book finished on audio but still
+ *  being read on ebook (a real case, not just a bug where one format's
+ *  progress is wrongly stuck at 100%) would vanish from Continue on the
+ *  ebook's behalf too, even though there's real reading left to resume. A
+ *  format the work doesn't have never counts against it. */
 private const val FINISHED_FRACTION = 0.999
 
-private fun isFinished(work: Work): Boolean =
-    maxOf(work.listenFraction, work.readFraction) >= FINISHED_FRACTION
+private fun isFinished(work: Work): Boolean {
+    val audioDone = !work.hasAudio || work.listenFraction >= FINISHED_FRACTION
+    val ebookDone = !work.hasEbook || work.readFraction >= FINISHED_FRACTION
+    return audioDone && ebookDone
+}
 
 /** Home caps each section to this many rows; a section's header opens the full
  *  list (see [HomeSection], [HomeSeeAllScreen]). */

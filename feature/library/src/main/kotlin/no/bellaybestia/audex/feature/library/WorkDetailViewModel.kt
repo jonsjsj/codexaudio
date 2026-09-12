@@ -307,8 +307,17 @@ class WorkDetailViewModel @Inject constructor(
      * "not started". The furthest-listened bookmark (ABS session history) is
      * unaffected, so a jump-back is still possible if it was a mistake.
      */
-    fun discardProgress() {
-        val eds = editions.value
+    fun discardProgress() = discardProgress(format = null)
+
+    /**
+     * Discard progress for just [format]'s edition(s) (null = every edition,
+     * the original whole-book reset). Split out for the case where only one
+     * format is actually wrong — e.g. audio stuck at a bogus 100% while the
+     * ebook is genuinely still being read; a whole-work discard would destroy
+     * that real ebook progress too just to clear the audio side.
+     */
+    fun discardProgress(format: Format?) {
+        val eds = editions.value.filter { format == null || it.format == format }
         viewModelScope.launch {
             // If this book is the one loaded in the player (even paused), stop it
             // first — the live player would otherwise write its position straight

@@ -3,6 +3,12 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.51.0
+
+- **A book's cover no longer goes blank when one edition is missing a cover on the server.** Root-caused against a real book: its audiobook edition had no cover on the server at all, while its ebook edition's did — the detail screen was picking the audiobook's (broken) one by order. It now falls back through every edition's cover until one actually loads.
+- **New Home section: Upcoming releases.** Not-yet-released books in series and authors you follow on Codex, pulled through the same connection you already set up for Codex sync in Settings — no new setup needed.
+- **Home gets an Edit button.** Show or hide any of the four sections (Continue, Recently added, Recently released, Upcoming releases) to build the Home you want.
+
 ## 0.4.50.0
 
 - **Continue no longer shows books you've finished.** A book at (practically) 100% in either format is done — it stayed in Continue before just because you'd closed it recently. It drops out the moment it's finished, however recent.

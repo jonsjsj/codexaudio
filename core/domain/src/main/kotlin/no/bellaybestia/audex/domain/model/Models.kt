@@ -91,6 +91,20 @@ data class ResumeTarget(
     val resumeAtS: Double?,
 )
 
+/**
+ * A book not yet in your library — from Codex's own upcoming-releases tracking
+ * (series/authors you follow there, via Hardcover). No workId/libraryItemId:
+ * you don't own it yet, so it isn't part of the local catalog and can't be
+ * tapped into a detail screen the way a [Work] can.
+ */
+data class UpcomingItem(
+    val mediaId: Int,
+    val title: String,
+    val coverUrl: String?,
+    /** "YYYY-MM-DD", or null if Codex hasn't pinned a date. */
+    val releaseDate: String?,
+)
+
 data class ServerAccount(
     val serverId: String,
     val name: String,

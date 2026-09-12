@@ -102,7 +102,12 @@ fun WorkDetailScreen(
     val allSeries by viewModel.allSeries.collectAsState()
     var showFixMetadata by remember { mutableStateOf(false) }
 
-    val cover = editions.firstNotNullOfOrNull { it.coverUrl }
+    // A non-null coverUrl only means we could CONSTRUCT one — an edition can still
+    // 404 (verified: an audiobook item with no cover on the server, while its
+    // paired ebook edition had a real one). Pass every edition's URL so CoverImage
+    // can fall back instead of the cover silently going blank.
+    val coverCandidates = editions.mapNotNull { it.coverUrl }
+    val cover = coverCandidates.firstOrNull()
     // Browsing a book re-tints the whole app around it (mockup 2c).
     TintFromCover(cover)
 
@@ -141,7 +146,12 @@ fun WorkDetailScreen(
         // sit over the foot. No "Audio + EPUB" text — the icons carry it. The W
         // (word sync) only appears when it's actually ready for this book.
         Box(Modifier.fillMaxWidth().aspectRatio(0.96f)) {
-            CoverImage(url = cover, contentDescription = viewModel.title, modifier = Modifier.fillMaxSize())
+            CoverImage(
+                url = cover,
+                contentDescription = viewModel.title,
+                fallbackUrls = coverCandidates.drop(1),
+                modifier = Modifier.fillMaxSize(),
+            )
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(

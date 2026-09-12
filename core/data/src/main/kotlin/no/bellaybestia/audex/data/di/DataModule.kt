@@ -104,6 +104,11 @@ abstract class DataModule {
     abstract fun updateSettings(impl: UpdateSettingsImpl): UpdateSettings
 
     @Binds
+    abstract fun homeSettings(
+        impl: no.bellaybestia.audex.data.HomeSettingsImpl,
+    ): no.bellaybestia.audex.domain.settings.HomeSettings
+
+    @Binds
     abstract fun reportsRepository(impl: ReportsRepositoryImpl): ReportsRepository
 
     @Binds

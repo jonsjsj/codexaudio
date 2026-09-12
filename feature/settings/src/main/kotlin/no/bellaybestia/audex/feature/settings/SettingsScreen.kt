@@ -139,7 +139,9 @@ fun SettingsScreen(
                 Text(
                     text = "When you listen, Audex sends your position to Codex right away " +
                         "(via its Audiobookshelf webhook) so it doesn't wait for Codex's " +
-                        "periodic sync. Create the token in Codex; blank or Off disables it.",
+                        "periodic sync. The same token also lets Home's Upcoming releases " +
+                        "section read what Codex tracks for series and authors you follow " +
+                        "there. Create the token in Codex; blank or Off disables both.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

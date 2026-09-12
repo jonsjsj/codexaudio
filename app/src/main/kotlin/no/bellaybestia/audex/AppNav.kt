@@ -42,7 +42,7 @@ import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.feature.downloads.DownloadsScreen
 import no.bellaybestia.audex.feature.home.HomeScreen
 import no.bellaybestia.audex.feature.home.HomeSeeAllScreen
-import no.bellaybestia.audex.feature.home.HomeSection
+import no.bellaybestia.audex.domain.settings.HomeSection
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen

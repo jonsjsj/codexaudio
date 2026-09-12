@@ -21,18 +21,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,8 +54,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.roundToInt
 import no.bellaybestia.audex.designsystem.CoverImage
 import no.bellaybestia.audex.designsystem.PosterTile
+import no.bellaybestia.audex.domain.model.UpcomingItem
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.settings.HomeLook
+import no.bellaybestia.audex.domain.settings.HomeSection
 
 @Composable
 fun HomeScreen(
@@ -62,8 +72,11 @@ fun HomeScreen(
     val continueWorks by viewModel.continueWorks.collectAsState()
     val recentWorks by viewModel.recentWorks.collectAsState()
     val recentlyReleasedWorks by viewModel.recentlyReleasedWorks.collectAsState()
+    val upcomingWorks by viewModel.upcomingWorks.collectAsState()
+    val hiddenSections by viewModel.hiddenSections.collectAsState()
     val totalBooks by viewModel.totalBooks.collectAsState()
     val serverCount by viewModel.serverCount.collectAsState()
+    var showEdit by remember { mutableStateOf(false) }
 
     // Resume jumps straight into the full-screen experience: the reader for
     // an ebook, the player for an audiobook — not just a mini-player.
@@ -74,9 +87,31 @@ fun HomeScreen(
         viewModel.openPlayer.collect { onOpenPlayer() }
     }
 
-    if (continueWorks.isEmpty() && recentWorks.isEmpty() && recentlyReleasedWorks.isEmpty()) {
+    if (showEdit) {
+        HomeEditDialog(
+            hiddenSections = hiddenSections,
+            onSetHidden = viewModel::setSectionHidden,
+            onDismiss = { showEdit = false },
+        )
+    }
+
+    // A section only actually shows when it's both non-empty AND not turned
+    // off via Edit — an empty section renders nothing either way, so "nothing
+    // here yet" only fires when there's truly nothing left to show.
+    fun visible(section: HomeSection) = section !in hiddenSections
+    val shownContinue = continueWorks.takeIf { visible(HomeSection.CONTINUE) } ?: emptyList()
+    val shownRecent = recentWorks.takeIf { visible(HomeSection.RECENTLY_ADDED) } ?: emptyList()
+    val shownReleased = recentlyReleasedWorks.takeIf { visible(HomeSection.RECENTLY_RELEASED) } ?: emptyList()
+    val shownUpcoming = upcomingWorks.takeIf { visible(HomeSection.UPCOMING) } ?: emptyList()
+
+    if (shownContinue.isEmpty() && shownRecent.isEmpty() && shownReleased.isEmpty() && shownUpcoming.isEmpty()) {
         Column(modifier.fillMaxSize().padding(24.dp)) {
-            Text("Nothing here yet", style = MaterialTheme.typography.headlineSmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Nothing here yet", style = MaterialTheme.typography.headlineSmall)
+                IconButton(onClick = { showEdit = true }) {
+                    Icon(Icons.Outlined.Edit, contentDescription = "Edit Home")
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Add a server and start a book — what you're partway through shows up here.",
@@ -90,15 +125,53 @@ fun HomeScreen(
     when (look) {
         HomeLook.NIGHTFALL ->
             NightfallHome(
-                continueWorks, recentWorks, recentlyReleasedWorks, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, modifier,
+                shownContinue, shownRecent, shownReleased, shownUpcoming, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, { showEdit = true }, modifier,
             )
         HomeLook.STACKS ->
             StacksHome(
-                continueWorks, recentWorks, recentlyReleasedWorks, totalBooks, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, modifier,
+                shownContinue, shownRecent, shownReleased, shownUpcoming, totalBooks, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, { showEdit = true }, modifier,
             )
     }
+}
+
+/** Home's "Edit" affordance: a plain checklist of the 4 sections, each with a
+ *  Switch — no reordering, just show/hide, per the ask ("add and remove these
+ *  elements"). Persisted immediately per-toggle via [HomeViewModel.setSectionHidden]
+ *  rather than needing a separate Save action. */
+@Composable
+private fun HomeEditDialog(
+    hiddenSections: Set<HomeSection>,
+    onSetHidden: (HomeSection, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sections = listOf(
+        HomeSection.CONTINUE to "Continue",
+        HomeSection.RECENTLY_ADDED to "Recently added",
+        HomeSection.RECENTLY_RELEASED to "Recently released",
+        HomeSection.UPCOMING to "Upcoming releases",
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Home sections") },
+        text = {
+            Column {
+                sections.forEach { (section, label) ->
+                    val shown = section !in hiddenSections
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = shown, onCheckedChange = { onSetHidden(section, !it) })
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }
 
 /** "Synced · 2 servers" (mockup 2a). Singular/plural, hidden with no servers. */
@@ -115,21 +188,34 @@ private fun NightfallHome(
     continueWorks: List<Work>,
     recentWorks: List<Work>,
     recentlyReleasedWorks: List<Work>,
+    upcomingWorks: List<UpcomingItem>,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
     onSeeAll: (HomeSection) -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(state = rememberLazyListState(), modifier = modifier.fillMaxSize()) {
-        syncedLabel(serverCount)?.let { synced ->
-            item(key = "synced") {
+        item(key = "synced") {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = synced.uppercase(),
+                    text = syncedLabel(serverCount)?.uppercase().orEmpty(),
                     style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Outlined.Edit,
+                        contentDescription = "Edit Home",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         continueWorks.firstOrNull()?.let { hero ->
@@ -165,6 +251,15 @@ private fun NightfallHome(
                 recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT),
                 key = { "rr_${it.id}" },
             ) { w -> FlatWorkRow(w, showBars = false, onWorkClick, showYear = true) }
+        }
+        if (upcomingWorks.isNotEmpty()) {
+            item(key = "l_upcoming") {
+                SectionEyebrow("Upcoming releases", onClick = { onSeeAll(HomeSection.UPCOMING) })
+            }
+            items(
+                upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "u_${it.mediaId}" },
+            ) { UpcomingRow(it) }
         }
         item(key = "tail") { Spacer(Modifier.height(24.dp)) }
     }
@@ -339,6 +434,48 @@ internal fun FlatWorkRow(
     }
 }
 
+/**
+ * A book Codex knows about but you don't own yet (upcoming, in a series/by an
+ * author you follow there) — same flat-row shape as [FlatWorkRow] but not
+ * clickable (there's no local catalog entry to open) and showing a release
+ * date instead of progress.
+ */
+@Composable
+internal fun UpcomingRow(item: UpcomingItem) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CoverImage(
+                url = item.coverUrl,
+                contentDescription = item.title,
+                modifier = Modifier.size(width = 48.dp, height = 66.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                item.releaseDate?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp),
+        )
+    }
+}
+
 @Composable
 private fun FlatFormatBar(icon: ImageVector, contentDescription: String, fraction: Double) {
     val clamped = fraction.coerceIn(0.0, 1.0).toFloat()
@@ -369,11 +506,13 @@ private fun StacksHome(
     continueWorks: List<Work>,
     recentWorks: List<Work>,
     recentlyReleasedWorks: List<Work>,
+    upcomingWorks: List<UpcomingItem>,
     totalBooks: Int,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
     onSeeAll: (HomeSection) -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(
@@ -382,17 +521,29 @@ private fun StacksHome(
         contentPadding = PaddingValues(bottom = 28.dp),
     ) {
         item(key = "head") {
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp)) {
-                Text(text = "Home", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                Text(
-                    text = listOfNotNull(
-                        "$totalBooks books · ${continueWorks.size} in progress",
-                        syncedLabel(serverCount),
-                    ).joinToString(" · ").uppercase(),
-                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(text = "Home", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = listOfNotNull(
+                            "$totalBooks books · ${continueWorks.size} in progress",
+                            syncedLabel(serverCount),
+                        ).joinToString(" · ").uppercase(),
+                        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Outlined.Edit,
+                        contentDescription = "Edit Home",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         if (continueWorks.isNotEmpty()) {
@@ -417,6 +568,15 @@ private fun StacksHome(
                 recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
                 key = { "rr_" + it.first().id },
             ) { pair -> PosterRow(pair, onWorkClick, showYear = true) }
+        }
+        if (upcomingWorks.isNotEmpty()) {
+            item(key = "l_upcoming") {
+                StacksLabel("Upcoming releases") { onSeeAll(HomeSection.UPCOMING) }
+            }
+            items(
+                upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "u_${it.mediaId}" },
+            ) { UpcomingRow(it) }
         }
     }
 }

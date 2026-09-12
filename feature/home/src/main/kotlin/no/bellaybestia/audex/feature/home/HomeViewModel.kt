@@ -9,15 +9,20 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import no.bellaybestia.audex.domain.model.Format
+import no.bellaybestia.audex.domain.model.UpcomingItem
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.playback.PlaybackController
 import no.bellaybestia.audex.domain.repository.CatalogRepository
 import no.bellaybestia.audex.domain.repository.ServerRepository
+import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.settings.HomeLook
+import no.bellaybestia.audex.domain.settings.HomeSection
+import no.bellaybestia.audex.domain.settings.HomeSettings
 import no.bellaybestia.audex.domain.settings.ThemeSettings
 
 /** One-shot event: open the reader for this ebook edition (Resume on an ebook). */
@@ -30,17 +35,19 @@ private const val FINISHED_FRACTION = 0.999
 private fun isFinished(work: Work): Boolean =
     maxOf(work.listenFraction, work.readFraction) >= FINISHED_FRACTION
 
-/** Which Home section a "See all" screen is showing. */
-enum class HomeSection { CONTINUE, RECENTLY_ADDED, RECENTLY_RELEASED }
-
 /** Home caps each section to this many rows; a section's header opens the full
  *  list (see [HomeSection], [HomeSeeAllScreen]). */
 const val HOME_SECTION_PREVIEW_COUNT = 3
+
+/** How far ahead to look for Codex-tracked upcoming book releases. */
+private const val UPCOMING_WINDOW_DAYS = 365
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val playbackController: PlaybackController,
+    private val homeSettings: HomeSettings,
+    codexSync: CodexSync,
     serverRepository: ServerRepository,
     themeSettings: ThemeSettings,
 ) : ViewModel() {
@@ -126,4 +133,23 @@ class HomeViewModel @Inject constructor(
                 .sortedWith(compareByDescending<Work> { it.year }.thenByDescending { it.updatedAt ?: 0L })
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Not-yet-released books in series/authors you follow on Codex — pulled
+     * once per Home visit (not a live-reactive local flow, since it's a
+     * network call to a separate service). Empty (not null) when Codex sync
+     * isn't configured, so the section just quietly has nothing to show
+     * instead of surfacing a fetch error on every launch.
+     */
+    val upcomingWorks: StateFlow<List<UpcomingItem>> = flow {
+        emit(codexSync.upcomingBooks(days = UPCOMING_WINDOW_DAYS).orEmpty())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Sections you've turned off via Home's Edit button. */
+    val hiddenSections: StateFlow<Set<HomeSection>> = homeSettings.hiddenSections
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun setSectionHidden(section: HomeSection, hidden: Boolean) {
+        viewModelScope.launch { homeSettings.setHidden(section, hidden) }
+    }
 }

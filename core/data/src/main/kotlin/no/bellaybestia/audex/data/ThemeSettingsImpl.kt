@@ -3,6 +3,7 @@ package no.bellaybestia.audex.data
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import no.bellaybestia.audex.domain.settings.AccentChoice
 import no.bellaybestia.audex.domain.settings.HomeLook
+import no.bellaybestia.audex.domain.settings.HomeSection
+import no.bellaybestia.audex.domain.settings.HomeSettings
 import no.bellaybestia.audex.domain.settings.ProgressUnit
 import no.bellaybestia.audex.domain.settings.ThemeMode
 import no.bellaybestia.audex.domain.settings.ThemePrefs
@@ -73,5 +76,26 @@ class UpdateSettingsImpl @Inject constructor(
 
     override suspend fun setChannel(channel: UpdateChannel) {
         context.appSettingsDataStore.edit { p -> p[KEY_UPDATE_CHANNEL] = channel.name }
+    }
+}
+
+private val KEY_HOME_HIDDEN_SECTIONS = stringSetPreferencesKey("home_hidden_sections")
+
+@Singleton
+class HomeSettingsImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : HomeSettings {
+
+    override val hiddenSections: Flow<Set<HomeSection>> = context.appSettingsDataStore.data.map { p ->
+        (p[KEY_HOME_HIDDEN_SECTIONS] ?: emptySet())
+            .mapNotNull { runCatching { HomeSection.valueOf(it) }.getOrNull() }
+            .toSet()
+    }
+
+    override suspend fun setHidden(section: HomeSection, hidden: Boolean) {
+        context.appSettingsDataStore.edit { p ->
+            val current = p[KEY_HOME_HIDDEN_SECTIONS] ?: emptySet()
+            p[KEY_HOME_HIDDEN_SECTIONS] = if (hidden) current + section.name else current - section.name
+        }
     }
 }

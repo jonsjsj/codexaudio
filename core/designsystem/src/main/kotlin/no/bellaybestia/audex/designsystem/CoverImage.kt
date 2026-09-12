@@ -16,6 +16,10 @@ import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 
 /**
  * Cover-art tile: the caller sizes it; a plain surfaceVariant block with a
@@ -37,6 +42,14 @@ import coil.compose.AsyncImage
  * [hasAudio]/[hasEbook] add a small format badge to the top-right corner
  * (headphones / book glyphs) so you can tell at a glance whether a book has an
  * audiobook, an ebook, or both — without opening it. Both false hides it.
+ *
+ * [fallbackUrls] are tried, in order, if [url] fails to load — not every URL
+ * we can construct actually serves an image: an ABS library item can have a
+ * paired edition (e.g. its ebook) with a real cover while the one we picked
+ * first 404s (verified against a real item: its audiobook edition had no
+ * cover on the server at all, so the detail screen showed blank even though
+ * the ebook edition's cover loaded fine). A non-null [url] only means we
+ * could construct a URL, never that it resolves.
  */
 @Composable
 fun CoverImage(
@@ -46,7 +59,12 @@ fun CoverImage(
     progress: Float? = null,
     hasAudio: Boolean = false,
     hasEbook: Boolean = false,
+    fallbackUrls: List<String> = emptyList(),
 ) {
+    val candidates = remember(url, fallbackUrls) { (listOfNotNull(url) + fallbackUrls).distinct() }
+    var candidateIndex by remember(candidates) { mutableIntStateOf(0) }
+    val currentUrl = candidates.getOrNull(candidateIndex)
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
@@ -58,12 +76,17 @@ fun CoverImage(
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (url != null) {
+        if (currentUrl != null) {
             AsyncImage(
-                model = url,
+                model = currentUrl,
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
+                onState = { state ->
+                    if (state is AsyncImagePainter.State.Error && candidateIndex < candidates.lastIndex) {
+                        candidateIndex++
+                    }
+                },
             )
         }
         // Format badge, top-right: which formats this book has.

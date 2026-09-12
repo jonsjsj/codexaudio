@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.49.0
+
+- **Found why "jumps to the end" progress never corrected itself.** Root-caused against your own real account data: the server only durably saves your listening position when a session closes — not on the regular background syncs while you listen — but that close call only ever ran when you explicitly stopped playback in the app. Swiping the app away or the OS reclaiming it in the background (the common case) skipped it, so if a bad position ever got saved, it stayed stuck at that wrong spot forever, even though the app kept tracking your real progress correctly the whole time. Closing the session now also happens as a safety net when the app is torn down, not only on an explicit Stop.
+
 ## 0.4.48.0
 
 - **Bookmarks can now be deleted from the Player's Jump panel and the Reader's Go-to sheet.** Both showed bookmarks as tap-to-seek-only; each bookmark row now has a two-tap Remove control, same as the player's dedicated Bookmarks tab already had. Chapters and the audiobook position rows are untouched — only bookmarks get the delete option.

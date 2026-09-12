@@ -23,6 +23,20 @@ import no.bellaybestia.audex.domain.settings.ThemeSettings
 /** One-shot event: open the reader for this ebook edition (Resume on an ebook). */
 data class ReaderNav(val serverId: String, val libraryItemId: String, val title: String)
 
+/** A book counts as finished once you've reached (practically) the very end in
+ *  either format — it no longer belongs in "Continue". */
+private const val FINISHED_FRACTION = 0.999
+
+private fun isFinished(work: Work): Boolean =
+    maxOf(work.listenFraction, work.readFraction) >= FINISHED_FRACTION
+
+/** Which Home section a "See all" screen is showing. */
+enum class HomeSection { CONTINUE, RECENTLY_ADDED, RECENTLY_RELEASED }
+
+/** Home caps each section to this many rows; a section's header opens the full
+ *  list (see [HomeSection], [HomeSeeAllScreen]). */
+const val HOME_SECTION_PREVIEW_COUNT = 3
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
@@ -70,16 +84,16 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
-     * Every work you've actually opened — listened to or read at all, not just
-     * ones still in progress — MOST RECENT FIRST, so the Home hero features
-     * the book you last had open. Home leads with this (your own activity)
-     * rather than what was merely added to the server; a work you just
-     * finished, or only just started, belongs here as much as one you're
-     * halfway through.
+     * Every work you've actually opened and NOT finished yet — MOST RECENT
+     * FIRST, so the Home hero features the book you last had open. A book you
+     * finished (practically 100% in either format) is done; it no longer
+     * belongs in Continue, however recently you closed it out. The full list
+     * (uncapped) is what [HomeSeeAllScreen] shows for [HomeSection.CONTINUE] —
+     * Home itself only ever renders the first [HOME_SECTION_PREVIEW_COUNT].
      */
     val continueWorks: StateFlow<List<Work>> = catalogRepository.works()
         .map { works ->
-            works.filter { it.listenedAt != null }
+            works.filter { it.listenedAt != null && !isFinished(it) }
                 .sortedByDescending { it.listenedAt }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -89,12 +103,27 @@ class HomeViewModel @Inject constructor(
      * fills Home (and gives you something to discover) once you're caught up
      * on your own activity. Excludes anything already surfaced in
      * [continueWorks] so a book you're mid-way through never shows twice.
+     * Uncapped — Home takes the first [HOME_SECTION_PREVIEW_COUNT] itself.
      */
     val recentWorks: StateFlow<List<Work>> = catalogRepository.works()
         .map { works ->
             works.filter { it.updatedAt != null && it.listenedAt == null }
                 .sortedByDescending { it.updatedAt }
-                .take(15)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Books already in your library, newest by real-world publish year, that
+     * you haven't started — a discovery feed by release date rather than by
+     * when you (or the server) acquired them. ABS only carries a publish YEAR
+     * for books (no exact date — that's a podcast-episode-only field), so this
+     * section can't show a finer date than that without pulling from an
+     * external metadata source.
+     */
+    val recentlyReleasedWorks: StateFlow<List<Work>> = catalogRepository.works()
+        .map { works ->
+            works.filter { it.year != null && it.listenedAt == null }
+                .sortedWith(compareByDescending<Work> { it.year }.thenByDescending { it.updatedAt ?: 0L })
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }

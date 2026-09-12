@@ -41,6 +41,8 @@ import androidx.navigation.navArgument
 import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.feature.downloads.DownloadsScreen
 import no.bellaybestia.audex.feature.home.HomeScreen
+import no.bellaybestia.audex.feature.home.HomeSeeAllScreen
+import no.bellaybestia.audex.feature.home.HomeSection
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen
@@ -73,6 +75,7 @@ private object Routes {
     const val REPORT = "report"
     const val STATS = "stats"
     const val PLAYER = "player"
+    const val HOME_SEE_ALL = "home_see_all/{section}"
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
     const val WORK = "work/{id}?title={title}&author={author}"
@@ -83,6 +86,7 @@ private object Routes {
     fun podcast(serverId: String, itemId: String) =
         "podcast/${Uri.encode(serverId)}/${Uri.encode(itemId)}"
 
+    fun homeSeeAll(section: HomeSection) = "home_see_all/${section.name}"
     fun author(id: String, name: String) = "author/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun series(id: String, name: String) = "series/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun work(id: String, title: String, author: String?) =
@@ -114,7 +118,7 @@ fun AppNav() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val selectedTab = when (currentRoute) {
-        Routes.HOME -> 0
+        Routes.HOME, Routes.HOME_SEE_ALL -> 0
         Routes.LIBRARY, Routes.AUTHOR, Routes.SERIES, Routes.WORK, Routes.READER -> 1
         Routes.PODCASTS, Routes.PODCAST, Routes.ADD_PODCAST -> 2
         Routes.DOWNLOADS -> 3
@@ -160,6 +164,19 @@ fun AppNav() {
                         navController.navigateToReader(serverId, itemId, title)
                     },
                     onOpenPlayer = { navController.navigateToPlayer() },
+                    onSeeAll = { section -> navController.navigate(Routes.homeSeeAll(section)) },
+                )
+            }
+            composable(
+                route = Routes.HOME_SEE_ALL,
+                arguments = listOf(navArgument("section") { type = NavType.StringType }),
+            ) { entry ->
+                val section = entry.arguments?.getString("section")
+                    ?.let { runCatching { HomeSection.valueOf(it) }.getOrNull() }
+                    ?: HomeSection.CONTINUE
+                HomeSeeAllScreen(
+                    section = section,
+                    onWorkClick = { work -> navController.navigateToWork(work) },
                 )
             }
             composable(Routes.LIBRARY) {

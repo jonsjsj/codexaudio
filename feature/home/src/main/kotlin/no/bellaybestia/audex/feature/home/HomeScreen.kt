@@ -54,12 +54,14 @@ fun HomeScreen(
     onWorkClick: (Work) -> Unit = {},
     onOpenReader: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenPlayer: () -> Unit = {},
+    onSeeAll: (HomeSection) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val look by viewModel.look.collectAsState()
     val continueWorks by viewModel.continueWorks.collectAsState()
     val recentWorks by viewModel.recentWorks.collectAsState()
+    val recentlyReleasedWorks by viewModel.recentlyReleasedWorks.collectAsState()
     val totalBooks by viewModel.totalBooks.collectAsState()
     val serverCount by viewModel.serverCount.collectAsState()
 
@@ -72,7 +74,7 @@ fun HomeScreen(
         viewModel.openPlayer.collect { onOpenPlayer() }
     }
 
-    if (continueWorks.isEmpty() && recentWorks.isEmpty()) {
+    if (continueWorks.isEmpty() && recentWorks.isEmpty() && recentlyReleasedWorks.isEmpty()) {
         Column(modifier.fillMaxSize().padding(24.dp)) {
             Text("Nothing here yet", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
@@ -87,9 +89,15 @@ fun HomeScreen(
 
     when (look) {
         HomeLook.NIGHTFALL ->
-            NightfallHome(continueWorks, recentWorks, serverCount, onWorkClick, viewModel::resume, modifier)
+            NightfallHome(
+                continueWorks, recentWorks, recentlyReleasedWorks, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, modifier,
+            )
         HomeLook.STACKS ->
-            StacksHome(continueWorks, recentWorks, totalBooks, serverCount, onWorkClick, viewModel::resume, modifier)
+            StacksHome(
+                continueWorks, recentWorks, recentlyReleasedWorks, totalBooks, serverCount,
+                onWorkClick, viewModel::resume, onSeeAll, modifier,
+            )
     }
 }
 
@@ -106,9 +114,11 @@ private fun syncedLabel(servers: Int): String? = when {
 private fun NightfallHome(
     continueWorks: List<Work>,
     recentWorks: List<Work>,
+    recentlyReleasedWorks: List<Work>,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
+    onSeeAll: (HomeSection) -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(state = rememberLazyListState(), modifier = modifier.fillMaxSize()) {
@@ -126,18 +136,35 @@ private fun NightfallHome(
             item(key = "hero") { HeroCard(hero, onWorkClick, onResume) }
         }
         // Below the hero: flat hairline rows per the mockup (2a) — the rest of
-        // in-progress books with dual listen/read bars, then recently added.
+        // in-progress books with dual listen/read bars, then discovery
+        // sections. Each is capped to HOME_SECTION_PREVIEW_COUNT here; the
+        // section header opens the full, uncapped list.
         if (continueWorks.size > 1) {
-            item(key = "l_cont") { SectionEyebrow("Continue") }
-            items(continueWorks.drop(1), key = { "c_${it.id}" }) { w ->
-                FlatWorkRow(w, showBars = true, onWorkClick)
+            item(key = "l_cont") {
+                SectionEyebrow("Continue", onClick = { onSeeAll(HomeSection.CONTINUE) })
             }
+            items(
+                continueWorks.drop(1).take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "c_${it.id}" },
+            ) { w -> FlatWorkRow(w, showBars = true, onWorkClick) }
         }
         if (recentWorks.isNotEmpty()) {
-            item(key = "l_recent") { SectionEyebrow("Recently added") }
-            items(recentWorks, key = { "r_${it.id}" }) { w ->
-                FlatWorkRow(w, showBars = false, onWorkClick)
+            item(key = "l_recent") {
+                SectionEyebrow("Recently added", onClick = { onSeeAll(HomeSection.RECENTLY_ADDED) })
             }
+            items(
+                recentWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "r_${it.id}" },
+            ) { w -> FlatWorkRow(w, showBars = false, onWorkClick) }
+        }
+        if (recentlyReleasedWorks.isNotEmpty()) {
+            item(key = "l_released") {
+                SectionEyebrow("Recently released", onClick = { onSeeAll(HomeSection.RECENTLY_RELEASED) })
+            }
+            items(
+                recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "rr_${it.id}" },
+            ) { w -> FlatWorkRow(w, showBars = false, onWorkClick, showYear = true) }
         }
         item(key = "tail") { Spacer(Modifier.height(24.dp)) }
     }
@@ -218,17 +245,33 @@ private fun HeroCard(work: Work, onWorkClick: (Work) -> Unit, onResume: (Work) -
     }
 }
 
-/** Mockup 2a section eyebrow: letter-spaced muted caps over a hairline. */
+/** Mockup 2a section eyebrow: letter-spaced muted caps over a hairline. Tapping
+ *  it opens the full, uncapped list for this section ("See all"). */
 @Composable
-private fun SectionEyebrow(text: String) {
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp)) {
-        Text(
-            text = text.uppercase(),
-            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 10.dp),
-        )
+private fun SectionEyebrow(text: String, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 20.dp, end = 20.dp, top = 18.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text.uppercase(),
+                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = "See all",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
@@ -238,7 +281,12 @@ private fun SectionEyebrow(text: String) {
  * listen/read bars when [showBars] (Continue) or plain when off (Recently added).
  */
 @Composable
-private fun FlatWorkRow(work: Work, showBars: Boolean, onWorkClick: (Work) -> Unit) {
+internal fun FlatWorkRow(
+    work: Work,
+    showBars: Boolean,
+    onWorkClick: (Work) -> Unit,
+    showYear: Boolean = false,
+) {
     Column {
         Row(
             modifier = Modifier
@@ -262,7 +310,11 @@ private fun FlatWorkRow(work: Work, showBars: Boolean, onWorkClick: (Work) -> Un
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                subtitleOf(work)?.let {
+                val subtitle = listOfNotNull(
+                    subtitleOf(work),
+                    work.year?.takeIf { showYear }?.toString(),
+                ).joinToString(" · ").ifBlank { null }
+                subtitle?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
@@ -316,10 +368,12 @@ private fun FlatFormatBar(icon: ImageVector, contentDescription: String, fractio
 private fun StacksHome(
     continueWorks: List<Work>,
     recentWorks: List<Work>,
+    recentlyReleasedWorks: List<Work>,
     totalBooks: Int,
     serverCount: Int,
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
+    onSeeAll: (HomeSection) -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(
@@ -342,44 +396,78 @@ private fun StacksHome(
             }
         }
         if (continueWorks.isNotEmpty()) {
-            item(key = "l_cont") { StacksLabel("Continue") }
-            items(continueWorks, key = { "c_${it.id}" }) { BigContinueRow(it, onWorkClick) }
+            item(key = "l_cont") { StacksLabel("Continue") { onSeeAll(HomeSection.CONTINUE) } }
+            items(
+                continueWorks.take(HOME_SECTION_PREVIEW_COUNT),
+                key = { "c_${it.id}" },
+            ) { BigContinueRow(it, onWorkClick) }
         }
         if (recentWorks.isNotEmpty()) {
-            item(key = "l_recent") { StacksLabel("Recently added") }
-            items(recentWorks.chunked(2), key = { it.first().id }) { pair ->
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    pair.forEach { w ->
-                        Box(Modifier.weight(1f)) {
-                            PosterTile(
-                                coverUrl = w.coverUrl,
-                                title = w.title,
-                                subtitle = w.authorName?.takeIf { it.isNotBlank() },
-                                progress = furthestFraction(w).takeIf { it > 0f },
-                                hasAudio = w.hasAudio,
-                                hasEbook = w.hasEbook,
-                                onClick = { onWorkClick(w) },
-                            )
-                        }
-                    }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
-                }
+            item(key = "l_recent") { StacksLabel("Recently added") { onSeeAll(HomeSection.RECENTLY_ADDED) } }
+            items(
+                recentWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
+                key = { it.first().id },
+            ) { pair -> PosterRow(pair, onWorkClick) }
+        }
+        if (recentlyReleasedWorks.isNotEmpty()) {
+            item(key = "l_released") {
+                StacksLabel("Recently released") { onSeeAll(HomeSection.RECENTLY_RELEASED) }
             }
+            items(
+                recentlyReleasedWorks.take(HOME_SECTION_PREVIEW_COUNT).chunked(2),
+                key = { "rr_" + it.first().id },
+            ) { pair -> PosterRow(pair, onWorkClick, showYear = true) }
         }
     }
 }
 
 @Composable
-private fun StacksLabel(text: String) {
-    Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 12.dp),
-    )
+private fun PosterRow(pair: List<Work>, onWorkClick: (Work) -> Unit, showYear: Boolean = false) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        pair.forEach { w ->
+            Box(Modifier.weight(1f)) {
+                PosterTile(
+                    coverUrl = w.coverUrl,
+                    title = w.title,
+                    subtitle = listOfNotNull(
+                        w.authorName?.takeIf { it.isNotBlank() },
+                        w.year?.takeIf { showYear }?.toString(),
+                    ).joinToString(" · ").ifBlank { null },
+                    progress = furthestFraction(w).takeIf { it > 0f },
+                    hasAudio = w.hasAudio,
+                    hasEbook = w.hasEbook,
+                    onClick = { onWorkClick(w) },
+                )
+            }
+        }
+        if (pair.size == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun StacksLabel(text: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text.uppercase(),
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "See all",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable

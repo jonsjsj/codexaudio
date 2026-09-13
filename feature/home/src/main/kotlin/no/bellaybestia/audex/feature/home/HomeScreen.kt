@@ -63,6 +63,7 @@ fun HomeScreen(
     onOpenReader: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenPlayer: () -> Unit = {},
     onSeeAll: (HomeSection) -> Unit = {},
+    onUpcomingClick: (UpcomingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -135,12 +136,12 @@ fun HomeScreen(
         HomeLook.NIGHTFALL ->
             NightfallHome(
                 shownContinue, shownRecent, shownReleased, shownUpcoming, sectionsInOrder, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, { editMode = true }, modifier,
+                onWorkClick, viewModel::resume, onSeeAll, onUpcomingClick, { editMode = true }, modifier,
             )
         HomeLook.STACKS ->
             StacksHome(
                 shownContinue, shownRecent, shownReleased, shownUpcoming, sectionsInOrder, totalBooks, serverCount,
-                onWorkClick, viewModel::resume, onSeeAll, { editMode = true }, modifier,
+                onWorkClick, viewModel::resume, onSeeAll, onUpcomingClick, { editMode = true }, modifier,
             )
     }
 }
@@ -183,6 +184,7 @@ private fun NightfallHome(
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
     onSeeAll: (HomeSection) -> Unit,
+    onUpcomingClick: (UpcomingItem) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier,
 ) {
@@ -252,7 +254,7 @@ private fun NightfallHome(
                     items(
                         upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
                         key = { "u_${it.mediaId}" },
-                    ) { UpcomingRow(it) }
+                    ) { UpcomingRow(it, onClick = onUpcomingClick) }
                 }
             }
         }
@@ -431,15 +433,19 @@ internal fun FlatWorkRow(
 
 /**
  * A book Codex knows about but you don't own yet (upcoming, in a series/by an
- * author you follow there) — same flat-row shape as [FlatWorkRow] but not
- * clickable (there's no local catalog entry to open) and showing a release
- * date instead of progress.
+ * author you follow there) — same flat-row shape as [FlatWorkRow], showing a
+ * release date instead of progress. Tapping it opens [MediaDetail] (Codex's
+ * own catalog entry, or a public Open Library lookup as a fallback) rather
+ * than a local [Work] detail screen, since there's no local catalog entry yet.
  */
 @Composable
-internal fun UpcomingRow(item: UpcomingItem) {
+internal fun UpcomingRow(item: UpcomingItem, onClick: (UpcomingItem) -> Unit = {}) {
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick(item) }
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CoverImage(
@@ -508,6 +514,7 @@ private fun StacksHome(
     onWorkClick: (Work) -> Unit,
     onResume: (Work) -> Unit,
     onSeeAll: (HomeSection) -> Unit,
+    onUpcomingClick: (UpcomingItem) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier,
 ) {
@@ -574,7 +581,7 @@ private fun StacksHome(
                     items(
                         upcomingWorks.take(HOME_SECTION_PREVIEW_COUNT),
                         key = { "u_${it.mediaId}" },
-                    ) { UpcomingRow(it) }
+                    ) { UpcomingRow(it, onClick = onUpcomingClick) }
                 }
             }
         }

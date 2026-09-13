@@ -3,6 +3,10 @@
 Source of truth for release notes: the in-app update page and the OTA
 manifest's notes derive from this file — never hand-maintain copies.
 
+## 0.4.55.0
+
+- **Upcoming releases are now tappable.** Opens a detail page with the cover, author/narrator, series, release date, and description — pulled from Codex's own catalog since it already tracks the release, or from a public Open Library lookup on the rare title Codex hasn't matched yet.
+
 ## 0.4.54.0
 
 - **Continue no longer refills with every book you've ever only read.** A format you never actually started (a clean, untouched 0%) no longer counts as "left incomplete" — only a format you've made real progress in and haven't finished does. A book finished on ebook, with its audiobook never opened, now correctly stays out of Continue instead of flooding back in the moment the ebook hits 100%.

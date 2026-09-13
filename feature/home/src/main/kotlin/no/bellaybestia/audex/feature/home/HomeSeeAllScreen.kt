@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import no.bellaybestia.audex.designsystem.ScreenHeader
+import no.bellaybestia.audex.domain.model.UpcomingItem
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.domain.settings.HomeSection
 
@@ -38,6 +39,7 @@ private fun HomeSection.title(): String = when (this) {
 fun HomeSeeAllScreen(
     section: HomeSection,
     onWorkClick: (Work) -> Unit = {},
+    onUpcomingClick: (UpcomingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -57,7 +59,7 @@ fun HomeSeeAllScreen(
                 return@Column
             }
             LazyColumn(state = rememberLazyListState(), modifier = Modifier.fillMaxSize()) {
-                items(upcoming, key = { it.mediaId }) { UpcomingRow(it) }
+                items(upcoming, key = { it.mediaId }) { UpcomingRow(it, onClick = onUpcomingClick) }
             }
         }
         return

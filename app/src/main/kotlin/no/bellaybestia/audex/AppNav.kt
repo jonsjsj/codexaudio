@@ -42,7 +42,9 @@ import no.bellaybestia.audex.designsystem.FlatTabRow
 import no.bellaybestia.audex.feature.downloads.DownloadsScreen
 import no.bellaybestia.audex.feature.home.HomeScreen
 import no.bellaybestia.audex.feature.home.HomeSeeAllScreen
+import no.bellaybestia.audex.feature.home.UpcomingDetailScreen
 import no.bellaybestia.audex.domain.settings.HomeSection
+import no.bellaybestia.audex.domain.model.UpcomingItem
 import no.bellaybestia.audex.domain.model.Work
 import no.bellaybestia.audex.feature.library.AuthorDetailScreen
 import no.bellaybestia.audex.feature.library.LibraryScreen
@@ -79,6 +81,7 @@ private object Routes {
     const val AUTHOR = "author/{id}?name={name}"
     const val SERIES = "series/{id}?name={name}"
     const val WORK = "work/{id}?title={title}&author={author}"
+    const val UPCOMING_DETAIL = "upcoming_detail/{mediaId}?title={title}&cover={cover}&release={release}"
     const val READER = "reader/{serverId}/{itemId}?title={title}"
     const val ADD_PODCAST = "add_podcast"
     const val PODCAST = "podcast/{serverId}/{itemId}"
@@ -91,6 +94,9 @@ private object Routes {
     fun series(id: String, name: String) = "series/${Uri.encode(id)}?name=${Uri.encode(name)}"
     fun work(id: String, title: String, author: String?) =
         "work/${Uri.encode(id)}?title=${Uri.encode(title)}&author=${Uri.encode(author.orEmpty())}"
+    fun upcomingDetail(item: UpcomingItem) =
+        "upcoming_detail/${item.mediaId}?title=${Uri.encode(item.title)}" +
+            "&cover=${Uri.encode(item.coverUrl.orEmpty())}&release=${Uri.encode(item.releaseDate.orEmpty())}"
     fun reader(serverId: String, itemId: String, title: String) =
         "reader/${Uri.encode(serverId)}/${Uri.encode(itemId)}?title=${Uri.encode(title)}"
 }
@@ -165,6 +171,7 @@ fun AppNav() {
                     },
                     onOpenPlayer = { navController.navigateToPlayer() },
                     onSeeAll = { section -> navController.navigate(Routes.homeSeeAll(section)) },
+                    onUpcomingClick = { item -> navController.navigate(Routes.upcomingDetail(item)) },
                 )
             }
             composable(
@@ -177,7 +184,31 @@ fun AppNav() {
                 HomeSeeAllScreen(
                     section = section,
                     onWorkClick = { work -> navController.navigateToWork(work) },
+                    onUpcomingClick = { item -> navController.navigate(Routes.upcomingDetail(item)) },
                 )
+            }
+            composable(
+                route = Routes.UPCOMING_DETAIL,
+                arguments = listOf(
+                    navArgument("mediaId") { type = NavType.IntType },
+                    navArgument("title") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("cover") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("release") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
+                UpcomingDetailScreen()
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(

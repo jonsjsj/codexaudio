@@ -12,7 +12,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import no.bellaybestia.audex.common.DefaultDispatcher
+import no.bellaybestia.audex.domain.model.MediaDetail
 import no.bellaybestia.audex.domain.model.UpcomingItem
 import no.bellaybestia.audex.domain.settings.CodexSync
 import no.bellaybestia.audex.domain.settings.CodexSyncSettings
@@ -38,6 +44,25 @@ private data class WireUpcoming(
     val type: String? = null,
     val cover_url: String? = null,
     val release_date: String? = null,
+)
+
+// Mirrors Codex's MediaOut schema (GET /media/{id}) — only the fields the
+// detail screen actually shows are declared; the rest are ignored via
+// ignoreUnknownKeys.
+@Serializable
+private data class WireMediaDetail(
+    val id: Int,
+    val type: String? = null,
+    val title: String,
+    val cover_url: String? = null,
+    val description: String? = null,
+    val author: String? = null,
+    val narrator: String? = null,
+    val series_name: String? = null,
+    val series_position: Double? = null,
+    val release_date: String? = null,
+    val year: Int? = null,
+    val genres: String? = null,
 )
 
 @Singleton
@@ -113,6 +138,100 @@ class CodexSyncImpl @Inject constructor(
             }
         }.getOrNull()
     }
+
+    override suspend fun mediaDetail(
+        mediaId: Int,
+        fallbackTitle: String,
+        fallbackAuthor: String?,
+    ): MediaDetail? = withContext(dispatcher) {
+        fetchCodexMediaDetail(mediaId) ?: fetchPublicMediaDetail(fallbackTitle, fallbackAuthor)
+    }
+
+    private suspend fun fetchCodexMediaDetail(mediaId: Int): MediaDetail? {
+        val s = settings.first()
+        if (!s.isConfigured) return null
+        val base = s.url.trim().trimEnd('/')
+        val request = Request.Builder()
+            .url("$base/media/$mediaId")
+            .header("Authorization", "Bearer ${s.token.trim()}")
+            .get()
+            .build()
+        return runCatching {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val body = resp.body?.string() ?: return@use null
+                val w = json.decodeFromString(WireMediaDetail.serializer(), body)
+                MediaDetail(
+                    mediaId = w.id,
+                    title = w.title,
+                    type = w.type,
+                    author = w.author,
+                    narrator = w.narrator,
+                    seriesName = w.series_name,
+                    seriesPosition = w.series_position,
+                    coverUrl = w.cover_url?.let { absoluteCodexUrl(base, it) },
+                    description = w.description?.takeIf { it.isNotBlank() },
+                    releaseDate = w.release_date,
+                    year = w.year,
+                    genres = w.genres,
+                    source = "codex",
+                )
+            }
+        }.getOrNull()
+    }
+
+    /** Codex had nothing for this id (not configured, 404, network failure) —
+     *  look the book up directly from Open Library's public, keyless API by
+     *  title (+author when known) instead. Best-effort: any failure here just
+     *  means the detail screen falls back to the nav-arg title/cover it
+     *  already had. */
+    private suspend fun fetchPublicMediaDetail(title: String, author: String?): MediaDetail? = runCatching {
+        var q = "title=${java.net.URLEncoder.encode(title, "UTF-8")}"
+        if (!author.isNullOrBlank()) q += "&author=${java.net.URLEncoder.encode(author, "UTF-8")}"
+        val searchRequest = Request.Builder()
+            .url("https://openlibrary.org/search.json?$q&limit=1")
+            .get()
+            .build()
+        val first = client.newCall(searchRequest).execute().use { resp ->
+            if (!resp.isSuccessful) return@runCatching null
+            val body = resp.body?.string() ?: return@runCatching null
+            json.parseToJsonElement(body).jsonObject["docs"]
+                ?.jsonArray?.firstOrNull()?.jsonObject
+        } ?: return@runCatching null
+
+        val workKey = first["key"]?.jsonPrimitive?.contentOrNull
+        val coverId = first["cover_i"]?.jsonPrimitive?.intOrNull
+        val year = first["first_publish_year"]?.jsonPrimitive?.intOrNull
+        val authorName = first["author_name"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull
+
+        val description = workKey?.let { key ->
+            runCatching {
+                val workRequest = Request.Builder().url("https://openlibrary.org$key.json").get().build()
+                client.newCall(workRequest).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use null
+                    val body = resp.body?.string() ?: return@use null
+                    val d = json.parseToJsonElement(body).jsonObject["description"]
+                    d?.jsonPrimitive?.contentOrNull ?: d?.jsonObject?.get("value")?.jsonPrimitive?.contentOrNull
+                }
+            }.getOrNull()
+        }
+
+        MediaDetail(
+            mediaId = -1,
+            title = title,
+            type = null,
+            author = authorName ?: author,
+            narrator = null,
+            seriesName = null,
+            seriesPosition = null,
+            coverUrl = coverId?.let { "https://covers.openlibrary.org/b/id/$it-L.jpg" },
+            description = description,
+            releaseDate = null,
+            year = year,
+            genres = null,
+            source = "public",
+        )
+    }.getOrNull()
 
     /** Codex's own cover paths ("/media/2340/poster", a MediaCoverProxy path) are
      *  relative to the Codex host; an already-absolute URL (e.g. openlibrary.org,

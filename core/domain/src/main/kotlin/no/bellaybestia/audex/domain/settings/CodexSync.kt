@@ -1,6 +1,7 @@
 package no.bellaybestia.audex.domain.settings
 
 import kotlinx.coroutines.flow.Flow
+import no.bellaybestia.audex.domain.model.MediaDetail
 import no.bellaybestia.audex.domain.model.UpcomingItem
 
 /**
@@ -38,4 +39,14 @@ interface CodexSync {
      * distinct from a real, empty list.
      */
     suspend fun upcomingBooks(days: Int = 365): List<UpcomingItem>?
+
+    /**
+     * Detail for one [UpcomingItem] you tapped, keyed by Codex's `media_id`.
+     * Tries Codex's own catalog first (`GET /media/{id}`, no ownership
+     * required — it already tracks the release) and only falls back to a
+     * direct, public Open Library lookup by [fallbackTitle]/[fallbackAuthor]
+     * when Codex has nothing for that id (not configured, 404, or a network
+     * failure). Null when both fail.
+     */
+    suspend fun mediaDetail(mediaId: Int, fallbackTitle: String, fallbackAuthor: String? = null): MediaDetail?
 }

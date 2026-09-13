@@ -94,8 +94,8 @@ data class ResumeTarget(
 /**
  * A book not yet in your library — from Codex's own upcoming-releases tracking
  * (series/authors you follow there, via Hardcover). No workId/libraryItemId:
- * you don't own it yet, so it isn't part of the local catalog and can't be
- * tapped into a detail screen the way a [Work] can.
+ * you don't own it yet, so it isn't part of the local catalog. Tapping it opens
+ * [MediaDetail] instead of a local [Work] detail screen.
  */
 data class UpcomingItem(
     val mediaId: Int,
@@ -103,6 +103,29 @@ data class UpcomingItem(
     val coverUrl: String?,
     /** "YYYY-MM-DD", or null if Codex hasn't pinned a date. */
     val releaseDate: String?,
+)
+
+/**
+ * Read-only detail for a book you don't own yet, shown when tapping an
+ * [UpcomingItem]. [source] is "codex" when this came from Codex's own catalog
+ * (it already tracks the release, often with a description via Hardcover/Open
+ * Library enrichment) or "public" when Codex had nothing for this id and the
+ * data was looked up directly from Open Library by title instead.
+ */
+data class MediaDetail(
+    val mediaId: Int,
+    val title: String,
+    val type: String?,
+    val author: String?,
+    val narrator: String?,
+    val seriesName: String?,
+    val seriesPosition: Double?,
+    val coverUrl: String?,
+    val description: String?,
+    val releaseDate: String?,
+    val year: Int?,
+    val genres: String?,
+    val source: String,
 )
 
 data class ServerAccount(
